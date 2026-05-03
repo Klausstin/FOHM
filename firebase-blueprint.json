@@ -1,0 +1,248 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about the user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "householdId": { "type": "string", "description": "ID of the shared household for finances." },
+        "sharingConfig": {
+          "type": "object",
+          "properties": {
+            "goals": { "type": "boolean" },
+            "mind": { "type": "boolean" },
+            "finances": { "type": "boolean" },
+            "habits": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Thought": {
+      "title": "Thought Entry",
+      "description": "A text or audio thought entry.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "content": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "categories": { 
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "avatar-personaje",
+              "vicky-amor",
+              "aventura-movimiento",
+              "laburo-desafío",
+              "finanzas-estabilidad",
+              "educación-crecimiento",
+              "relaciones-sociales",
+              "salud-entrenamiento",
+              "ocio-entretenimiento"
+            ]
+          }
+        },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "analysis": { "type": "string" }
+      },
+      "required": ["uid", "content", "categories", "timestamp"]
+    },
+    "Goal": {
+      "title": "Annual Goal",
+      "description": "A goal for the year.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "householdId": { "type": "string" },
+        "year": { "type": "number" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["health", "finance", "order", "other"] },
+        "status": { "type": "string", "enum": ["pending", "in_progress", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "year", "title", "category", "status"]
+    },
+    "Account": {
+      "title": "Financial Account",
+      "description": "A bank account, wallet, or investment account.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "householdId": { "type": "string" },
+        "name": { "type": "string" },
+        "currency": { "type": "string", "default": "ARS" },
+        "balance": { "type": "number", "description": "Current or initial balance" },
+        "color": { "type": "string", "description": "Color code for UI" },
+        "type": { "type": "string", "enum": ["bank", "wallet", "credit_card", "investment"] }
+      },
+      "required": ["uid", "householdId", "name", "currency"]
+    },
+    "Finance": {
+      "title": "Finance Entry",
+      "description": "A financial transaction (expense, income, or transfer).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Creator UID" },
+        "householdId": { "type": "string", "description": "Shared household ID" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "default": "ARS" },
+        "description": { "type": "string" },
+        "note": { "type": "string", "description": "Additional notes about the transaction" },
+        "category": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "type": { "type": "string", "enum": ["expense", "income", "transfer"] },
+        "accountId": { "type": "string", "description": "The ID of the account used" },
+        "toAccountId": { "type": "string", "description": "The ID of the destination account for transfers" },
+        "tags": { 
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "date": { "type": "string", "format": "date-time" },
+        "source": { "type": "string", "enum": ["manual", "pdf"] },
+        "pdfName": { "type": "string" },
+        "isFixed": { "type": "boolean" },
+        "isConfirmed": { "type": "boolean" },
+        "generatedBy": { "type": "string", "description": "UID of the person who generated the expense" },
+        "assignedTo": { "type": "string", "description": "UID or name of the person assigned to the expense" },
+        "payer": { "type": "string", "description": "The person who paid (Pagador)" },
+        "paymentType": { "type": "string", "description": "Type of payment (e.g., Cash, Credit Card)" },
+        "paymentStatus": { "type": "string", "description": "Status of the payment (e.g., Cleared, Pending)" }
+      },
+      "required": ["uid", "householdId", "amount", "type", "date"]
+    },
+    "Mapping": {
+      "title": "Transaction Mapping",
+      "description": "User-defined mapping for transaction descriptions.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "originalDescription": { "type": "string" },
+        "mappedDescription": { "type": "string" },
+        "mappedCategory": { "type": "string" },
+        "mappedSubCategory": { "type": "string" }
+      },
+      "required": ["uid", "originalDescription", "mappedDescription"]
+    },
+    "Category": {
+      "title": "Financial Category",
+      "description": "Custom categories and sub-categories.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "subCategories": { 
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["uid", "name"]
+    },
+    "Habit": {
+      "title": "Quarterly Habit",
+      "description": "A habit to track for a specific quarter.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "startDate": { "type": "string", "format": "date", "description": "The date the habit challenge starts (YYYY-MM-DD)" },
+        "quarter": { "type": "number" },
+        "year": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "completed", "abandoned"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "title", "description", "quarter", "year", "status", "createdAt"]
+    },
+    "GoalComment": {
+      "title": "Goal Comment",
+      "description": "A comment on a goal.",
+      "type": "object",
+      "properties": {
+        "goalId": { "type": "string" },
+        "uid": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["goalId", "uid", "content", "createdAt"]
+    },
+    "HabitLog": {
+      "title": "Daily Habit Log",
+      "description": "A daily record of habit performance.",
+      "type": "object",
+      "properties": {
+        "habitId": { "type": "string" },
+        "uid": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["green", "yellow", "red"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["habitId", "uid", "date", "status", "timestamp"]
+    },
+    "GoogleToken": {
+      "title": "Google OAuth Token",
+      "description": "OAuth tokens for Google Calendar access.",
+      "type": "object",
+      "properties": {
+        "tokens": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tokens", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/thoughts/{thoughtId}": {
+      "schema": "Thought",
+      "description": "User thoughts and reflections."
+    },
+    "/finances/{financeId}": {
+      "schema": "Finance",
+      "description": "Financial transactions."
+    },
+    "/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "Financial accounts."
+    },
+    "/mappings/{mappingId}": {
+      "schema": "Mapping",
+      "description": "User-defined transaction mappings."
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "User-defined financial categories."
+    },
+    "/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "Annual goals."
+    },
+    "/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "Quarterly habits."
+    },
+    "/goalComments/{commentId}": {
+      "schema": "GoalComment",
+      "description": "Comments on goals."
+    },
+    "/habitLogs/{logId}": {
+      "schema": "HabitLog",
+      "description": "Daily logs for habits."
+    },
+    "/google_tokens/{userId}": {
+      "schema": "GoogleToken",
+      "description": "Google OAuth tokens."
+    }
+  }
+}

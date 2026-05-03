@@ -1,0 +1,5 @@
+{
+  "name": "Mind & Money Tracker",
+  "description": "An integrated app for tracking thoughts, finances, and time. Uses Gemini to analyze mental consistency, automate financial categorization, and suggest schedule optimizations via Google Calendar integration.",
+  "requestFramePermissions": ["microphone"]
+}

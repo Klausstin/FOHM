@@ -1,0 +1,344 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: thoughts
+    // Fields:
+    //   - uid: string (required, owner's UID)
+    //   - content: string (required, < 10000 chars)
+    //   - audioUrl: string (optional, URL format)
+    //   - categories: list (required, enum)
+    //   - timestamp: timestamp (required)
+    //   - analysis: string (optional, < 5000 chars)
+    //
+    // Collection: goals
+    // Fields:
+    //   - uid: string (required)
+    //   - householdId: string (optional)
+    //   - year: number (required)
+    //   - title: string (required)
+    //   - description: string (optional)
+    //   - category: string (required, enum: health, finance, order, other)
+    //   - status: string (required, enum: pending, in_progress, completed)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: finances
+    // Fields:
+    //   - uid: string (required, owner's UID)
+    //   - amount: number (required)
+    //   - description: string (optional, < 500 chars)
+    //   - category: string (required, < 100 chars)
+    //   - subCategory: string (optional, < 100 chars)
+    //   - type: string (required, enum: expense, income, investment)
+    //   - date: timestamp (required)
+    //   - source: string (required, enum: manual, pdf)
+    //   - pdfName: string (optional, < 200 chars)
+    //   - isFixed: bool (optional)
+    //   - isConfirmed: bool (optional)
+    //
+    // Collection: mappings
+    // Fields:
+    //   - uid: string (required)
+    //   - originalDescription: string (required)
+    //   - mappedDescription: string (required)
+    //   - mappedCategory: string (optional)
+    //   - mappedSubCategory: string (optional)
+    //
+    // Collection: categories
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - icon: string (optional)
+    //   - subCategories: list (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isHouseholdMember(hid) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == hid;
+    }
+
+    function isSharing(ownerId, feature) {
+      return exists(/databases/$(database)/documents/users/$(ownerId)) &&
+             get(/databases/$(database)/documents/users/$(ownerId)).data.sharingConfig[feature] == true;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((request.auth.token.email == "agustin@granberta.com" && request.auth.token.email_verified == true) ||
+         (request.auth.token.email == "agus.stegmann@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isRecent(ts) {
+      return ts is timestamp && 
+             ts > request.time - duration.value(5, 'm') && 
+             ts < request.time + duration.value(5, 'm');
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'createdAt', 'householdId']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'role', 'householdId', 'sharingConfig']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.createdAt is timestamp &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 500)) &&
+             data.householdId is string && data.householdId.size() < 100 &&
+             (!('sharingConfig' in data) || (data.sharingConfig is map && 
+               (!('goals' in data.sharingConfig) || data.sharingConfig.goals is bool) &&
+               (!('mind' in data.sharingConfig) || data.sharingConfig.mind is bool) &&
+               (!('finances' in data.sharingConfig) || data.sharingConfig.finances is bool) &&
+               (!('habits' in data.sharingConfig) || data.sharingConfig.habits is bool)));
+    }
+
+    function isValidThought(data) {
+      return hasRequiredFields(['uid', 'content', 'categories', 'timestamp']) &&
+             hasOnlyAllowedFields(['uid', 'content', 'audioUrl', 'imageUrl', 'categories', 'timestamp', 'analysis', 'householdId', 'id']) &&
+             data.uid == request.auth.uid &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
+             data.categories is list && data.categories.size() > 0 && data.categories.size() < 20 &&
+             data.timestamp is timestamp &&
+             (!('audioUrl' in data) || data.audioUrl == null || (data.audioUrl is string && data.audioUrl.size() < 1000000)) &&
+             (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() < 1000000)) &&
+             (!('analysis' in data) || data.analysis == null || (data.analysis is string && data.analysis.size() < 10000)) &&
+             (!('householdId' in data) || data.householdId == null || (data.householdId is string && data.householdId.size() < 100));
+    }
+
+    function isValidHabit(data) {
+      return hasRequiredFields(['uid', 'title', 'description', 'progress', 'streak', 'incorporated', 'status', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'description', 'progress', 'streak', 'lastWatered', 'incorporated', 'status', 'createdAt', 'id']) &&
+             data.uid == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
+             data.progress is number && data.progress >= 0 &&
+             data.streak is number && data.streak >= 0 &&
+             data.incorporated is bool &&
+             data.status in ['active', 'completed', 'abandoned'] &&
+             (!('lastWatered' in data) || data.lastWatered == null || data.lastWatered is timestamp) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidGoal(data, isUpdate) {
+      return hasRequiredFields(['uid', 'year', 'title', 'categories', 'status']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'year', 'title', 'description', 'categories', 'status', 'createdAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.year is number &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             data.categories is list && data.categories.size() > 0 &&
+             data.status in ["pending", "in_progress", "completed"] &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidGoalComment(data) {
+      return hasRequiredFields(['goalId', 'uid', 'content', 'createdAt']) &&
+             hasOnlyAllowedFields(['goalId', 'uid', 'userName', 'userPhoto', 'content', 'createdAt', 'id']) &&
+             data.uid == request.auth.uid &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidFinance(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'amount', 'type', 'date', 'category', 'source']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'accountId', 'toAccountId', 'tags', 'date', 'source', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'createdAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.amount is number &&
+             data.type in ["expense", "income", "transfer"] &&
+             data.source in ["manual", "pdf"] &&
+             data.date is timestamp &&
+             data.category is string && data.category.size() < 100 &&
+             (!('subCategory' in data) || (data.subCategory is string && data.subCategory.size() < 100)) &&
+             (!('subSubCategory' in data) || (data.subSubCategory is string && data.subSubCategory.size() < 100)) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
+             (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() < 10)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidAccount(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'name', 'currency']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'currency', 'balance', 'color', 'type', 'createdAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.currency is string && data.currency.size() > 0 && data.currency.size() < 10 &&
+             (!('balance' in data) || data.balance is number) &&
+             (!('color' in data) || (data.color is string && data.color.size() < 20)) &&
+             (!('type' in data) || (data.type is string && data.type.size() < 50)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidMapping(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'originalDescription', 'mappedDescription']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'originalDescription', 'mappedDescription', 'category', 'subCategory', 'subSubCategory', 'isFixed', 'createdAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.originalDescription is string && data.originalDescription.size() > 0 && data.originalDescription.size() < 500 &&
+             data.mappedDescription is string && data.mappedDescription.size() > 0 && data.mappedDescription.size() < 500 &&
+             (!('category' in data) || (data.category is string && data.category.size() < 100)) &&
+             (!('subCategory' in data) || (data.subCategory is string && data.subCategory.size() < 100)) &&
+             (!('subSubCategory' in data) || (data.subSubCategory is string && data.subSubCategory.size() < 100)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidCategory(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'name']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'icon', 'color', 'subCategories', 'subSubCategory', 'createdAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('icon' in data) || (data.icon is string && data.icon.size() < 50)) &&
+             (!('color' in data) || (data.color is string && data.color.size() < 20)) &&
+             (!('subCategories' in data) || (data.subCategories is list && data.subCategories.size() < 50)) &&
+             (!('subSubCategory' in data) || (data.subSubCategory is string && data.subSubCategory.size() < 100)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidHabitLog(data) {
+      return hasRequiredFields(['habitId', 'uid', 'date', 'status', 'timestamp']) &&
+             hasOnlyAllowedFields(['habitId', 'uid', 'date', 'status', 'timestamp', 'id']) &&
+             data.uid == request.auth.uid &&
+             data.habitId is string &&
+             data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+             data.status in ['green', 'yellow', 'red'] &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == resource.data.householdId));
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.role == resource.data.role; // Role cannot be changed by user
+    }
+
+    match /thoughts/{thoughtId} {
+      allow read: if isDocOwner() || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'mind'));
+      allow create: if isAuthenticated() && isValidThought(request.resource.data);
+      allow update: if isDocOwner() && isValidThought(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /habits/{habitId} {
+      allow read: if isDocOwner() || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'habits'));
+      allow create: if isAuthenticated() && isValidHabit(request.resource.data);
+      allow update: if isDocOwner() && isValidHabit(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /finances/{financeId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow create: if isAuthenticated() && isValidFinance(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidFinance(request.resource.data, true) && (isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (isHouseholdMember(resource.data.householdId) || isAdmin());
+    }
+
+    match /mappings/{mappingId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow create: if isAuthenticated() && isValidMapping(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidMapping(request.resource.data, true) && (isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (isHouseholdMember(resource.data.householdId) || isAdmin());
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow create: if isAuthenticated() && isValidCategory(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidCategory(request.resource.data, true) && (isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (isHouseholdMember(resource.data.householdId) || isAdmin());
+    }
+
+    match /accounts/{accountId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow create: if isAuthenticated() && isValidAccount(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidAccount(request.resource.data, true) && (isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+    }
+
+    match /goals/{goalId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'goals')));
+      allow create: if isAuthenticated() && isValidGoal(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidGoal(request.resource.data, true) && 
+                      (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin()) &&
+                      (isAdmin() || (request.resource.data.uid == resource.data.uid &&
+                      (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)));
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /goalComments/{commentId} {
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid || 
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/goals/$(resource.data.goalId)) && 
+         (get(/databases/$(database)/documents/goals/$(resource.data.goalId)).data.uid == request.auth.uid || 
+          isHouseholdMember(get(/databases/$(database)/documents/goals/$(resource.data.goalId)).data.householdId)))
+      );
+      allow create: if isAuthenticated() && isValidGoalComment(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && isValidGoalComment(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /habitLogs/{logId} {
+      allow read: if isDocOwner() || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'habits'));
+      allow create: if isAuthenticated() && isValidHabitLog(request.resource.data);
+      allow update: if isDocOwner() && isValidHabitLog(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /google_tokens/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
