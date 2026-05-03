@@ -6,6 +6,7 @@ import { MIND_CATEGORIES } from '../lib/mindCategories.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { analyzeMentalConsistency, transcribeAudio, analyzeImage, categorizeThought, checkHabitProgress } from '../services/gemini.ts';
+import { DEFAULT_PRIVATE_VISIBILITY, VISIBILITY_LABELS } from '../domain/permissions.ts';
 
 
 export default function MindTracker({ user }: { user: any }) {
@@ -39,7 +40,7 @@ export default function MindTracker({ user }: { user: any }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Fetch household members for names/photos
+    // Members are kept only for legacy entries that may already exist.
     const qMembers = query(collection(db, 'users'), where('householdId', '==', user.householdId));
     const unsubMembers = onSnapshot(qMembers, (snap) => {
       const memberMap: { [key: string]: any } = {};
@@ -51,7 +52,7 @@ export default function MindTracker({ user }: { user: any }) {
 
     const q = query(
       collection(db, 'thoughts'),
-      where('householdId', '==', user.householdId),
+      where('uid', '==', user.uid),
       orderBy('timestamp', 'desc')
     );
 
@@ -140,6 +141,9 @@ export default function MindTracker({ user }: { user: any }) {
         householdId: user.householdId || null,
         content: finalContent,
         categories: categories,
+        visibility: DEFAULT_PRIVATE_VISIBILITY,
+        entryType: selectedImage ? 'mixed' : 'text',
+        attachments: [],
         timestamp: new Date(),
         imageUrl: selectedImage?.data ? `data:${selectedImage.type};base64,${selectedImage.data}` : null,
         analysis: imageAnalysis || null
@@ -524,7 +528,7 @@ export default function MindTracker({ user }: { user: any }) {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <History size={18} className="text-neutral-400" />
-              Pensamientos Recientes
+              Entradas recientes
             </h3>
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-neutral-400" />
@@ -559,6 +563,9 @@ export default function MindTracker({ user }: { user: any }) {
                           <span>{members[thought.uid]?.displayName?.split(' ')?.[0] || 'Socio'}</span>
                         </div>
                       )}
+                      <div className="flex items-center gap-1 bg-neutral-900 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest">
+                        <span>{VISIBILITY_LABELS[thought.visibility || DEFAULT_PRIVATE_VISIBILITY]}</span>
+                      </div>
                       {thought.categories?.map((catId: string) => {
                         const search = (catId || '').trim().toLowerCase();
                         const cat = MIND_CATEGORIES.find(c => 
@@ -588,14 +595,14 @@ export default function MindTracker({ user }: { user: any }) {
                     <div className="mt-4 space-y-4">
                       <img 
                         src={thought.imageUrl} 
-                        alt="Thought visual" 
+                        alt="Imagen de la entrada" 
                         className="w-full h-48 object-cover rounded-2xl border border-neutral-100"
                         referrerPolicy="no-referrer"
                       />
                       {thought.analysis && (
                         <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100">
                           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-1">
-                            <Sparkles size={10} /> Visual Insight
+                            <Sparkles size={10} /> Lectura visual
                           </p>
                           <p className="text-xs text-neutral-600 italic leading-relaxed">
                             {thought.analysis}
@@ -610,7 +617,7 @@ export default function MindTracker({ user }: { user: any }) {
 
             {filteredThoughts.length === 0 && (
               <div className="text-center py-20 bg-neutral-100 rounded-[2rem] border-2 border-dashed border-neutral-200">
-                <p className="text-neutral-400 font-bold">No thoughts found in this category.</p>
+                <p className="text-neutral-400 font-bold">No hay entradas en esta categoría.</p>
               </div>
             )}
           </div>
