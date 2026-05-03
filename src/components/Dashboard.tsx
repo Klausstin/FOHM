@@ -55,7 +55,7 @@ export default function Dashboard({ user }: { user: any }) {
     { id: 'trend', title: 'Tendencia de saldo', visible: true },
     { id: 'expenseStructure', title: 'Estructura de los gastos', visible: true },
     { id: 'recentRecords', title: 'Últimos registros', visible: true },
-    { id: 'calendarSummary', title: 'Agenda & Productividad', visible: true },
+    { id: 'calendarSummary', title: 'Agenda y productividad', visible: true },
     { id: 'goalsSummary', title: 'Objetivos', visible: true },
   ];
 
@@ -509,7 +509,7 @@ export default function Dashboard({ user }: { user: any }) {
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Calendar size={16} className="text-neutral-400" />
-                      Agenda & Productividad
+                      Agenda y productividad
                     </h3>
                   </div>
                   <div className="space-y-4">
