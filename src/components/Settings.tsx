@@ -234,7 +234,7 @@ export default function Settings({ user }: { user: any }) {
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <Folder size={20} className="text-neutral-400" />
-              Finance Categories
+              Categorías financieras
             </h3>
             <button
               onClick={syncCategories}
@@ -448,7 +448,7 @@ export default function Settings({ user }: { user: any }) {
             <Tag size={20} className="text-neutral-400" />
             Household Members
           </h3>
-          <p className="text-sm text-neutral-500 mb-6">These people share the Finance Hub with you.</p>
+          <p className="text-sm text-neutral-500 mb-6">Estas personas comparten espacios de la app con vos.</p>
           
           <div className="space-y-4">
             {members.map(member => (
@@ -487,7 +487,7 @@ export default function Settings({ user }: { user: any }) {
                 {[
                   { id: 'goals', label: 'Objetivos Anuales', icon: <Target size={14} /> },
                   { id: 'mind', label: 'Diario de la Mente', icon: <Brain size={14} /> },
-                  { id: 'finances', label: 'Finanzas Hub', icon: <Wallet size={14} /> },
+                  { id: 'finances', label: 'Finanzas', icon: <Wallet size={14} /> },
                   { id: 'habits', label: 'Hábitos Trimestrales', icon: <CheckCircle2 size={14} /> }
                 ].map((item) => (
                   <div key={item.id} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/10">

@@ -211,7 +211,7 @@ export default function MindTracker({ user }: { user: any }) {
 
   const runAnalysis = async () => {
     if (thoughts.length < 3) {
-      alert("Please add at least 3 thoughts to analyze consistency.");
+      alert("Agregá al menos 3 entradas para analizar consistencia.");
       return;
     }
     setIsAnalyzing(true);
@@ -249,8 +249,8 @@ export default function MindTracker({ user }: { user: any }) {
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Mind Diary</h2>
-          <p className="text-neutral-500 font-medium">Capture your thoughts and track your mental consistency.</p>
+          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Diario Mental</h2>
+          <p className="text-neutral-500 font-medium">Registrá pensamientos, energía y patrones para entender tu alineación.</p>
         </div>
         <button
           onClick={runAnalysis}
@@ -274,7 +274,7 @@ export default function MindTracker({ user }: { user: any }) {
           <div className="relative z-10">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Sparkles size={20} className="text-neutral-400" />
-              Gemini Analysis
+              Análisis con IA
             </h3>
             <div className="prose prose-invert max-w-none text-neutral-300 leading-relaxed">
               {analysisResult}
