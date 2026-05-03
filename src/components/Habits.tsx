@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { db, collection, addDoc, query, where, onSnapshot, handleFirestoreError, OperationType, updateDoc, doc, serverTimestamp, deleteDoc } from '../firebase.ts';
-import { CheckCircle2, Plus, Calendar, Info, Loader2, Sparkles, User as UserIcon, Droplets, Trophy, History, ArrowRight, Flame, AlertCircle, Star, Award, Zap } from 'lucide-react';
+import { CheckCircle2, Plus, Calendar, Info, Loader2, Sparkles, User as UserIcon, Droplets, Trophy, History, ArrowRight, Flame, AlertCircle, Star, Award, Zap, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays, isToday, isYesterday, eachDayOfInterval, subDays, startOfToday, startOfWeek, addDays, getWeek, isSameDay, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function Habits({ user }: { user: any }) {
   const [habits, setHabits] = useState<any[]>([]);
+  const [goals, setGoals] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [members, setMembers] = useState<{ [key: string]: any }>({});
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newHabit, setNewHabit] = useState({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd') });
+  const [newHabit, setNewHabit] = useState({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd'), linkedGoalIds: [] as string[] });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [view, setView] = useState<'current' | 'inventory'>('current');
   const [celebration, setCelebration] = useState<{ show: boolean, message: string }>({ show: false, message: '' });
@@ -37,16 +38,45 @@ export default function Habits({ user }: { user: any }) {
       setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    const qGoals = query(
+      collection(db, 'goals'),
+      where('householdId', '==', user.householdId),
+      where('year', '==', new Date().getFullYear())
+    );
+    const unsubGoals = onSnapshot(qGoals, (snapshot) => {
+      setGoals(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'goals');
+    });
+
     return () => {
       unsubscribe();
       unsubMembers();
       unsubLogs();
+      unsubGoals();
     };
   }, [user.uid, user.householdId]);
 
   const myHabits = habits.filter(h => h.uid === user.uid);
   const activeHabit = myHabits.find(h => !h.incorporated && h.status === 'active');
   const inventory = myHabits.filter(h => h.incorporated);
+  const availableGoals = goals.filter(goal => goal.uid === user.uid || goal.householdId === user.householdId);
+
+  const getLinkedGoalTitles = (habit: any) => {
+    const linkedGoalIds = Array.isArray(habit.linkedGoalIds) ? habit.linkedGoalIds : [];
+    return linkedGoalIds
+      .map((goalId: string) => goals.find(goal => goal.id === goalId)?.title)
+      .filter(Boolean);
+  };
+
+  const toggleLinkedGoal = (goalId: string) => {
+    setNewHabit(prev => ({
+      ...prev,
+      linkedGoalIds: prev.linkedGoalIds.includes(goalId)
+        ? prev.linkedGoalIds.filter(id => id !== goalId)
+        : [...prev.linkedGoalIds, goalId],
+    }));
+  };
 
   const handleAddHabit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,10 +99,11 @@ export default function Habits({ user }: { user: any }) {
         lastWatered: null,
         incorporated: false,
         status: 'active',
+        linkedGoalIds: newHabit.linkedGoalIds,
         createdAt: serverTimestamp()
       });
       setShowAddModal(false);
-      setNewHabit({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd') });
+      setNewHabit({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd'), linkedGoalIds: [] });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'habits');
     } finally {
@@ -351,6 +382,16 @@ export default function Habits({ user }: { user: any }) {
                       </div>
                       <h3 className="text-4xl font-black text-neutral-900 tracking-tight">{activeHabit.title}</h3>
                       <p className="text-neutral-500 font-medium max-w-md">{activeHabit.description}</p>
+                      {getLinkedGoalTitles(activeHabit).length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {getLinkedGoalTitles(activeHabit).map((title: string) => (
+                            <span key={title} className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                              <Target size={10} />
+                              {title}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex items-center gap-4 bg-neutral-50 p-4 rounded-[2rem] border border-neutral-100">
@@ -480,6 +521,11 @@ export default function Habits({ user }: { user: any }) {
                       <div>
                         <h5 className="font-black text-neutral-900">{habit.title}</h5>
                         <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">{members[habit.uid]?.displayName || 'Socio'}</p>
+                        {getLinkedGoalTitles(habit).length > 0 && (
+                          <p className="text-[10px] font-bold text-neutral-400 mt-1">
+                            Objetivo: {getLinkedGoalTitles(habit)[0]}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-full">
@@ -512,6 +558,11 @@ export default function Habits({ user }: { user: any }) {
                     <div>
                       <h4 className="text-xl font-black text-neutral-900 leading-tight">{habit.title}</h4>
                       <p className="text-sm text-neutral-500 font-medium mt-1">{habit.description}</p>
+                      {getLinkedGoalTitles(habit).length > 0 && (
+                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-3">
+                          Sostiene: {getLinkedGoalTitles(habit).join(', ')}
+                        </p>
+                      )}
                     </div>
                     <div className="pt-4 border-t border-neutral-50 flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
@@ -585,6 +636,38 @@ export default function Habits({ user }: { user: any }) {
                     required
                   />
                 </div>
+
+                {availableGoals.length > 0 && (
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest ml-2">Objetivos que sostiene</label>
+                    <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
+                      {availableGoals.map(goal => (
+                        <button
+                          key={goal.id}
+                          type="button"
+                          onClick={() => toggleLinkedGoal(goal.id)}
+                          className={`text-left rounded-2xl border p-4 transition-all ${
+                            newHabit.linkedGoalIds.includes(goal.id)
+                              ? 'border-neutral-900 bg-neutral-900 text-white shadow-lg shadow-neutral-200'
+                              : 'border-neutral-100 bg-neutral-50 text-neutral-600 hover:border-neutral-300'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Target size={16} className="mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-sm font-black leading-tight">{goal.title}</p>
+                              <p className={`mt-1 text-[10px] font-bold uppercase tracking-widest ${
+                                newHabit.linkedGoalIds.includes(goal.id) ? 'text-white/60' : 'text-neutral-400'
+                              }`}>
+                                {goal.status === 'completed' ? 'Logrado' : goal.status === 'in_progress' ? 'En proceso' : 'Pendiente'}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-4 pt-4">
                   <button
