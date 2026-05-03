@@ -124,7 +124,7 @@ export default function CalendarIntegration({ user, habits, goals, thoughts }: C
       <PageHeader
         eyebrow="Calendario"
         title="Google Calendar"
-        description="Sincronizá tu tiempo con tus objetivos y hábitos."
+        description="Mira si tu semana refleja tus prioridades reales, tu descanso y la vida que queres sostener."
         actions={!isConnected ? (
           <Button
             onClick={handleConnect}
@@ -232,7 +232,7 @@ export default function CalendarIntegration({ user, habits, goals, thoughts }: C
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
                       <CheckCircle2 size={24} className="text-white" />
                     </div>
-                    <h3 className="text-2xl font-bold">Sugerencias de IA</h3>
+                    <h3 className="text-2xl font-bold">Sugerencias de Luz</h3>
                   </div>
 
                   <div className="prose prose-invert max-w-none prose-p:text-neutral-300 prose-headings:text-white prose-strong:text-white">

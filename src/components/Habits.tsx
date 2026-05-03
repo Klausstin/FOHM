@@ -334,9 +334,9 @@ export default function Habits({ user }: { user: any }) {
 
       <header className="flex flex-col justify-between gap-6 rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:p-8">
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Sistema trimestral</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Vivi mas alineado</p>
           <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Habitos</h2>
-          <p className="max-w-2xl text-neutral-500 font-medium">Un habito fuerte por trimestre, sosteniendo lo anterior sin convertir la vida en una lista infinita de tareas.</p>
+          <p className="max-w-2xl text-neutral-500 font-medium">Un habito fuerte por trimestre, sosteniendo salud, energia, descanso y disfrute sin convertir la vida en una lista infinita de tareas.</p>
         </div>
         
         <div className="flex bg-neutral-100 p-1 rounded-2xl">

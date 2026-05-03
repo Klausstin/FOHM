@@ -647,8 +647,9 @@ export default function FinanceTracker({ user }: { user: any }) {
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Decidi mejor</p>
           <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Finanzas</h2>
-          <p className="text-neutral-500 font-medium">Ordena cuentas, movimientos y decisiones de plata sin exigir precision imposible.</p>
+          <p className="text-neutral-500 font-medium">Entende donde esta tu plata y si tus gastos sostienen la vida que queres construir.</p>
         </div>
         <div className="flex gap-2">
           <button

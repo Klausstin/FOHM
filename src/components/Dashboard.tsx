@@ -60,8 +60,8 @@ export default function Dashboard({ user }: { user: any }) {
     { id: 'alignment', title: 'Alineacion personal', visible: true },
     { id: 'trend', title: 'Tendencia de saldo', visible: true },
     { id: 'expenseStructure', title: 'Estructura de los gastos', visible: true },
-    { id: 'recentRecords', title: 'Últimos registros', visible: true },
-    { id: 'calendarSummary', title: 'Agenda y productividad', visible: true },
+    { id: 'recentRecords', title: 'Ultimos registros', visible: true },
+    { id: 'calendarSummary', title: 'Tiempo y prioridades', visible: true },
     { id: 'goalsSummary', title: 'Objetivos', visible: true },
   ];
 
@@ -282,15 +282,15 @@ export default function Dashboard({ user }: { user: any }) {
     if (myGoals.length === 0) {
       signals.push({
         tone: 'warning',
-        title: 'Faltan objetivos anuales',
-        body: 'Todavia no hay una direccion explicita para cruzar habitos, finanzas y diario.',
+        title: 'Falta una direccion explicita',
+        body: 'Todavia no hay objetivos autenticos para cruzar decisiones, habitos, finanzas y diario.',
       });
     }
     if (goalsWithoutHabits.length > 0) {
       signals.push({
         tone: 'warning',
         title: `${goalsWithoutHabits.length} objetivo(s) sin habitos`,
-        body: 'Hay metas declaradas que todavia no tienen acciones repetibles asociadas.',
+        body: 'Hay metas declaradas que todavia no tienen decisiones o acciones repetibles asociadas.',
       });
     }
     if (habitsWithoutGoals.length > 0) {
@@ -304,7 +304,7 @@ export default function Dashboard({ user }: { user: any }) {
       signals.push({
         tone: 'neutral',
         title: 'Sin diario reciente',
-        body: 'No hay entradas de los ultimos 7 dias para entender patrones o preocupaciones actuales.',
+        body: 'No hay entradas de los ultimos 7 dias para ver patrones, bloqueos o aprendizajes recientes.',
       });
     }
     if (stats.net < 0 && finances.length > 0) {
@@ -352,13 +352,13 @@ export default function Dashboard({ user }: { user: any }) {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-3xl">
                 <p className="mb-4 inline-flex rounded-full border border-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
-                  Inicio
+                  Entendete mejor. Decidi mejor. Vivi mas alineado.
                 </p>
                 <h2 className="text-4xl font-black tracking-tight md:text-6xl">
-                  Sistema operativo personal.
+                  Claridad para ordenar tu vida real.
                 </h2>
                 <p className="mt-5 max-w-2xl text-base font-medium leading-7 text-white/62">
-                  VEO cruza objetivos, habitos, diario, finanzas y tiempo para ayudarte a ver si la vida que estas construyendo coincide con lo que decis que queres.
+                  VEO registra tu vida, detecta patrones y conecta objetivos, tiempo, habitos, finanzas y energia sin empujarte a producir por producir.
                 </p>
               </div>
               <div className="rounded-[1.5rem] bg-white px-5 py-4 text-neutral-950">
@@ -547,7 +547,7 @@ export default function Dashboard({ user }: { user: any }) {
                           Alineacion personal
                         </h3>
                         <p className="text-sm text-neutral-400 mt-2 max-w-xl">
-                          Primer cruce entre objetivos, habitos, diario y finanzas. No es IA real todavia: son senales calculadas con tus datos.
+                          Primer cruce entre lo que decis que queres, lo que haces, como usas tu tiempo y como usas tu plata.
                         </p>
                       </div>
                       <div className="bg-white text-neutral-900 rounded-3xl px-5 py-4 min-w-28 text-center">
@@ -677,7 +677,7 @@ export default function Dashboard({ user }: { user: any }) {
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Briefcase size={16} className="text-neutral-400" />
-                      Últimos registros
+                      Ultimos registros
                     </h3>
                   </div>
                   <div className="space-y-3">
@@ -714,14 +714,14 @@ export default function Dashboard({ user }: { user: any }) {
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Calendar size={16} className="text-neutral-400" />
-                      Agenda y productividad
+                      Tiempo y prioridades
                     </h3>
                   </div>
                   <div className="space-y-4">
                     <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100">
-                      <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest mb-2">Análisis de tiempo</p>
+                      <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest mb-2">Uso del tiempo</p>
                       <p className="text-sm text-neutral-600 leading-relaxed">
-                        Conecta tu calendario para analizar cómo distribuyes tu tiempo y recibir sugerencias inteligentes.
+                        Conecta tu calendario para ver si tu semana refleja tus prioridades reales.
                       </p>
                     </div>
                     <button 

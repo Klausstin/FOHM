@@ -238,11 +238,12 @@ export default function AnnualGoals({ user }: { user: any }) {
         </div>
 
         <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Decidi mejor</p>
           <h1 className="text-6xl font-black text-neutral-900 tracking-tighter">
             Objetivos
           </h1>
           <p className="text-neutral-500 font-medium max-w-md">
-            Define tus metas. Salud, finanzas y orden para una vida mejor.
+            Defini objetivos autenticos y conectalos con decisiones, habitos, tiempo y plata.
           </p>
         </div>
       </header>

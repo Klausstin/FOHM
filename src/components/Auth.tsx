@@ -24,18 +24,18 @@ export default function Auth() {
         </div>
         
         <h1 className="text-4xl font-black tracking-tight text-neutral-900 mb-4 leading-tight">
-          Mind & Money <br/>
-          <span className="text-neutral-400">Bienestar</span>
+          VEO <br/>
+          <span className="text-neutral-400">Vida en Orden</span>
         </h1>
         
         <p className="text-neutral-500 mb-10 text-lg font-medium leading-relaxed">
-          Un sistema personal para entenderte mejor, elegir con mas claridad y vivir mas alineado.
+          Un sistema personal de claridad para entenderte mejor, decidir mejor y vivir mas alineado.
         </p>
 
         <div className="space-y-4 mb-10">
           <Feature icon={<ShieldCheck size={18} className="text-neutral-900" />} text="Acceso seguro con Google" />
-          <Feature icon={<Target size={18} className="text-neutral-900" />} text="Objetivos, habitos y finanzas conectados" />
-          <Feature icon={<Sparkles size={18} className="text-neutral-900" />} text="Luz detecta patrones y desalineaciones" />
+          <Feature icon={<Target size={18} className="text-neutral-900" />} text="Tiempo, habitos, finanzas y energia en contexto" />
+          <Feature icon={<Sparkles size={18} className="text-neutral-900" />} text="Luz detecta patrones, contradicciones y proximos pasos" />
         </div>
 
         <button
