@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { db, collection, query, where, onSnapshot, handleFirestoreError, OperationType } from '../firebase.ts';
-import { Brain, Mic, Send, Trash2, Filter, Sparkles, MessageSquare, History, Image, Loader2, X, Tag, CheckCircle2, User as UserIcon } from 'lucide-react';
+import { Brain, Mic, Send, Trash2, Filter, Sparkles, MessageSquare, History, Image, Loader2, X, CheckCircle2, User as UserIcon, Edit3, Search } from 'lucide-react';
 import { MIND_CATEGORIES } from '../lib/mindCategories.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { analyzeMentalConsistency, transcribeAudio, analyzeImage, categorizeThought, checkHabitProgress } from '../services/gemini.ts';
 import { DEFAULT_PRIVATE_VISIBILITY, VISIBILITY_LABELS } from '../domain/permissions.ts';
 import { buildFinalJournalContent, EMPTY_REFLECTION, REFLECTION_PRODUCTIVITY_OPTIONS } from '../features/journal/journal.helpers.ts';
-import { createJournalEntry, subscribeToUserJournalEntries } from '../features/journal/journal.service.ts';
+import { createJournalEntry, deleteJournalEntry, subscribeToUserJournalEntries, updateJournalEntry } from '../features/journal/journal.service.ts';
 import type { JournalEntryRecord, JournalReflection, SelectedJournalImage } from '../features/journal/journal.types.ts';
 
 
@@ -18,6 +18,11 @@ export default function MindTracker({ user }: { user: any }) {
   const [members, setMembers] = useState<{ [key: string]: any }>({});
   const [newThought, setNewThought] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editCategories, setEditCategories] = useState<string[]>([]);
+  const [isMutatingEntry, setIsMutatingEntry] = useState(false);
   const [habitFeedback, setHabitFeedback] = useState<string | null>(null);
   
   // Guided Reflection State
@@ -201,25 +206,97 @@ export default function MindTracker({ user }: { user: any }) {
     }
   };
 
-  const filteredThoughts = useMemo(() => {
-    if (!filterCategory) return thoughts;
-    
-    const targetCat = MIND_CATEGORIES.find(cat => cat.id === filterCategory);
-    if (!targetCat) return thoughts;
+  const startEditingEntry = (entry: JournalEntryRecord) => {
+    setEditingEntryId(entry.id);
+    setEditContent(entry.content || '');
+    setEditCategories(entry.categories || []);
+  };
 
-    const targetId = targetCat.id.toLowerCase();
-    const targetLabel = targetCat.label.toLowerCase();
+  const cancelEditingEntry = () => {
+    setEditingEntryId(null);
+    setEditContent('');
+    setEditCategories([]);
+  };
+
+  const saveEditingEntry = async () => {
+    if (!editingEntryId || !editContent.trim() || editCategories.length === 0) return;
+
+    setIsMutatingEntry(true);
+    try {
+      await updateJournalEntry({
+        id: editingEntryId,
+        content: editContent.trim(),
+        categories: editCategories,
+      });
+      cancelEditingEntry();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'thoughts');
+    } finally {
+      setIsMutatingEntry(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entry: JournalEntryRecord) => {
+    const confirmed = window.confirm('Eliminar esta entrada del diario? Esta accion no se puede deshacer.');
+    if (!confirmed) return;
+
+    setIsMutatingEntry(true);
+    try {
+      await deleteJournalEntry(entry.id);
+      if (editingEntryId === entry.id) {
+        cancelEditingEntry();
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'thoughts');
+    } finally {
+      setIsMutatingEntry(false);
+    }
+  };
+
+  const toggleEditCategory = (categoryId: string) => {
+    setEditCategories(prev =>
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId],
+    );
+  };
+
+  const formatEntryDate = (entry: JournalEntryRecord) => {
+    const rawTimestamp = entry.timestamp;
+    const date = typeof rawTimestamp?.toDate === 'function'
+      ? rawTimestamp.toDate()
+      : new Date(rawTimestamp);
+
+    if (Number.isNaN(date.getTime())) return '';
+    return format(date, 'MMM d, yyyy - h:mm a');
+  };
+
+  const filteredThoughts = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const targetCat = filterCategory ? MIND_CATEGORIES.find(cat => cat.id === filterCategory) : null;
+
+    const targetId = targetCat?.id.toLowerCase();
+    const targetLabel = targetCat?.label.toLowerCase();
 
     return thoughts.filter(t => {
-      if (!t.categories || !Array.isArray(t.categories)) return false;
-      return t.categories.some((c: string) => {
-        if (!c || typeof c !== 'string') return false;
-        const search = c.trim().toLowerCase();
-        // Exact match with ID or Label, OR the stored item contains the label (handles legacy with emojis)
-        return search === targetId || search === targetLabel || search.includes(targetLabel);
-      });
+      const categories = Array.isArray(t.categories) ? t.categories : [];
+      const matchesCategory = !targetCat || categories.some((c: string) => {
+          if (!c || typeof c !== 'string') return false;
+          const search = c.trim().toLowerCase();
+          return search === targetId || search === targetLabel || search.includes(targetLabel || '');
+        });
+
+      const categoryLabels = categories
+        .map((catId: string) => MIND_CATEGORIES.find(c => c.id === catId)?.label || catId)
+        .join(' ')
+        .toLowerCase();
+      const matchesSearch = !normalizedSearch ||
+        (t.content || '').toLowerCase().includes(normalizedSearch) ||
+        categoryLabels.includes(normalizedSearch);
+
+      return matchesCategory && matchesSearch;
     });
-  }, [thoughts, filterCategory]);
+  }, [thoughts, filterCategory, searchTerm]);
 
   return (
     <div className="space-y-8">
@@ -497,23 +574,34 @@ export default function MindTracker({ user }: { user: any }) {
 
         {/* List Section */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <History size={18} className="text-neutral-400" />
               Entradas recientes
             </h3>
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-neutral-400" />
-              <select 
-                value={filterCategory || ''} 
-                onChange={(e) => setFilterCategory(e.target.value || null)}
-                className="bg-transparent text-sm font-bold text-neutral-500 border-none focus:ring-0 cursor-pointer"
-              >
-                <option value="">Todas las categorias</option>
-                {MIND_CATEGORIES.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.label}</option>
-                ))}
-              </select>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <label className="flex items-center gap-2 bg-white border border-neutral-200 rounded-2xl px-3 py-2 text-sm text-neutral-500">
+                <Search size={16} className="text-neutral-400 shrink-0" />
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar en el diario"
+                  className="bg-transparent border-none focus:ring-0 p-0 w-full sm:w-44 text-sm font-medium"
+                />
+              </label>
+              <label className="flex items-center gap-2 bg-white border border-neutral-200 rounded-2xl px-3 py-2">
+                <Filter size={16} className="text-neutral-400 shrink-0" />
+                <select 
+                  value={filterCategory || ''} 
+                  onChange={(e) => setFilterCategory(e.target.value || null)}
+                  className="bg-transparent text-sm font-bold text-neutral-500 border-none focus:ring-0 cursor-pointer p-0"
+                >
+                  <option value="">Todas las categorias</option>
+                  {MIND_CATEGORIES.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.label}</option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
 
@@ -555,13 +643,81 @@ export default function MindTracker({ user }: { user: any }) {
                         );
                       })}
                     </div>
-                    <p className="text-[10px] text-neutral-300 font-bold">
-                      {format(thought.timestamp.toDate(), 'MMM d, yyyy - h:mm a')}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] text-neutral-300 font-bold">
+                        {formatEntryDate(thought)}
+                      </p>
+                      {thought.uid === user.uid && editingEntryId !== thought.id && (
+                        <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => startEditingEntry(thought)}
+                            className="p-2 rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 transition-all"
+                            title="Editar entrada"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteEntry(thought)}
+                            disabled={isMutatingEntry}
+                            className="p-2 rounded-full text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-40"
+                            title="Eliminar entrada"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-neutral-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">
-                    {thought.content}
-                  </p>
+                  {editingEntryId === thought.id ? (
+                    <div className="space-y-4 mb-4">
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="w-full min-h-36 bg-neutral-50 border border-neutral-200 rounded-2xl p-4 text-sm text-neutral-800 focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-y"
+                      />
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {MIND_CATEGORIES.map(cat => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => toggleEditCategory(cat.id)}
+                            className={`flex items-center gap-2 p-2 rounded-xl text-[10px] font-bold transition-all border ${
+                              editCategories.includes(cat.id)
+                                ? 'bg-neutral-900 text-white border-neutral-900'
+                                : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
+                            }`}
+                          >
+                            <span>{cat.icon}</span>
+                            <span className="truncate">{cat.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelEditingEntry}
+                          disabled={isMutatingEntry}
+                          className="px-4 py-2 rounded-xl text-sm font-bold text-neutral-500 hover:bg-neutral-100 transition-all disabled:opacity-40"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveEditingEntry}
+                          disabled={isMutatingEntry || !editContent.trim() || editCategories.length === 0}
+                          className="px-5 py-2 rounded-xl text-sm font-bold bg-neutral-900 text-white hover:bg-neutral-800 transition-all disabled:opacity-40"
+                        >
+                          {isMutatingEntry ? 'Guardando...' : 'Guardar'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-neutral-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">
+                      {thought.content}
+                    </p>
+                  )}
                   
                   {thought.imageUrl && (
                     <div className="mt-4 space-y-4">

@@ -1,7 +1,7 @@
-import { addDoc, collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { buildJournalEntryPayload } from './journal.helpers';
-import type { CreateJournalEntryInput, JournalEntryRecord } from './journal.types';
+import type { CreateJournalEntryInput, JournalEntryRecord, UpdateJournalEntryInput } from './journal.types';
 
 export function subscribeToUserJournalEntries(
   uid: string,
@@ -25,4 +25,16 @@ export function subscribeToUserJournalEntries(
 
 export async function createJournalEntry(input: CreateJournalEntryInput) {
   await addDoc(collection(db, 'thoughts'), buildJournalEntryPayload(input));
+}
+
+export async function updateJournalEntry(input: UpdateJournalEntryInput) {
+  await updateDoc(doc(db, 'thoughts', input.id), {
+    content: input.content,
+    categories: input.categories,
+    updatedAt: new Date(),
+  });
+}
+
+export async function deleteJournalEntry(id: string) {
+  await deleteDoc(doc(db, 'thoughts', id));
 }

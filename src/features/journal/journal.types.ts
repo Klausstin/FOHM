@@ -34,3 +34,9 @@ export interface CreateJournalEntryInput {
   image?: SelectedJournalImage | null;
   imageAnalysis?: string | null;
 }
+
+export interface UpdateJournalEntryInput {
+  id: string;
+  content: string;
+  categories: string[];
+}
