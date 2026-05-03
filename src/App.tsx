@@ -9,8 +9,10 @@ import AnnualGoals from './components/AnnualGoals.tsx';
 import Settings from './components/Settings.tsx';
 import Habits from './components/Habits.tsx';
 import CalendarIntegration from './components/CalendarIntegration.tsx';
-import { Layout, Brain, Wallet, Home, LogOut, User as UserIcon, Settings as SettingsIcon, Target, CheckCircle2, Calendar } from 'lucide-react';
+import { Brain, Wallet, Home, LogOut, User as UserIcon, Settings as SettingsIcon, Target, CheckCircle2, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+const getDefaultHouseholdId = (uid: string) => `personal-${uid}`;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -39,14 +41,22 @@ export default function App() {
             photoURL: currentUser.photoURL,
             createdAt: new Date(),
             role: 'client',
-            householdId: 'shared-household-vicky-agustin' // Default shared household for them
+            householdId: getDefaultHouseholdId(currentUser.uid),
+            language: 'es',
+            primaryCurrency: 'ARS',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            sharingConfig: {
+              goals: false,
+              mind: false,
+              finances: false,
+              habits: false,
+            },
           };
           await setDoc(userRef, profileData);
         } else {
           profileData = userSnap.data();
-          // Ensure householdId exists for existing users
           if (!profileData.householdId) {
-            profileData.householdId = 'shared-household-vicky-agustin';
+            profileData.householdId = getDefaultHouseholdId(currentUser.uid);
             await setDoc(userRef, { householdId: profileData.householdId }, { merge: true });
           }
         }
@@ -73,7 +83,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="animate-pulse text-neutral-400">Loading...</div>
+        <div className="animate-pulse text-neutral-400">Cargando...</div>
       </div>
     );
   }
@@ -101,25 +111,25 @@ export default function App() {
               active={activeTab === 'home'} 
               onClick={() => setActiveTab('home')} 
               icon={<Home size={20} />} 
-              label="Overview" 
+              label="Inicio" 
             />
             <NavItem 
               active={activeTab === 'mind'} 
               onClick={() => setActiveTab('mind')} 
               icon={<Brain size={20} />} 
-              label="Mind Diary" 
+              label="Diario Mental" 
             />
             <NavItem 
               active={activeTab === 'finance'} 
               onClick={() => setActiveTab('finance')} 
               icon={<Wallet size={20} />} 
-              label="Finance Hub" 
+              label="Finanzas" 
             />
             <NavItem 
               active={activeTab === 'goals'} 
               onClick={() => setActiveTab('goals')} 
               icon={<Target size={20} />} 
-              label="Objetivos 2026" 
+              label="Objetivos" 
             />
             <NavItem 
               active={activeTab === 'habits'} 
@@ -137,7 +147,7 @@ export default function App() {
               active={activeTab === 'settings'} 
               onClick={() => setActiveTab('settings')} 
               icon={<SettingsIcon size={20} />} 
-              label="Settings" 
+              label="Ajustes" 
             />
           </div>
 
@@ -151,7 +161,7 @@ export default function App() {
                 </div>
               )}
               <div className="hidden md:block overflow-hidden">
-                <p className="text-sm font-medium truncate">{user.displayName || 'User'}</p>
+                <p className="text-sm font-medium truncate">{user.displayName || 'Usuario'}</p>
                 <p className="text-xs text-neutral-500 truncate">{user.email}</p>
               </div>
             </div>
@@ -160,7 +170,7 @@ export default function App() {
               className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all md:w-full md:flex md:items-center md:gap-3"
             >
               <LogOut size={20} />
-              <span className="hidden md:block text-sm font-medium">Sign Out</span>
+              <span className="hidden md:block text-sm font-medium">Cerrar sesión</span>
             </button>
           </div>
         </div>

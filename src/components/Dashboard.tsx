@@ -56,7 +56,7 @@ export default function Dashboard({ user }: { user: any }) {
     { id: 'expenseStructure', title: 'Estructura de los gastos', visible: true },
     { id: 'recentRecords', title: 'Últimos registros', visible: true },
     { id: 'calendarSummary', title: 'Agenda & Productividad', visible: true },
-    { id: 'goalsSummary', title: 'Objetivos 2026', visible: true },
+    { id: 'goalsSummary', title: 'Objetivos', visible: true },
   ];
 
   const [widgetsConfig, setWidgetsConfig] = useState<any[]>(user.dashboardWidgets || defaultWidgets);
@@ -223,8 +223,8 @@ export default function Dashboard({ user }: { user: any }) {
       {/* Summary Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
         <div>
-          <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Dashboard</h2>
-          <p className="text-neutral-500 font-medium mt-1">Resumen de tu salud financiera</p>
+          <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Inicio</h2>
+          <p className="text-neutral-500 font-medium mt-1">Resumen de tu bienestar, objetivos y finanzas</p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch bg-white rounded-3xl shadow-sm border border-neutral-200 overflow-hidden">
@@ -295,7 +295,7 @@ export default function Dashboard({ user }: { user: any }) {
             className="flex items-center gap-2.5 text-xs font-black text-neutral-600 hover:text-neutral-900 transition-all bg-white px-6 py-3.5 rounded-2xl border border-neutral-200/60 shadow-sm active:scale-95"
           >
             <Settings2 size={16} className="text-neutral-400" />
-            Personalizar Dashboard
+            Personalizar inicio
           </button>
         </div>
       </div>
@@ -537,7 +537,7 @@ export default function Dashboard({ user }: { user: any }) {
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Target size={16} className="text-neutral-400" />
-                      Objetivos 2026
+                      Objetivos
                     </h3>
                   </div>
                   <div className="space-y-4">
