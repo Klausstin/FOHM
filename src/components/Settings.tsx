@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db, collection, addDoc, query, where, onSnapshot, handleFirestoreError, OperationType, deleteDoc, doc, updateDoc, getDocs } from '../firebase.ts';
-import { User } from 'firebase/auth';
 import { Settings as SettingsIcon, Plus, Trash2, ChevronRight, ChevronDown, Folder, Tag, Save, Sparkles, RefreshCw, Share2, Lock, Unlock, Loader2, Wallet, Brain, Target, CheckCircle2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PREDEFINED_CATEGORIES } from '../lib/categories.ts';
+import { getHouseholdDescription, getHouseholdDisplayName, HOUSEHOLD_FEATURE_LABELS, JOURNAL_PRIVACY_NOTE } from '../domain/household.ts';
 
 export default function Settings({ user }: { user: any }) {
   const [categories, setCategories] = useState<any[]>([]);
@@ -23,12 +23,13 @@ export default function Settings({ user }: { user: any }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [sharingConfig, setSharingConfig] = useState(user.sharingConfig || {
     goals: false,
-    mind: false,
     finances: true,
     habits: false
   });
 
   const updateSharing = async (feature: string, value: boolean) => {
+    if (feature === 'mind') return;
+
     const newConfig = { ...sharingConfig, [feature]: value };
     setSharingConfig(newConfig);
     try {
@@ -224,12 +225,35 @@ export default function Settings({ user }: { user: any }) {
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Settings</h2>
-          <p className="text-neutral-500 font-medium">Manage your categories and household settings.</p>
+          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Ajustes</h2>
+          <p className="text-neutral-500 font-medium">Gestioná categorías, privacidad y base de grupo familiar.</p>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-200 shadow-sm lg:col-span-2">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Grupo familiar</p>
+              <h3 className="mt-2 text-2xl font-black text-neutral-900">{getHouseholdDisplayName(user.householdId)}</h3>
+              <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-neutral-500">
+                {getHouseholdDescription(user.householdId)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4 text-sm">
+              <p className="font-black text-neutral-900">ID actual</p>
+              <p className="mt-1 break-all font-mono text-xs text-neutral-500">{user.householdId || 'Sin configurar'}</p>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+            <p className="text-sm font-bold text-amber-900">{JOURNAL_PRIVACY_NOTE}</p>
+            <p className="mt-1 text-xs font-medium leading-relaxed text-amber-800">
+              En esta fase solo dejamos la base técnica. Las invitaciones reales de pareja/grupo se implementan después con reglas y confirmaciones claras.
+            </p>
+          </div>
+        </div>
+
         <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-200 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold flex items-center gap-2">
@@ -242,7 +266,7 @@ export default function Settings({ user }: { user: any }) {
               className="flex items-center gap-2 text-xs font-bold text-neutral-500 hover:text-neutral-900 transition-colors"
             >
               <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-              Sync Defaults
+              Sincronizar base
             </button>
           </div>
 
@@ -251,14 +275,14 @@ export default function Settings({ user }: { user: any }) {
               type="text"
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
-              placeholder="New Category Name"
+              placeholder="Nombre de la categoría"
               className="flex-1 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
             />
             <button
               onClick={addCategory}
               className="bg-neutral-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center gap-2"
             >
-              <Plus size={18} /> Add
+              <Plus size={18} /> Agregar
             </button>
           </div>
 
@@ -412,7 +436,7 @@ export default function Settings({ user }: { user: any }) {
                                     onClick={() => addSubSubCategory(cat.id, i)}
                                     className="text-neutral-400 hover:text-neutral-600 text-[10px] font-bold"
                                   >
-                                    Add
+                                    Agregar
                                   </button>
                                 </div>
                               </div>
@@ -431,7 +455,7 @@ export default function Settings({ user }: { user: any }) {
                             onClick={() => addSubCategory(cat.id)}
                             className="bg-neutral-100 text-neutral-600 px-3 py-2 rounded-lg font-bold text-xs hover:bg-neutral-200 transition-all"
                           >
-                            Add
+                            Agregar
                           </button>
                         </div>
                       </div>
@@ -446,7 +470,7 @@ export default function Settings({ user }: { user: any }) {
         <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-200 shadow-sm">
           <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
             <Tag size={20} className="text-neutral-400" />
-            Household Members
+            Miembros del grupo
           </h3>
           <p className="text-sm text-neutral-500 mb-6">Estas personas comparten espacios de la app con vos.</p>
           
@@ -461,12 +485,12 @@ export default function Settings({ user }: { user: any }) {
                   </div>
                 )}
                 <div>
-                  <p className="font-bold text-neutral-900">{member.displayName || 'User'}</p>
+                  <p className="font-bold text-neutral-900">{member.displayName || 'Usuario'}</p>
                   <p className="text-xs text-neutral-500 font-medium">{member.email}</p>
                 </div>
                 {member.uid === user.uid && (
                   <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-neutral-400 bg-white px-2 py-1 rounded-lg border border-neutral-100">
-                    You
+                    Vos
                   </span>
                 )}
               </div>
@@ -477,18 +501,18 @@ export default function Settings({ user }: { user: any }) {
             <div className="relative z-10">
               <h4 className="font-bold mb-2 flex items-center gap-2">
                 <Share2 size={16} className="text-neutral-400" />
-                Configuración de Privacidad
+                Configuración de privacidad
               </h4>
               <p className="text-xs text-neutral-400 leading-relaxed mb-4">
-                Elige qué secciones quieres compartir con los miembros de tu hogar.
+                Elegí qué secciones querés compartir con los miembros de tu grupo.
               </p>
               
               <div className="space-y-3">
                 {[
-                  { id: 'goals', label: 'Objetivos Anuales', icon: <Target size={14} /> },
-                  { id: 'mind', label: 'Diario de la Mente', icon: <Brain size={14} /> },
-                  { id: 'finances', label: 'Finanzas', icon: <Wallet size={14} /> },
-                  { id: 'habits', label: 'Hábitos Trimestrales', icon: <CheckCircle2 size={14} /> }
+                  { id: 'goals', label: HOUSEHOLD_FEATURE_LABELS.goals, icon: <Target size={14} /> },
+                  { id: 'mind', label: 'Diario Mental (siempre privado)', icon: <Brain size={14} />, disabled: true },
+                  { id: 'finances', label: HOUSEHOLD_FEATURE_LABELS.finances, icon: <Wallet size={14} /> },
+                  { id: 'habits', label: HOUSEHOLD_FEATURE_LABELS.habits, icon: <CheckCircle2 size={14} /> }
                 ].map((item) => (
                   <div key={item.id} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/10">
                     <div className="flex items-center gap-3">
@@ -496,12 +520,14 @@ export default function Settings({ user }: { user: any }) {
                       <span className="text-sm font-medium">{item.label}</span>
                     </div>
                     <button 
-                      onClick={() => updateSharing(item.id, !sharingConfig[item.id])}
+                      onClick={() => !item.disabled && updateSharing(item.id, !sharingConfig[item.id])}
+                      disabled={item.disabled}
                       className={`p-1.5 rounded-lg transition-all ${
+                        item.disabled ? 'bg-white/5 text-neutral-600 cursor-not-allowed' :
                         sharingConfig[item.id] ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-neutral-500'
                       }`}
                     >
-                      {sharingConfig[item.id] ? <Unlock size={14} /> : <Lock size={14} />}
+                      {!item.disabled && sharingConfig[item.id] ? <Unlock size={14} /> : <Lock size={14} />}
                     </button>
                   </div>
                 ))}

@@ -5,7 +5,8 @@
 - Migrar gradualmente las pantallas grandes a `components/ui` y `components/layout`.
 - Usar `PageHeader`, `Card`, `Button`, `EmptyState`, `SectionTabs`, `StatCard` y `CategoryPill` en cada feature.
 - Completar unificacion de idioma en Finanzas, Habitos, Objetivos, Calendario y Ajustes.
-- Crear flujo real de `Household` y miembros en lugar de depender solo de `householdId`.
+- Crear flujo real de invitaciones para `Household` y miembros.
+- Persistir `households` y `householdMembers` como colecciones propias cuando se implementen invitaciones.
 - Ajustar reglas Firestore para `visibility` en objetivos, habitos, cuentas y movimientos.
 - Mover IA y tokens sensibles fuera del frontend.
 

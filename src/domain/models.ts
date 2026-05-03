@@ -22,6 +22,7 @@ export interface Household {
   id: string;
   name: string;
   ownerId: string;
+  type: 'personal' | 'partner' | 'family' | 'group';
   createdAt: TimestampLike;
 }
 
@@ -31,6 +32,16 @@ export interface HouseholdMember {
   role: 'owner' | 'member';
   status: 'invited' | 'active' | 'removed';
   createdAt: TimestampLike;
+}
+
+export interface HouseholdInvite {
+  id: string;
+  householdId: string;
+  invitedByUserId: string;
+  invitedEmail: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  createdAt: TimestampLike;
+  expiresAt?: TimestampLike;
 }
 
 export interface Attachment {
