@@ -64,14 +64,14 @@ export default function Settings({ user }: { user: any }) {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      // Delete existing categories for this household
+      // Borra categorias existentes del grupo antes de sincronizar la base.
       const q = query(collection(db, 'categories'), where('householdId', '==', user.householdId));
       const snap = await getDocs(q);
       for (const d of snap.docs) {
         await deleteDoc(doc(db, 'categories', d.id));
       }
 
-      // Add predefined categories
+      // Agrega categorias predefinidas.
       for (const cat of PREDEFINED_CATEGORIES) {
         await addDoc(collection(db, 'categories'), {
           uid: user.uid,
@@ -429,7 +429,7 @@ export default function Settings({ user }: { user: any }) {
                                     type="text"
                                     value={newSubSubCategory[subKey] || ''}
                                     onChange={(e) => setNewSubSubCategory({ ...newSubSubCategory, [subKey]: e.target.value })}
-                                    placeholder="New Sub-sub"
+                                    placeholder="Nueva subcategoría"
                                     className="flex-1 bg-neutral-50 border border-neutral-100 rounded p-1 text-[10px] focus:ring-1 focus:ring-neutral-900 focus:border-transparent transition-all"
                                   />
                                   <button
@@ -448,7 +448,7 @@ export default function Settings({ user }: { user: any }) {
                             type="text"
                             value={newSubCategory[cat.id] || ''}
                             onChange={(e) => setNewSubCategory({ ...newSubCategory, [cat.id]: e.target.value })}
-                            placeholder="New Sub-category"
+                            placeholder="Nueva subcategoría"
                             className="flex-1 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs focus:ring-1 focus:ring-neutral-900 focus:border-transparent transition-all"
                           />
                           <button
