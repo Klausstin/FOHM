@@ -287,7 +287,6 @@ export default function AnnualGoals({ user }: { user: any }) {
                   : 'bg-neutral-50 text-neutral-400 hover:bg-neutral-100'
               }`}
             >
-              <span>{cat.icon}</span>
               <span className="hidden sm:inline">{cat.label?.split(' ')?.[0]}</span>
             </button>
           ))}
@@ -342,7 +341,6 @@ export default function AnnualGoals({ user }: { user: any }) {
                             : 'bg-neutral-50 text-neutral-400 hover:bg-neutral-100'
                         }`}
                       >
-                        <span>{cat.icon}</span>
                         <span className="truncate">{cat.label?.split(' ')?.[0]}</span>
                       </button>
                     ))}
@@ -389,7 +387,6 @@ export default function AnnualGoals({ user }: { user: any }) {
                     const cat = MIND_CATEGORIES.find(c => c.id === catId);
                     return (
                       <div key={catId} className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${cat?.color || 'bg-neutral-50 text-neutral-600'}`}>
-                        <span>{cat?.icon || '🏷️'}</span>
                         <span>{cat?.label?.split(' ')?.[0] || catId}</span>
                       </div>
                     );
@@ -484,7 +481,6 @@ export default function AnnualGoals({ user }: { user: any }) {
                         const cat = MIND_CATEGORIES.find(c => c.id === catId);
                         return (
                           <div key={catId} className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${cat?.color || 'bg-neutral-50 text-neutral-600'}`}>
-                            <span>{cat?.icon || '🏷️'}</span>
                             <span>{cat?.label?.split(' ')?.[0] || catId}</span>
                           </div>
                         );

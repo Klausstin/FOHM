@@ -317,7 +317,7 @@ export default function Habits({ user }: { user: any }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 p-4 md:p-8">
+    <div className="space-y-6">
       <AnimatePresence>
         {celebration.show && (
           <motion.div 
@@ -332,10 +332,11 @@ export default function Habits({ user }: { user: any }) {
         )}
       </AnimatePresence>
 
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <header className="flex flex-col justify-between gap-6 rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:p-8">
         <div className="space-y-1">
-          <h2 className="text-4xl font-black text-neutral-900 tracking-tighter">Hábitos</h2>
-          <p className="text-neutral-500 font-medium">Forja tu disciplina, un día a la vez.</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Sistema trimestral</p>
+          <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Habitos</h2>
+          <p className="max-w-2xl text-neutral-500 font-medium">Un habito fuerte por trimestre, sosteniendo lo anterior sin convertir la vida en una lista infinita de tareas.</p>
         </div>
         
         <div className="flex bg-neutral-100 p-1 rounded-2xl">
@@ -365,10 +366,10 @@ export default function Habits({ user }: { user: any }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="space-y-8"
+            className="space-y-6"
           >
             {activeHabit ? (
-              <div className="bg-white rounded-[3rem] border border-neutral-100 shadow-2xl shadow-neutral-200/50 overflow-hidden">
+              <div className="overflow-hidden rounded-[2rem] border border-neutral-200 bg-white shadow-sm">
                 <div className="p-8 md:p-12 space-y-8">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="space-y-2">
@@ -483,7 +484,7 @@ export default function Habits({ user }: { user: any }) {
                 </div>
               </div>
             ) : (
-              <div className="bg-neutral-50 rounded-[3rem] border-2 border-dashed border-neutral-200 p-12 text-center space-y-6">
+              <div className="rounded-[2rem] border-2 border-dashed border-neutral-200 bg-white/70 p-12 text-center space-y-6">
                 <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm border border-neutral-100">
                   <Plus size={40} className="text-neutral-300" />
                 </div>

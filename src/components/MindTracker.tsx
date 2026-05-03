@@ -30,6 +30,7 @@ export default function MindTracker({ user }: { user: any }) {
   const [reflection, setReflection] = useState<JournalReflection>(EMPTY_REFLECTION);
 
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -314,11 +315,13 @@ export default function MindTracker({ user }: { user: any }) {
   }, [thoughts, filterCategory, searchTerm]);
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6">
+      <header className="rounded-[2rem] bg-white p-6 shadow-sm border border-neutral-200 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Diario Mental</h2>
-          <p className="text-neutral-500 font-medium">Registra pensamientos, energia y patrones para entender tu alineacion.</p>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Privado por defecto</p>
+          <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Diario Mental</h2>
+          <p className="mt-2 max-w-2xl text-neutral-500 font-medium">Registra pensamientos, energia y patrones para que Luz pueda ayudarte a distinguir ruido, deseo real y desalineaciones.</p>
         </div>
         <button
           onClick={runAnalysis}
@@ -328,6 +331,7 @@ export default function MindTracker({ user }: { user: any }) {
           {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
           Analizar consistencia
         </button>
+        </div>
       </header>
 
       {analysisResult && (
@@ -373,10 +377,10 @@ export default function MindTracker({ user }: { user: any }) {
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         {/* Input Section */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm">
+        <div className="space-y-5 xl:col-span-4">
+          <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm xl:sticky xl:top-8">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <MessageSquare size={18} className="text-neutral-400" />
               Nuevo pensamiento
@@ -413,7 +417,6 @@ export default function MindTracker({ user }: { user: any }) {
                           : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
                       }`}
                     >
-                      <span>{cat.icon}</span>
                       <span className="truncate">{cat.label}</span>
                     </button>
                   ))}
@@ -480,6 +483,12 @@ export default function MindTracker({ user }: { user: any }) {
                   <textarea
                     value={newThought}
                     onChange={(e) => setNewThought(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
                     placeholder={showReflection ? "Comentarios adicionales..." : "Que tenes en mente?"}
                     className="w-full h-40 bg-neutral-50 border border-neutral-100 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none mb-2"
                   />
@@ -588,7 +597,7 @@ export default function MindTracker({ user }: { user: any }) {
         </div>
 
         {/* List Section */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-5 xl:col-span-8">
           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <History size={18} className="text-neutral-400" />
@@ -604,19 +613,54 @@ export default function MindTracker({ user }: { user: any }) {
                   className="bg-transparent border-none focus:ring-0 p-0 w-full sm:w-44 text-sm font-medium"
                 />
               </label>
-              <label className="flex items-center gap-2 bg-white border border-neutral-200 rounded-2xl px-3 py-2">
-                <Filter size={16} className="text-neutral-400 shrink-0" />
-                <select 
-                  value={filterCategory || ''} 
-                  onChange={(e) => setFilterCategory(e.target.value || null)}
-                  className="bg-transparent text-sm font-bold text-neutral-500 border-none focus:ring-0 cursor-pointer p-0"
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryFilter(prev => !prev)}
+                  className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-600 shadow-sm transition hover:border-neutral-300"
                 >
-                  <option value="">Todas las categorias</option>
-                  {MIND_CATEGORIES.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.label}</option>
-                  ))}
-                </select>
-              </label>
+                  <Filter size={16} className="text-neutral-400 shrink-0" />
+                  {filterCategory ? MIND_CATEGORIES.find(cat => cat.id === filterCategory)?.label : 'Todas las categorias'}
+                </button>
+                <AnimatePresence>
+                  {showCategoryFilter && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      className="absolute right-0 top-12 z-30 grid w-64 grid-cols-2 gap-2 rounded-3xl border border-neutral-200 bg-white p-3 shadow-2xl shadow-neutral-200"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterCategory(null);
+                          setShowCategoryFilter(false);
+                        }}
+                        className={`col-span-2 rounded-2xl px-3 py-2 text-left text-xs font-black uppercase tracking-widest transition ${
+                          !filterCategory ? 'bg-neutral-900 text-white' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'
+                        }`}
+                      >
+                        Todas
+                      </button>
+                      {MIND_CATEGORIES.map(cat => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => {
+                            setFilterCategory(cat.id);
+                            setShowCategoryFilter(false);
+                          }}
+                          className={`rounded-2xl px-3 py-2 text-left text-xs font-black transition ${
+                            filterCategory === cat.id ? 'bg-neutral-900 text-white' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
 
@@ -650,7 +694,6 @@ export default function MindTracker({ user }: { user: any }) {
                         );
                         return (
                           <div key={catId} className="flex items-center gap-1 bg-neutral-50 px-2 py-1 rounded-lg border border-neutral-100">
-                            <span>{cat?.icon || 'Etiqueta'}</span>
                             <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
                               {cat?.label || catId}
                             </span>
@@ -690,6 +733,12 @@ export default function MindTracker({ user }: { user: any }) {
                       <textarea
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            e.preventDefault();
+                            saveEditingEntry();
+                          }
+                        }}
                         className="w-full min-h-36 bg-neutral-50 border border-neutral-200 rounded-2xl p-4 text-sm text-neutral-800 focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-y"
                       />
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -704,7 +753,6 @@ export default function MindTracker({ user }: { user: any }) {
                                 : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
                             }`}
                           >
-                            <span>{cat.icon}</span>
                             <span className="truncate">{cat.label}</span>
                           </button>
                         ))}
