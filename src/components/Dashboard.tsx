@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, startOfYear, endOfYear, subDays } from 'date-fns';
+import LuzCommandCenter from './LuzCommandCenter.tsx';
 import { 
   BarChart, 
   Bar, 
@@ -344,59 +345,75 @@ export default function Dashboard({ user }: { user: any }) {
   }, [goals, habits, thoughts, stats.net, finances.length, user.uid]);
 
   return (
-    <div className="space-y-8 bg-neutral-50/50 min-h-screen p-4 md:p-8 pb-24 md:pb-8">
-      {/* Summary Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
-        <div>
-          <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Inicio</h2>
-          <p className="text-neutral-500 font-medium mt-1">Resumen de tu bienestar, objetivos y finanzas</p>
+    <div className="min-h-screen space-y-6 pb-24 md:pb-8">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.85fr)]">
+        <div className="rounded-[2rem] bg-neutral-950 p-6 text-white shadow-sm md:p-8 xl:p-10">
+          <div className="flex h-full min-h-[260px] flex-col justify-between gap-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-3xl">
+                <p className="mb-4 inline-flex rounded-full border border-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
+                  Inicio
+                </p>
+                <h2 className="text-4xl font-black tracking-tight md:text-6xl">
+                  Sistema operativo personal.
+                </h2>
+                <p className="mt-5 max-w-2xl text-base font-medium leading-7 text-white/62">
+                  VEO cruza objetivos, habitos, diario, finanzas y tiempo para ayudarte a ver si la vida que estas construyendo coincide con lo que decis que queres.
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] bg-white px-5 py-4 text-neutral-950">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Alineacion</p>
+                <p className="mt-1 text-5xl font-black tracking-tight">{alignment.score}%</p>
+              </div>
+            </div>
+
+            <LuzCommandCenter user={user} />
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MetricTile label="Objetivos activos" value={goals.filter(goal => goal.status !== 'completed').length} />
+              <MetricTile label="Habitos activos" value={habits.filter(habit => habit.status === 'active').length} />
+              <MetricTile label="Entradas 7 dias" value={alignment.recentThoughts} />
+            </div>
+          </div>
         </div>
-        
-        <div className="flex flex-col sm:flex-row items-stretch bg-white rounded-3xl shadow-sm border border-neutral-200 overflow-hidden">
-          <div className="px-8 py-6 border-b sm:border-b-0 sm:border-r border-neutral-100 flex flex-col justify-center min-w-[240px]">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 block">Saldo Total</span>
-            <div className="space-y-1">
+
+        <aside className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Saldo total</p>
+            <div className="mt-5 space-y-3">
               {(Object.entries(stats.balancesByCurrency || {})).map(([curr, val]: [string, any]) => (
-                <div key={curr} className="flex items-center justify-between gap-4">
-                  <span className="text-2xl font-black text-neutral-900 tabular-nums">
+                <div key={curr} className="flex items-end justify-between gap-4">
+                  <span className="text-3xl font-black tracking-tight text-neutral-900 tabular-nums">
                     {val.toLocaleString()}
                   </span>
-                  <span className="text-[10px] font-bold text-neutral-400 uppercase bg-neutral-50 px-2 py-0.5 rounded tracking-wider">{curr}</span>
+                  <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-neutral-500">{curr}</span>
                 </div>
               ))}
               {Object.keys(stats.balancesByCurrency).length === 0 && (
-                <span className="text-xl font-black text-neutral-300">0.00</span>
+                <span className="text-3xl font-black text-neutral-300">0.00</span>
               )}
             </div>
           </div>
-          
-          <div className="px-8 py-6 bg-neutral-50/30 flex flex-col justify-center min-w-[240px]">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 block">Flujo de Caja (Mes)</span>
-            <div className="flex items-center justify-between gap-4">
-              <span className={`text-2xl font-black tabular-nums ${stats.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+
+          <div className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Flujo del periodo</p>
+            <div className="mt-5 flex items-end justify-between gap-4">
+              <span className={`text-4xl font-black tracking-tight tabular-nums ${stats.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {stats.net >= 0 ? '+' : ''}{stats.net.toLocaleString()}
               </span>
-              <span className="text-[10px] font-bold text-neutral-400 uppercase bg-white px-2 py-0.5 rounded tracking-wider border border-neutral-100">ARS</span>
-            </div>
-            <div className="mt-4 flex items-center gap-3">
-              <div className="h-1.5 w-full rounded-full bg-neutral-200/50 overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(Math.abs((stats.net / (stats.income || 1)) * 100), 100)}%` }}
-                  transition={{ duration: 1, ease: "easeOut" }}
-                  className={`h-full rounded-full ${stats.net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} 
-                />
-              </div>
-              <span className={`text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${stats.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {stats.net >= 0 ? 'Saludable' : 'Critico'}
+              <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${stats.net >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                {stats.net >= 0 ? 'Ordenado' : 'Revisar'}
               </span>
             </div>
+            <p className="mt-4 text-sm font-medium leading-6 text-neutral-500">
+              {stats.net >= 0 ? 'El periodo no esta tensionando la caja.' : 'Los gastos superan los ingresos del periodo.'}
+            </p>
           </div>
-        </div>
-      </div>
+        </aside>
+      </section>
 
       {/* Date Selector & Actions */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-b border-neutral-100 mb-8">
+      <div className="flex flex-col gap-4 rounded-[1.75rem] border border-neutral-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-1 bg-white p-1.5 rounded-2xl border border-neutral-200/60 shadow-sm">
           <button className="p-2.5 hover:bg-neutral-50 rounded-xl transition-all active:scale-95 text-neutral-400 hover:text-neutral-900"><ChevronLeft size={18} /></button>
           <div className="px-4 py-1.5 flex flex-col items-center">
@@ -426,14 +443,14 @@ export default function Dashboard({ user }: { user: any }) {
       </div>
 
       {/* Bento Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-6">
         {(widgetsConfig || []).map((widget) => {
           if (!widget.visible) return null;
           
           switch (widget.id) {
             case 'balances':
               return (
-                <div key="balances" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200 flex flex-col">
+                <div key="balances" className="flex flex-col rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-2">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Wallet size={16} className="text-neutral-400" />
@@ -476,7 +493,7 @@ export default function Dashboard({ user }: { user: any }) {
               );
             case 'cashflow':
               return (
-                <div key="cashflow" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200 lg:col-span-2">
+                <div key="cashflow" className="rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-4">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <TrendingUp size={16} className="text-neutral-400" />
@@ -518,7 +535,7 @@ export default function Dashboard({ user }: { user: any }) {
               );
             case 'alignment':
               return (
-                <div key="alignment" className="bg-neutral-900 text-white p-6 rounded-3xl shadow-sm border border-neutral-800 lg:col-span-2 overflow-hidden relative">
+                <div key="alignment" className="relative overflow-hidden rounded-[1.75rem] border border-neutral-800 bg-neutral-900 p-6 text-white shadow-sm lg:col-span-4">
                   <div className="absolute right-0 top-0 p-6 opacity-10">
                     <Sparkles size={120} />
                   </div>
@@ -581,7 +598,7 @@ export default function Dashboard({ user }: { user: any }) {
               );
             case 'trend':
               return (
-                <div key="trend" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200 lg:col-span-2">
+                <div key="trend" className="rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-4">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <TrendingUp size={16} className="text-neutral-400" />
@@ -620,7 +637,7 @@ export default function Dashboard({ user }: { user: any }) {
               );
             case 'expenseStructure':
               return (
-                <div key="expenseStructure" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200">
+                <div key="expenseStructure" className="rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-2">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <PieChartIcon size={16} className="text-neutral-400" />
@@ -656,7 +673,7 @@ export default function Dashboard({ user }: { user: any }) {
               );
             case 'recentRecords':
               return (
-                <div key="recentRecords" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200 lg:col-span-1">
+                <div key="recentRecords" className="rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-2">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Briefcase size={16} className="text-neutral-400" />
@@ -693,7 +710,7 @@ export default function Dashboard({ user }: { user: any }) {
               );
             case 'calendarSummary':
               return (
-                <div key="calendarSummary" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200">
+                <div key="calendarSummary" className="rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-2">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Calendar size={16} className="text-neutral-400" />
@@ -721,7 +738,7 @@ export default function Dashboard({ user }: { user: any }) {
               const total = goals.length;
               const progress = total > 0 ? (completed / total) * 100 : 0;
               return (
-                <div key="goalsSummary" className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-200">
+                <div key="goalsSummary" className="rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-sm lg:col-span-2">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2 uppercase tracking-wider">
                       <Target size={16} className="text-neutral-400" />
@@ -766,6 +783,15 @@ export default function Dashboard({ user }: { user: any }) {
           }
         })}
       </div>
+    </div>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.07] p-4">
+      <p className="text-3xl font-black tracking-tight text-white">{value}</p>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/38">{label}</p>
     </div>
   );
 }

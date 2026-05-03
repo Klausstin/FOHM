@@ -29,13 +29,13 @@ export default function Auth() {
         </h1>
         
         <p className="text-neutral-500 mb-10 text-lg font-medium leading-relaxed">
-          Un espacio personal para ordenar mente, hábitos, objetivos, calendario y finanzas con ayuda de IA.
+          Un sistema personal para entenderte mejor, elegir con mas claridad y vivir mas alineado.
         </p>
 
         <div className="space-y-4 mb-10">
           <Feature icon={<ShieldCheck size={18} className="text-neutral-900" />} text="Acceso seguro con Google" />
-          <Feature icon={<Target size={18} className="text-neutral-900" />} text="Objetivos, hábitos y finanzas conectados" />
-          <Feature icon={<Sparkles size={18} className="text-neutral-900" />} text="IA para detectar patrones y desalineaciones" />
+          <Feature icon={<Target size={18} className="text-neutral-900" />} text="Objetivos, habitos y finanzas conectados" />
+          <Feature icon={<Sparkles size={18} className="text-neutral-900" />} text="Luz detecta patrones y desalineaciones" />
         </div>
 
         <button
@@ -47,7 +47,7 @@ export default function Auth() {
         </button>
         
         <p className="mt-8 text-xs text-neutral-400 font-medium uppercase tracking-widest">
-          Privado y seguro • Powered by Gemini
+          Privado y seguro - Luz como copiloto
         </p>
       </motion.div>
     </div>
