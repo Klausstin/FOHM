@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { db, collection, addDoc, query, where, orderBy, onSnapshot, handleFirestoreError, OperationType } from '../firebase.ts';
-import { User } from 'firebase/auth';
+import { db, collection, query, where, onSnapshot, handleFirestoreError, OperationType } from '../firebase.ts';
 import { Brain, Mic, Send, Trash2, Filter, Sparkles, MessageSquare, History, Image, Loader2, X, Tag, CheckCircle2, User as UserIcon } from 'lucide-react';
 import { MIND_CATEGORIES } from '../lib/mindCategories.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { analyzeMentalConsistency, transcribeAudio, analyzeImage, categorizeThought, checkHabitProgress } from '../services/gemini.ts';
 import { DEFAULT_PRIVATE_VISIBILITY, VISIBILITY_LABELS } from '../domain/permissions.ts';
+import { buildFinalJournalContent, EMPTY_REFLECTION, REFLECTION_PRODUCTIVITY_OPTIONS } from '../features/journal/journal.helpers.ts';
+import { createJournalEntry, subscribeToUserJournalEntries } from '../features/journal/journal.service.ts';
+import type { JournalEntryRecord, JournalReflection, SelectedJournalImage } from '../features/journal/journal.types.ts';
 
 
 export default function MindTracker({ user }: { user: any }) {
-  const [thoughts, setThoughts] = useState<any[]>([]);
+  const [thoughts, setThoughts] = useState<JournalEntryRecord[]>([]);
   const [goals, setGoals] = useState<any[]>([]);
   const [activeHabits, setActiveHabits] = useState<any[]>([]);
   const [members, setMembers] = useState<{ [key: string]: any }>({});
@@ -20,12 +22,7 @@ export default function MindTracker({ user }: { user: any }) {
   
   // Guided Reflection State
   const [showReflection, setShowReflection] = useState(false);
-  const [reflection, setReflection] = useState({
-    emotions: '',
-    explanation: '',
-    highlights: '',
-    productivity: ''
-  });
+  const [reflection, setReflection] = useState<JournalReflection>(EMPTY_REFLECTION);
 
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -33,7 +30,7 @@ export default function MindTracker({ user }: { user: any }) {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<{ data: string, type: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<SelectedJournalImage | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
@@ -50,16 +47,7 @@ export default function MindTracker({ user }: { user: any }) {
       setMembers(memberMap);
     });
 
-    const q = query(
-      collection(db, 'thoughts'),
-      where('uid', '==', user.uid),
-      orderBy('timestamp', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setThoughts(data);
-    }, (error) => {
+    const unsubscribe = subscribeToUserJournalEntries(user.uid, setThoughts, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'thoughts');
     });
 
@@ -94,29 +82,18 @@ export default function MindTracker({ user }: { user: any }) {
     try {
       let imageAnalysis = "";
       if (selectedImage) {
-        imageAnalysis = await analyzeImage(selectedImage.data, selectedImage.type, newThought || "Analyze this image.");
+        imageAnalysis = await analyzeImage(selectedImage.data, selectedImage.type, newThought || "Analiza esta imagen.");
       }
 
-      // Combine text with reflection if present
-      let finalContent = newThought;
-      if (showReflection) {
-        const reflectionText = `
-### Reflexión del Día
-**Emociones:** ${reflection.emotions}
-**Explicación:** ${reflection.explanation}
-**Hitos del día:** ${reflection.highlights}
-**¿Cumplió objetivos?:** ${reflection.productivity}
-        `.trim();
-        finalContent = finalContent ? `${finalContent}\n\n${reflectionText}` : reflectionText;
-      }
+      const finalContent = buildFinalJournalContent(newThought, reflection, showReflection);
 
       if (!finalContent.trim() && !selectedImage) return;
 
-      // Automatic Categorization
+      // Automatic categorization keeps manual tags as the source of truth when present.
       let categories = selectedCategories;
       if (categories.length === 0 && finalContent.trim()) {
         const geminiLabels = await categorizeThought(finalContent, MIND_CATEGORIES);
-        // Translate labels back to IDs for consistency
+        // Translate labels back to IDs for consistency.
         categories = geminiLabels.map(label => {
           const searchLabel = label.trim().toLowerCase();
           const cat = MIND_CATEGORIES.find(c => 
@@ -129,29 +106,24 @@ export default function MindTracker({ user }: { user: any }) {
       }
       if (categories.length === 0) categories = [MIND_CATEGORIES[0].id];
 
-      // Habit Tracking
       const feedback = await checkHabitProgress(finalContent, activeHabits);
       if (feedback) {
         setHabitFeedback(feedback);
         setTimeout(() => setHabitFeedback(null), 10000);
       }
 
-      await addDoc(collection(db, 'thoughts'), {
+      await createJournalEntry({
         uid: user.uid,
         householdId: user.householdId || null,
         content: finalContent,
-        categories: categories,
-        visibility: DEFAULT_PRIVATE_VISIBILITY,
-        entryType: selectedImage ? 'mixed' : 'text',
-        attachments: [],
-        timestamp: new Date(),
-        imageUrl: selectedImage?.data ? `data:${selectedImage.type};base64,${selectedImage.data}` : null,
-        analysis: imageAnalysis || null
+        categories,
+        image: selectedImage,
+        imageAnalysis: imageAnalysis || null,
       });
       setNewThought('');
       setSelectedImage(null);
       setSelectedCategories([]);
-      setReflection({ emotions: '', explanation: '', highlights: '', productivity: '' });
+      setReflection({ ...EMPTY_REFLECTION });
       setShowReflection(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'thoughts');
@@ -215,7 +187,7 @@ export default function MindTracker({ user }: { user: any }) {
 
   const runAnalysis = async () => {
     if (thoughts.length < 3) {
-      alert("Agregá al menos 3 entradas para analizar consistencia.");
+      alert("Agrega al menos 3 entradas para analizar consistencia.");
       return;
     }
     setIsAnalyzing(true);
@@ -254,7 +226,7 @@ export default function MindTracker({ user }: { user: any }) {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Diario Mental</h2>
-          <p className="text-neutral-500 font-medium">Registrá pensamientos, energía y patrones para entender tu alineación.</p>
+          <p className="text-neutral-500 font-medium">Registra pensamientos, energia y patrones para entender tu alineacion.</p>
         </div>
         <button
           onClick={runAnalysis}
@@ -262,7 +234,7 @@ export default function MindTracker({ user }: { user: any }) {
           className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200 disabled:opacity-50"
         >
           {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
-          Analyze Consistency
+          Analizar consistencia
         </button>
       </header>
 
@@ -278,7 +250,7 @@ export default function MindTracker({ user }: { user: any }) {
           <div className="relative z-10">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Sparkles size={20} className="text-neutral-400" />
-              Análisis con IA
+              Analisis con IA
             </h3>
             <div className="prose prose-invert max-w-none text-neutral-300 leading-relaxed">
               {analysisResult}
@@ -287,7 +259,7 @@ export default function MindTracker({ user }: { user: any }) {
               onClick={() => setAnalysisResult(null)}
               className="mt-6 text-sm font-bold text-neutral-400 hover:text-white transition-colors"
             >
-              Dismiss Analysis
+              Cerrar analisis
             </button>
           </div>
         </motion.div>
@@ -303,7 +275,7 @@ export default function MindTracker({ user }: { user: any }) {
             <CheckCircle2 size={20} />
           </div>
           <div>
-            <h4 className="text-emerald-900 font-bold mb-1">Habit Progress Detected!</h4>
+            <h4 className="text-emerald-900 font-bold mb-1">Progreso de habito detectado</h4>
             <p className="text-emerald-700 text-sm">{habitFeedback}</p>
           </div>
         </motion.div>
@@ -315,12 +287,12 @@ export default function MindTracker({ user }: { user: any }) {
           <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <MessageSquare size={18} className="text-neutral-400" />
-              Nuevo Pensamiento
+              Nuevo pensamiento
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Categorías</label>
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Categorias</label>
                   <button 
                     type="button"
                     onClick={() => setShowReflection(!showReflection)}
@@ -328,7 +300,7 @@ export default function MindTracker({ user }: { user: any }) {
                       showReflection ? 'bg-amber-500 text-white shadow-lg' : 'bg-neutral-100 text-neutral-400'
                     }`}
                   >
-                    {showReflection ? 'Cerrar Reflexión' : 'Reflexión Guiada'}
+                    {showReflection ? 'Cerrar reflexion' : 'Reflexion guiada'}
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1">
@@ -366,17 +338,17 @@ export default function MindTracker({ user }: { user: any }) {
                       className="space-y-3 overflow-hidden border-l-2 border-amber-200 pl-4 py-2"
                     >
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">¿Qué emociones tuviste hoy?</label>
+                        <label className="text-[10px] font-bold text-neutral-400">Que emociones tuviste hoy?</label>
                         <input 
                           type="text" 
                           value={reflection.emotions}
                           onChange={(e) => setReflection({...reflection, emotions: e.target.value})}
-                          placeholder="Ej: Alegría, nostalgia..."
+                          placeholder="Ej: alegria, nostalgia..."
                           className="w-full text-xs p-2 bg-neutral-50 rounded-lg border-none focus:ring-1 focus:ring-amber-500"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">¿Por qué te sentiste así?</label>
+                        <label className="text-[10px] font-bold text-neutral-400">Por que te sentiste asi?</label>
                         <textarea 
                           value={reflection.explanation}
                           onChange={(e) => setReflection({...reflection, explanation: e.target.value})}
@@ -384,7 +356,7 @@ export default function MindTracker({ user }: { user: any }) {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">¿Qué fue lo más importante hoy?</label>
+                        <label className="text-[10px] font-bold text-neutral-400">Que fue lo mas importante hoy?</label>
                         <textarea 
                           value={reflection.highlights}
                           onChange={(e) => setReflection({...reflection, highlights: e.target.value})}
@@ -392,9 +364,9 @@ export default function MindTracker({ user }: { user: any }) {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">¿Hiciste lo que te propusiste?</label>
+                        <label className="text-[10px] font-bold text-neutral-400">Hiciste lo que te propusiste?</label>
                         <div className="flex gap-2">
-                          {['Sí, todo', 'La gran mayoría', 'Algo', 'Casi nada'].map(option => (
+                          {REFLECTION_PRODUCTIVITY_OPTIONS.map(option => (
                             <button
                               key={option}
                               type="button"
@@ -416,7 +388,7 @@ export default function MindTracker({ user }: { user: any }) {
                   <textarea
                     value={newThought}
                     onChange={(e) => setNewThought(e.target.value)}
-                    placeholder={showReflection ? "Comentarios adicionales..." : "¿Qué tienes en mente?"}
+                    placeholder={showReflection ? "Comentarios adicionales..." : "Que tenes en mente?"}
                     className="w-full h-40 bg-neutral-50 border border-neutral-100 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none mb-2"
                   />
                   
@@ -436,20 +408,20 @@ export default function MindTracker({ user }: { user: any }) {
                                 <Mic size={32} />
                               </div>
                             </div>
-                            <p className="text-red-500 font-bold animate-pulse">Grabando Audio...</p>
+                            <p className="text-red-500 font-bold animate-pulse">Grabando audio...</p>
                             <button 
                               type="button"
                               onClick={stopRecording}
                               className="mt-4 bg-neutral-900 text-white px-6 py-2 rounded-full text-sm font-bold"
                             >
-                              Detener Grabación
+                              Detener grabacion
                             </button>
                           </>
                         ) : (
                           <>
                             <Loader2 size={32} className="text-neutral-900 animate-spin" />
                             <p className="text-neutral-900 font-bold">
-                              {isTranscribing ? "Transcribiendo Audio..." : "Categorizando Pensamiento..."}
+                              {isTranscribing ? "Transcribiendo audio..." : "Categorizando entrada..."}
                             </p>
                           </>
                         )}
@@ -488,7 +460,7 @@ export default function MindTracker({ user }: { user: any }) {
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         className="p-3 bg-neutral-100 text-neutral-500 rounded-full hover:bg-neutral-200 transition-all"
-                        title="Añadir imagen"
+                        title="Agregar imagen"
                       >
                         <Image size={18} />
                       </button>
@@ -537,7 +509,7 @@ export default function MindTracker({ user }: { user: any }) {
                 onChange={(e) => setFilterCategory(e.target.value || null)}
                 className="bg-transparent text-sm font-bold text-neutral-500 border-none focus:ring-0 cursor-pointer"
               >
-                <option value="">Todas las Categorías</option>
+                <option value="">Todas las categorias</option>
                 {MIND_CATEGORIES.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.label}</option>
                 ))}
@@ -575,7 +547,7 @@ export default function MindTracker({ user }: { user: any }) {
                         );
                         return (
                           <div key={catId} className="flex items-center gap-1 bg-neutral-50 px-2 py-1 rounded-lg border border-neutral-100">
-                            <span>{cat?.icon || '🏷️'}</span>
+                            <span>{cat?.icon || 'Etiqueta'}</span>
                             <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
                               {cat?.label || catId}
                             </span>
@@ -584,7 +556,7 @@ export default function MindTracker({ user }: { user: any }) {
                       })}
                     </div>
                     <p className="text-[10px] text-neutral-300 font-bold">
-                      {format(thought.timestamp.toDate(), 'MMM d, yyyy • h:mm a')}
+                      {format(thought.timestamp.toDate(), 'MMM d, yyyy - h:mm a')}
                     </p>
                   </div>
                   <p className="text-neutral-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">
@@ -617,7 +589,7 @@ export default function MindTracker({ user }: { user: any }) {
 
             {filteredThoughts.length === 0 && (
               <div className="text-center py-20 bg-neutral-100 rounded-[2rem] border-2 border-dashed border-neutral-200">
-                <p className="text-neutral-400 font-bold">No hay entradas en esta categoría.</p>
+                <p className="text-neutral-400 font-bold">No hay entradas en esta categoria.</p>
               </div>
             )}
           </div>
