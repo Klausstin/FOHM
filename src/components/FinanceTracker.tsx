@@ -28,7 +28,7 @@ import {
   subscribeToHouseholdFinancialTransactions,
   updateFinancialAccount,
 } from '../features/finance/finance.service.ts';
-import { getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
+import { buildCatchupEstimatedTransaction, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -93,6 +93,17 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [newAccount, setNewAccount] = useState({ name: '', currency: 'ARS', balance: 0, color: '#3B82F6', type: 'bank' });
   const [householdMembers, setHouseholdMembers] = useState<any[]>([]);
   const [showCatchupPrompt, setShowCatchupPrompt] = useState(false);
+  const [showCatchupWizard, setShowCatchupWizard] = useState(false);
+  const [catchupDraft, setCatchupDraft] = useState({
+    accountId: '',
+    amount: '',
+    currency: 'ARS',
+    description: '',
+    category: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    estimatedReason: '',
+  });
+  const [isSavingCatchup, setIsSavingCatchup] = useState(false);
   
   // Filtering states
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, day, month, quarter, year, custom
@@ -531,6 +542,62 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const openCatchupWizard = () => {
+    setCatchupDraft({
+      accountId: userAccounts[0]?.id || '',
+      amount: '',
+      currency: userAccounts[0]?.currency || 'ARS',
+      description: '',
+      category: userCategories[0]?.name || 'Sin categoria',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      estimatedReason: '',
+    });
+    setShowCatchupWizard(true);
+  };
+
+  const handleSaveCatchupEstimate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!catchupDraft.amount || !catchupDraft.description || !catchupDraft.category || !catchupDraft.estimatedReason) return;
+
+    const amountValue = parseFloat(catchupDraft.amount);
+    if (Number.isNaN(amountValue) || amountValue <= 0) return;
+
+    const reconciliationBatchId = `catchup-${user.uid}-${Date.now()}`;
+    const transaction = buildCatchupEstimatedTransaction({
+      uid: user.uid,
+      householdId: user.householdId,
+      accountId: catchupDraft.accountId,
+      amount: amountValue,
+      currency: catchupDraft.currency,
+      description: catchupDraft.description,
+      category: catchupDraft.category,
+      date: new Date(`${catchupDraft.date}T12:00:00`),
+      estimatedReason: catchupDraft.estimatedReason,
+      reconciliationBatchId,
+    });
+
+    setIsSavingCatchup(true);
+    try {
+      await createFinancialTransaction(transaction);
+      await applyTransactionToAccountBalances(transaction);
+      setShowCatchupWizard(false);
+      setShowCatchupPrompt(false);
+      setCatchupDraft({
+        accountId: '',
+        amount: '',
+        currency: 'ARS',
+        description: '',
+        category: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        estimatedReason: '',
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'finances');
+    } finally {
+      setIsSavingCatchup(false);
+    }
+  };
+
   const totalBalance = userAccounts.reduce((acc, a) => acc + (a.balance || 0), 0);
 
   const monthlyIncome = finances
@@ -587,13 +654,170 @@ export default function FinanceTracker({ user }: { user: any }) {
           </div>
           <button
             type="button"
-            onClick={() => setShowCatchupPrompt(false)}
-            className="px-5 py-3 rounded-2xl bg-white text-neutral-900 text-sm font-black border border-amber-100 hover:bg-amber-100 transition-all"
+            onClick={openCatchupWizard}
+            className="px-5 py-3 rounded-2xl bg-neutral-900 text-white text-sm font-black border border-neutral-900 hover:bg-neutral-800 transition-all"
           >
-            Entendido
+            Empezar puesta al dia
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {showCatchupWizard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-start gap-4 mb-6">
+                <div>
+                  <h3 className="text-2xl font-black text-neutral-900">Modo puesta al dia</h3>
+                  <p className="text-sm text-neutral-500 mt-2">
+                    Carga un gasto aproximado para cerrar el periodo. Va a quedar marcado como supuesto y pendiente de revision.
+                  </p>
+                </div>
+                <button onClick={() => setShowCatchupWizard(false)} className="text-neutral-400 hover:text-neutral-900">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCatchupEstimate} className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Cuenta afectada</label>
+                    <select
+                      value={catchupDraft.accountId}
+                      onChange={e => {
+                        const selectedAccount = userAccounts.find(acc => acc.id === e.target.value);
+                        setCatchupDraft({
+                          ...catchupDraft,
+                          accountId: e.target.value,
+                          currency: selectedAccount?.currency || catchupDraft.currency,
+                        });
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
+                    >
+                      <option value="">Sin cuenta</option>
+                      {(userAccounts || []).map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Fecha aproximada</label>
+                    <input
+                      type="date"
+                      required
+                      value={catchupDraft.date}
+                      onChange={e => setCatchupDraft({ ...catchupDraft, date: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Monto estimado</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      value={catchupDraft.amount}
+                      onChange={e => setCatchupDraft({ ...catchupDraft, amount: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
+                      placeholder="Ej: 42000"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Moneda</label>
+                    <select
+                      value={catchupDraft.currency}
+                      onChange={e => setCatchupDraft({ ...catchupDraft, currency: e.target.value })}
+                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
+                    >
+                      {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Que recordas?</label>
+                  <input
+                    type="text"
+                    required
+                    value={catchupDraft.description}
+                    onChange={e => setCatchupDraft({ ...catchupDraft, description: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
+                    placeholder="Ej: supermercado, salidas, nafta, efectivo"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Categoria</label>
+                  <input
+                    type="text"
+                    required
+                    value={catchupDraft.category}
+                    onChange={e => setCatchupDraft({ ...catchupDraft, category: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
+                    list="catchup-categories"
+                    placeholder="Ej: Comida, Transporte, Ocio"
+                  />
+                  <datalist id="catchup-categories">
+                    {(userCategories || []).map(cat => (
+                      <option key={cat.id} value={cat.name} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Por que es estimado?</label>
+                  <textarea
+                    required
+                    value={catchupDraft.estimatedReason}
+                    onChange={e => setCatchupDraft({ ...catchupDraft, estimatedReason: e.target.value })}
+                    className="w-full h-24 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm resize-none"
+                    placeholder="Ej: no tengo el ticket, pero recuerdo que fue una compra grande de la semana."
+                  />
+                </div>
+
+                <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+                  <p className="text-sm font-bold text-amber-900">Este movimiento se guardara como supuesto.</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Quedara con source catchup_estimate, confidence estimated y status needs_review para revisarlo cuando tengas mejor informacion.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCatchupWizard(false)}
+                    className="flex-1 px-5 py-3 rounded-2xl font-bold text-neutral-500 hover:bg-neutral-50 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingCatchup}
+                    className="flex-[2] px-5 py-3 rounded-2xl bg-neutral-900 text-white font-black hover:bg-neutral-800 transition-all disabled:opacity-50"
+                  >
+                    {isSavingCatchup ? 'Guardando...' : 'Guardar movimiento supuesto'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Wallets Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
