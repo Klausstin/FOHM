@@ -27,6 +27,7 @@ import {
   subscribeToHouseholdFinancialAccounts,
   subscribeToHouseholdFinancialTransactions,
   updateFinancialAccount,
+  updateFinancialTransaction,
 } from '../features/finance/finance.service.ts';
 import { buildCatchupEstimatedTransaction, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
@@ -609,6 +610,38 @@ export default function FinanceTracker({ user }: { user: any }) {
     .reduce((acc, f) => acc + f.amount, 0);
 
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
+  const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
+  const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
+
+  const handleConfirmReviewedFinance = async (finance: any) => {
+    try {
+      await updateFinancialTransaction(finance.id, {
+        status: 'posted',
+        confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
+        needsReview: false,
+        isConfirmed: true,
+        paymentStatus: 'Contabilizado',
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+    }
+  };
+
+  const handleIgnoreReviewedFinance = async (finance: any) => {
+    const confirmed = window.confirm('Ignorar este movimiento supuesto? No se borra, pero deja de contar como pendiente.');
+    if (!confirmed) return;
+
+    try {
+      await updateFinancialTransaction(finance.id, {
+        status: 'ignored',
+        needsReview: false,
+        isConfirmed: false,
+        paymentStatus: 'Anulado',
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -1126,6 +1159,85 @@ export default function FinanceTracker({ user }: { user: any }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {reviewFinances.length > 0 && (
+        <section className="bg-white border border-amber-100 rounded-[2rem] p-6 shadow-sm space-y-5">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-neutral-900 flex items-center gap-2">
+                <AlertCircle size={18} className="text-amber-500" />
+                Movimientos para revisar
+              </h3>
+              <p className="text-sm text-neutral-500 mt-1 max-w-2xl">
+                Hay {reviewFinances.length} movimiento(s) marcados como supuestos, inferidos o pendientes. Confirmalos cuando la caja cierre, editalos si recordas mejor el detalle o ignoralos si no corresponden.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveListTab('reviews')}
+              className="px-4 py-2 rounded-2xl bg-neutral-900 text-white text-xs font-black uppercase tracking-widest hover:bg-neutral-800 transition-all"
+            >
+              Ver todos
+            </button>
+          </div>
+
+          {estimatedReviewFinances.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {estimatedReviewFinances.slice(0, 4).map(finance => (
+                <div key={finance.id} className="rounded-2xl bg-amber-50 border border-amber-100 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-neutral-900">{finance.description || finance.category}</p>
+                      <p className="text-xs text-neutral-500 mt-1">
+                        {finance.category} · {finance.currency || 'ARS'} {Number(finance.amount || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700 border border-amber-100">
+                      {finance.confidence || 'estimated'}
+                    </span>
+                  </div>
+
+                  {finance.estimatedReason && (
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      Motivo: {finance.estimatedReason}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmReviewedFinance(finance)}
+                      className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 transition-all flex items-center gap-1"
+                    >
+                      <Check size={14} />
+                      Confirmar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(finance.id);
+                        setEditForm(finance);
+                        setActiveListTab('reviews');
+                      }}
+                      className="px-3 py-2 rounded-xl bg-white text-neutral-700 text-xs font-black border border-amber-100 hover:bg-amber-100 transition-all flex items-center gap-1"
+                    >
+                      <Edit2 size={14} />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleIgnoreReviewedFinance(finance)}
+                      className="px-3 py-2 rounded-xl bg-white text-neutral-500 text-xs font-black border border-amber-100 hover:bg-white/70 transition-all"
+                    >
+                      Ignorar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Input & Stats */}
@@ -1848,15 +1960,22 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               {(f.isConfirmed === false || f.needsReview) && (
-                                <button 
-                                  onClick={async () => {
-                                    await updateDoc(doc(db, 'finances', f.id), { isConfirmed: true, needsReview: false });
-                                  }}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                                  title="Confirmar"
-                                >
-                                  <Check size={16} />
-                                </button>
+                                <>
+                                  <button 
+                                    onClick={() => handleConfirmReviewedFinance(f)}
+                                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                    title="Confirmar"
+                                  >
+                                    <Check size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleIgnoreReviewedFinance(f)}
+                                    className="p-2 text-neutral-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-all"
+                                    title="Ignorar"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </>
                               )}
                               <button 
                                 onClick={() => startEditing(f)}
@@ -1874,6 +1993,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                           </div>
                         </div>
                         <div className="flex items-center gap-4 pt-2 border-t border-neutral-50">
+                          {(f.source || f.confidence || f.estimatedReason) && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Origen</span>
+                              <span className="text-[10px] font-bold text-neutral-500">
+                                {f.source || 'manual'}{f.confidence ? ` · ${f.confidence}` : ''}
+                              </span>
+                            </div>
+                          )}
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">By</span>
                             <span className="text-[10px] font-bold text-neutral-500">{generator?.displayName || 'Unknown'}</span>
@@ -1884,6 +2011,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                               {f.assignedTo === 'Both' ? 'Both' : (assignee?.displayName || 'Unknown')}
                             </span>
                           </div>
+                          {f.estimatedReason && (
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[10px] font-bold text-amber-700 truncate block">
+                                Supuesto: {f.estimatedReason}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </>
                     )}
