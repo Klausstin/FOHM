@@ -41,7 +41,7 @@ export default function SidebarNav({ activeTab, onTabChange, user }: SidebarNavP
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight">VEO</h1>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">Vida En Orden</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">Vida en Orden</p>
             </div>
           </div>
 
@@ -51,7 +51,7 @@ export default function SidebarNav({ activeTab, onTabChange, user }: SidebarNavP
               Luz
             </div>
             <p className="text-sm font-semibold leading-5 text-white/80">
-              Entendete mejor. Decidi mejor. Vivi mas alineado.
+              Te ayuda a ver patrones, contradicciones y proximos pasos.
             </p>
           </div>
         </div>

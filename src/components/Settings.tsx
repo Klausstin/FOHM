@@ -226,7 +226,7 @@ export default function Settings({ user }: { user: any }) {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Ajustes</h2>
-          <p className="text-neutral-500 font-medium">Gestioná categorías, privacidad y base de grupo familiar.</p>
+          <p className="text-neutral-500 font-medium">Gestiona privacidad, grupo familiar y preferencias para que VEO respete tus limites.</p>
         </div>
       </header>
 

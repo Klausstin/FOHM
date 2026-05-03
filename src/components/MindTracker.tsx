@@ -319,9 +319,9 @@ export default function MindTracker({ user }: { user: any }) {
       <header className="rounded-[2rem] bg-white p-6 shadow-sm border border-neutral-200 md:p-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Privado por defecto</p>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Entendete mejor</p>
           <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Diario Mental</h2>
-          <p className="mt-2 max-w-2xl text-neutral-500 font-medium">Registra pensamientos, energia y patrones para que Luz pueda ayudarte a distinguir ruido, deseo real y desalineaciones.</p>
+          <p className="mt-2 max-w-2xl text-neutral-500 font-medium">Registra pensamientos, emociones, gustos, bloqueos y aprendizajes para que Luz pueda ayudarte a ver patrones sin diagnosticarte.</p>
         </div>
         <button
           onClick={runAnalysis}

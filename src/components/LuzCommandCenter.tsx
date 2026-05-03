@@ -105,7 +105,7 @@ export default function LuzCommandCenter({ user }: LuzCommandCenterProps) {
             Hablar con Luz
           </p>
           <p className="mt-1 text-sm font-medium text-white/60">
-            Escribi o dicta. Luz decide si guardarlo como gasto, ingreso o diario.
+            Escribi o dicta. Luz ordena la informacion y te pregunta lo minimo necesario para completar el registro.
           </p>
         </div>
         {preview && (
@@ -132,7 +132,7 @@ export default function LuzCommandCenter({ user }: LuzCommandCenterProps) {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-h-6 text-xs font-semibold text-white/62">
-            {status || preview?.summary || 'Luz espera una señal para ordenar.'}
+            {status || preview?.summary || 'Luz te ayuda a ver patrones, contradicciones y proximos pasos.'}
           </div>
           <div className="flex gap-2">
             <button
