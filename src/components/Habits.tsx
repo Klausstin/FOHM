@@ -1,14 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, addDoc, query, where, onSnapshot, handleFirestoreError, OperationType, updateDoc, doc, serverTimestamp, deleteDoc } from '../firebase.ts';
+import { handleFirestoreError, OperationType } from '../firebase.ts';
 import { CheckCircle2, Plus, Calendar, Info, Loader2, Sparkles, User as UserIcon, Droplets, Trophy, History, ArrowRight, Flame, AlertCircle, Star, Award, Zap, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays, isToday, isYesterday, eachDayOfInterval, subDays, startOfToday, startOfWeek, addDays, getWeek, isSameDay, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase.ts';
+import { subscribeToHouseholdGoals } from '../features/goals/goal.service.ts';
+import type { GoalRecord } from '../features/goals/goal.types.ts';
+import {
+  createHabit,
+  createHabitLog,
+  deleteHabitLog,
+  finishHabitChallenge,
+  subscribeToHouseholdHabits,
+  subscribeToUserHabitLogs,
+  updateHabitLog,
+  updateHabitProgress,
+} from '../features/habits/habit.service.ts';
+import type { HabitLogRecord, HabitRecord } from '../features/habits/habit.types.ts';
 
 export default function Habits({ user }: { user: any }) {
-  const [habits, setHabits] = useState<any[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [habits, setHabits] = useState<HabitRecord[]>([]);
+  const [goals, setGoals] = useState<GoalRecord[]>([]);
+  const [logs, setLogs] = useState<HabitLogRecord[]>([]);
   const [members, setMembers] = useState<{ [key: string]: any }>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newHabit, setNewHabit] = useState({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd'), linkedGoalIds: [] as string[] });
@@ -26,26 +41,15 @@ export default function Habits({ user }: { user: any }) {
       setMembers(memberMap);
     });
 
-    const q = query(collection(db, 'habits'), where('householdId', '==', user.householdId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setHabits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
+    const unsubscribe = subscribeToHouseholdHabits(user.householdId, setHabits, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'habits');
     });
 
-    const qLogs = query(collection(db, 'habitLogs'), where('uid', '==', user.uid));
-    const unsubLogs = onSnapshot(qLogs, (snapshot) => {
-      setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const unsubLogs = subscribeToUserHabitLogs(user.uid, setLogs, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'habitLogs');
     });
 
-    const qGoals = query(
-      collection(db, 'goals'),
-      where('householdId', '==', user.householdId),
-      where('year', '==', new Date().getFullYear())
-    );
-    const unsubGoals = onSnapshot(qGoals, (snapshot) => {
-      setGoals(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
+    const unsubGoals = subscribeToHouseholdGoals(user.householdId, new Date().getFullYear(), setGoals, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'goals');
     });
 
@@ -88,19 +92,13 @@ export default function Habits({ user }: { user: any }) {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'habits'), {
+      await createHabit({
         uid: user.uid,
         householdId: user.householdId || null,
         title: newHabit.title,
         description: newHabit.description,
         startDate: newHabit.startDate,
-        progress: 0,
-        streak: 0,
-        lastWatered: null,
-        incorporated: false,
-        status: 'active',
         linkedGoalIds: newHabit.linkedGoalIds,
-        createdAt: serverTimestamp()
       });
       setShowAddModal(false);
       setNewHabit({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd'), linkedGoalIds: [] });
@@ -117,21 +115,12 @@ export default function Habits({ user }: { user: any }) {
     try {
       if (status === 'none') {
         if (existingLog) {
-          await deleteDoc(doc(db, 'habitLogs', existingLog.id));
+          await deleteHabitLog(existingLog.id);
         }
       } else if (existingLog) {
-        await updateDoc(doc(db, 'habitLogs', existingLog.id), {
-          status,
-          timestamp: serverTimestamp()
-        });
+        await updateHabitLog(existingLog.id, status);
       } else {
-        await addDoc(collection(db, 'habitLogs'), {
-          habitId,
-          uid: user.uid,
-          date,
-          status,
-          timestamp: serverTimestamp()
-        });
+        await createHabitLog(habitId, user.uid, date, status);
       }
 
       // Update habit progress and check for streaks
@@ -169,11 +158,7 @@ export default function Habits({ user }: { user: any }) {
           }
         }
         
-        await updateDoc(doc(db, 'habits', habitId), {
-          progress: greenCount,
-          streak: currentStreak,
-          lastWatered: status !== 'none' ? serverTimestamp() : null
-        });
+        await updateHabitProgress(habitId, greenCount, currentStreak, status !== 'none');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'habitLogs');
@@ -199,12 +184,7 @@ export default function Habits({ user }: { user: any }) {
     const isWon = score >= 80 && redCount <= 1;
 
     try {
-      await updateDoc(doc(db, 'habits', habit.id), {
-        status: isWon ? 'completed' : 'abandoned',
-        incorporated: isWon,
-        finalScore: score,
-        finishedAt: serverTimestamp()
-      });
+      await finishHabitChallenge(habit.id, isWon, score);
       
       if (isWon) {
         setCelebration({ show: true, message: `¡HÁBITO INCORPORADO! Puntaje final: ${Math.round(score)}%` });
