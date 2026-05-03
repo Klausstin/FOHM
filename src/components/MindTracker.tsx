@@ -145,8 +145,8 @@ export default function MindTracker({ user }: { user: any }) {
       setReflection({ ...EMPTY_REFLECTION });
       setShowReflection(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'thoughts');
-      alert("No pude guardar la entrada. Si el problema se repite, hay que revisar los permisos de Firestore o la conexion.");
+      const errorInfo = handleFirestoreError(error, OperationType.CREATE, 'thoughts');
+      alert(`No pude guardar la entrada. Detalle: ${errorInfo.error}`);
     } finally {
       setIsAnalyzingImage(false);
       setIsCategorizing(false);
