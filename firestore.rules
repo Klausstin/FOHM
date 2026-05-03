@@ -171,7 +171,7 @@ service cloud.firestore {
 
     function isValidHabit(data) {
       return hasRequiredFields(['uid', 'title', 'description', 'progress', 'streak', 'incorporated', 'status', 'createdAt']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'description', 'progress', 'streak', 'lastWatered', 'incorporated', 'status', 'createdAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'description', 'progress', 'streak', 'lastWatered', 'incorporated', 'status', 'createdAt', 'id', 'startDate', 'linkedGoalIds', 'finalScore', 'finishedAt']) &&
              data.uid == request.auth.uid &&
              data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
              data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
@@ -179,6 +179,10 @@ service cloud.firestore {
              data.streak is number && data.streak >= 0 &&
              data.incorporated is bool &&
              data.status in ['active', 'completed', 'abandoned'] &&
+             (!('startDate' in data) || data.startDate is string) &&
+             (!('linkedGoalIds' in data) || data.linkedGoalIds is list) &&
+             (!('finalScore' in data) || data.finalScore is number) &&
+             (!('finishedAt' in data) || data.finishedAt is timestamp) &&
              (!('lastWatered' in data) || data.lastWatered == null || data.lastWatered is timestamp) &&
              data.createdAt is timestamp;
     }

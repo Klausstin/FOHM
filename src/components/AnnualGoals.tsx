@@ -40,8 +40,19 @@ interface Goal {
   createdAt: any;
 }
 
+interface HabitSupport {
+  id: string;
+  uid: string;
+  householdId?: string;
+  title: string;
+  status: string;
+  incorporated?: boolean;
+  linkedGoalIds?: string[];
+}
+
 export default function AnnualGoals({ user }: { user: any }) {
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [habits, setHabits] = useState<HabitSupport[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [comments, setComments] = useState<GoalComment[]>([]);
@@ -79,9 +90,15 @@ export default function AnnualGoals({ user }: { user: any }) {
       setGoals(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Goal)));
     });
 
+    const qHabits = query(collection(db, 'habits'), where('householdId', '==', user.householdId));
+    const unsubHabits = onSnapshot(qHabits, (snapshot) => {
+      setHabits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as HabitSupport)));
+    });
+
     return () => {
       unsubscribe();
       unsubMembers();
+      unsubHabits();
     };
   }, [user.uid, user.householdId]);
 
@@ -189,12 +206,18 @@ export default function AnnualGoals({ user }: { user: any }) {
   };
 
   const filteredGoals = filter === 'all' ? goals : goals.filter(g => g.categories?.includes(filter));
+  const habitsWithoutGoal = habits.filter(habit => habit.uid === user.uid && (!Array.isArray(habit.linkedGoalIds) || habit.linkedGoalIds.length === 0));
+  const goalsWithoutHabits = goals.filter(goal => !habits.some(habit => habit.linkedGoalIds?.includes(goal.id)));
+  const activeSupportedGoals = goals.filter(goal => habits.some(habit => habit.linkedGoalIds?.includes(goal.id) && habit.status === 'active'));
 
   const stats = {
     total: goals.length,
     completed: goals.filter(g => g.status === 'completed').length,
-    inProgress: goals.filter(g => g.status === 'in_progress').length
+    inProgress: goals.filter(g => g.status === 'in_progress').length,
+    supported: activeSupportedGoals.length,
   };
+
+  const getGoalHabits = (goalId: string) => habits.filter(habit => habit.linkedGoalIds?.includes(goalId));
 
   const toggleCategory = (catId: string) => {
     setNewGoal(prev => ({
@@ -225,6 +248,10 @@ export default function AnnualGoals({ user }: { user: any }) {
                 <span className="text-amber-500 font-black">{stats.inProgress}</span>
                 <span className="text-[10px] font-bold text-neutral-400 uppercase">En Proceso</span>
               </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-blue-600 font-black">{stats.supported}</span>
+                <span className="text-[10px] font-bold text-neutral-400 uppercase">Con habito</span>
+              </div>
             </div>
           </div>
           
@@ -245,6 +272,24 @@ export default function AnnualGoals({ user }: { user: any }) {
           </p>
         </div>
       </header>
+
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-[2rem] border border-neutral-100 p-5 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Alineacion activa</p>
+          <p className="text-3xl font-black text-neutral-900 mt-2">{activeSupportedGoals.length}</p>
+          <p className="text-sm text-neutral-500 font-medium mt-1">Objetivos con al menos un habito activo.</p>
+        </div>
+        <div className="bg-white rounded-[2rem] border border-neutral-100 p-5 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sin soporte</p>
+          <p className="text-3xl font-black text-amber-600 mt-2">{goalsWithoutHabits.length}</p>
+          <p className="text-sm text-neutral-500 font-medium mt-1">Objetivos que todavia no tienen habitos asociados.</p>
+        </div>
+        <div className="bg-white rounded-[2rem] border border-neutral-100 p-5 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Habitos sueltos</p>
+          <p className="text-3xl font-black text-neutral-900 mt-2">{habitsWithoutGoal.length}</p>
+          <p className="text-sm text-neutral-500 font-medium mt-1">Habitos propios que no empujan un objetivo declarado.</p>
+        </div>
+      </section>
 
       <div className="bg-white p-6 rounded-[2.5rem] border border-neutral-100 shadow-sm">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
@@ -402,6 +447,22 @@ export default function AnnualGoals({ user }: { user: any }) {
                 </p>
               )}
 
+              <div className="mb-4 space-y-2">
+                {getGoalHabits(goal.id).length > 0 ? (
+                  getGoalHabits(goal.id).slice(0, 2).map(habit => (
+                    <div key={habit.id} className="flex items-center gap-2 rounded-2xl bg-neutral-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                      <CheckCircle2 size={12} className={habit.status === 'active' ? 'text-emerald-600' : 'text-neutral-400'} />
+                      <span className="truncate">{habit.title}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                    <AlertCircle size={12} />
+                    <span>Sin habitos asociados</span>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between mt-auto pt-4 border-t border-neutral-50">
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleStatus(goal); }}
@@ -492,6 +553,31 @@ export default function AnnualGoals({ user }: { user: any }) {
                       </p>
                     </div>
                   )}
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-neutral-400 flex items-center gap-2">
+                      <CheckCircle2 size={14} />
+                      Habitos vinculados ({getGoalHabits(selectedGoal.id).length})
+                    </h3>
+                    {getGoalHabits(selectedGoal.id).length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {getGoalHabits(selectedGoal.id).map(habit => (
+                          <div key={habit.id} className="rounded-3xl border border-neutral-100 bg-neutral-50 p-4">
+                            <p className="font-black text-neutral-900 leading-tight">{habit.title}</p>
+                            <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                              {habit.status === 'active' ? 'Activo' : habit.incorporated ? 'Incorporado' : habit.status}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5">
+                        <p className="text-sm font-bold text-amber-800">
+                          Este objetivo todavia no tiene habitos vinculados. Conviene definir al menos una accion repetible que lo empuje.
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="space-y-4">
                     <h3 className="text-sm font-black uppercase tracking-widest text-neutral-400 flex items-center gap-2">
