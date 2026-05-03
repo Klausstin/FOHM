@@ -1,4 +1,3 @@
-import { DEFAULT_PRIVATE_VISIBILITY } from '../../domain/permissions';
 import type { CreateJournalEntryInput, JournalReflection, SelectedJournalImage } from './journal.types';
 
 export const EMPTY_REFLECTION: JournalReflection = {
@@ -34,20 +33,22 @@ export function buildFinalJournalContent(baseContent: string, reflection: Journa
 }
 
 export function buildJournalEntryPayload(input: CreateJournalEntryInput) {
-  const hasImage = Boolean(input.image);
-
-  return {
+  const payload: Record<string, unknown> = {
     uid: input.uid,
-    householdId: input.householdId || null,
     content: input.content,
     categories: input.categories,
-    visibility: DEFAULT_PRIVATE_VISIBILITY,
-    entryType: hasImage ? 'mixed' : 'text',
-    attachments: [],
     timestamp: new Date(),
-    imageUrl: input.image ? buildInlineImageUrl(input.image) : null,
-    analysis: input.imageAnalysis || null,
   };
+
+  if (input.image) {
+    payload.imageUrl = buildInlineImageUrl(input.image);
+  }
+
+  if (input.imageAnalysis) {
+    payload.analysis = input.imageAnalysis;
+  }
+
+  return payload;
 }
 
 function buildInlineImageUrl(image: SelectedJournalImage) {

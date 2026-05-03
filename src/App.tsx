@@ -11,6 +11,7 @@ import Settings from './components/Settings.tsx';
 import Habits from './components/Habits.tsx';
 import CalendarIntegration from './components/CalendarIntegration.tsx';
 import AppShell from './components/layout/AppShell.tsx';
+import ErrorBoundary from './components/ErrorBoundary.tsx';
 import type { AppTab } from './components/layout/SidebarNav.tsx';
 import { getPersonalHouseholdId } from './domain/household.ts';
 
@@ -105,20 +106,22 @@ export default function App() {
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.2 }}
         >
-          {activeTab === 'home' && <Dashboard user={userProfile} />}
-          {activeTab === 'mind' && <MindTracker user={userProfile} />}
-          {activeTab === 'finance' && <FinanceTracker user={userProfile} />}
-          {activeTab === 'goals' && <AnnualGoals user={userProfile} />}
-          {activeTab === 'habits' && <Habits user={userProfile} />}
-          {activeTab === 'calendar' && (
-            <CalendarIntegration
-              user={userProfile}
-              habits={habits}
-              goals={goals}
-              thoughts={thoughts}
-            />
-          )}
-          {activeTab === 'settings' && <Settings user={userProfile} />}
+          <ErrorBoundary screenName={activeTab}>
+            {activeTab === 'home' && <Dashboard user={userProfile} />}
+            {activeTab === 'mind' && <MindTracker user={userProfile} />}
+            {activeTab === 'finance' && <FinanceTracker user={userProfile} />}
+            {activeTab === 'goals' && <AnnualGoals user={userProfile} />}
+            {activeTab === 'habits' && <Habits user={userProfile} />}
+            {activeTab === 'calendar' && (
+              <CalendarIntegration
+                user={userProfile}
+                habits={habits}
+                goals={goals}
+                thoughts={thoughts}
+              />
+            )}
+            {activeTab === 'settings' && <Settings user={userProfile} />}
+          </ErrorBoundary>
         </motion.div>
       </AnimatePresence>
     </AppShell>

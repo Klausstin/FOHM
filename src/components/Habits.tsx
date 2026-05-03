@@ -66,6 +66,18 @@ export default function Habits({ user }: { user: any }) {
   const inventory = myHabits.filter(h => h.incorporated);
   const availableGoals = goals.filter(goal => goal.uid === user.uid || goal.householdId === user.householdId);
 
+  const getHabitStartDate = (habit: Pick<HabitRecord, 'startDate' | 'createdAt'>) => {
+    const fallback = new Date();
+    const rawDate = habit.startDate || format(habit.createdAt?.toDate?.() || fallback, 'yyyy-MM-dd');
+    const parsedDate = parseISO(rawDate);
+
+    return Number.isNaN(parsedDate.getTime()) ? fallback : parsedDate;
+  };
+
+  const getHabitStartDateString = (habit: Pick<HabitRecord, 'startDate' | 'createdAt'>) => {
+    return format(getHabitStartDate(habit), 'yyyy-MM-dd');
+  };
+
   const getLinkedGoalTitles = (habit: any) => {
     const linkedGoalIds = Array.isArray(habit.linkedGoalIds) ? habit.linkedGoalIds : [];
     return linkedGoalIds
@@ -104,6 +116,7 @@ export default function Habits({ user }: { user: any }) {
       setNewHabit({ title: '', description: '', startDate: format(new Date(), 'yyyy-MM-dd'), linkedGoalIds: [] });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'habits');
+      alert("No pude crear el habito. Si vuelve a pasar, hay que revisar los permisos de Firestore.");
     } finally {
       setIsSubmitting(false);
     }
@@ -162,6 +175,7 @@ export default function Habits({ user }: { user: any }) {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'habitLogs');
+      alert("No pude guardar el check-in del habito. Probemos de nuevo en unos segundos.");
     }
   };
 
@@ -171,7 +185,7 @@ export default function Habits({ user }: { user: any }) {
     const score = (greenCount / 90) * 100;
     
     // Check last 3 weeks (21 days)
-    const habitStartDate = parseISO(habit.startDate);
+    const habitStartDate = getHabitStartDate(habit);
     const challengeEndDate = addDays(habitStartDate, 89);
     const last21DaysStart = subDays(challengeEndDate, 20);
     
@@ -193,11 +207,13 @@ export default function Habits({ user }: { user: any }) {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'habits');
+      alert("No pude finalizar el desafio. Probemos de nuevo en unos segundos.");
     }
   };
 
   const HabitGrid = ({ habitId, startDateStr }: { habitId: string, startDateStr: string }) => {
-    const habitStartDate = parseISO(startDateStr);
+    const parsedStartDate = parseISO(startDateStr);
+    const habitStartDate = Number.isNaN(parsedStartDate.getTime()) ? new Date() : parsedStartDate;
     const gridStart = startOfWeek(habitStartDate, { weekStartsOn: 1 }); // Monday
     const gridEnd = addDays(gridStart, 91); // 13 weeks * 7 days = 91 days
     
@@ -376,12 +392,12 @@ export default function Habits({ user }: { user: any }) {
                     
                     <div className="flex items-center gap-4 bg-neutral-50 p-4 rounded-[2rem] border border-neutral-100">
                       <div className="text-center px-4 border-r border-neutral-200">
-                        <div className="text-3xl font-black text-neutral-900">{activeHabit.streak}</div>
+                        <div className="text-3xl font-black text-neutral-900">{activeHabit.streak || 0}</div>
                         <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Racha</div>
                       </div>
                       <div className="text-center px-4">
                         <div className="text-3xl font-black text-emerald-600">
-                          {Math.max(0, 90 - differenceInDays(new Date(), parseISO(activeHabit.startDate)))}
+                          {Math.max(0, 90 - differenceInDays(new Date(), getHabitStartDate(activeHabit)))}
                         </div>
                         <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Días Restantes</div>
                       </div>
@@ -396,14 +412,14 @@ export default function Habits({ user }: { user: any }) {
                           <div className="h-2 w-32 bg-neutral-100 rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-emerald-500 transition-all duration-1000" 
-                              style={{ width: `${Math.min(100, (activeHabit.progress / 90) * 100)}%` }} 
+                              style={{ width: `${Math.min(100, ((activeHabit.progress || 0) / 90) * 100)}%` }} 
                             />
                           </div>
-                          <span className="text-xs font-black text-neutral-900">{Math.round((activeHabit.progress / 90) * 100)}%</span>
+                          <span className="text-xs font-black text-neutral-900">{Math.round(((activeHabit.progress || 0) / 90) * 100)}%</span>
                         </div>
                       </div>
                       
-                      {differenceInDays(new Date(), parseISO(activeHabit.startDate)) >= 89 && (
+                      {differenceInDays(new Date(), getHabitStartDate(activeHabit)) >= 89 && (
                         <button
                           onClick={() => handleFinishChallenge(activeHabit)}
                           className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
@@ -429,7 +445,7 @@ export default function Habits({ user }: { user: any }) {
                     </div>
                     
                     <div className="p-6 bg-neutral-50 rounded-[2rem] border border-neutral-100">
-                      <HabitGrid habitId={activeHabit.id} startDateStr={activeHabit.startDate || format(activeHabit.createdAt?.toDate() || new Date(), 'yyyy-MM-dd')} />
+                      <HabitGrid habitId={activeHabit.id} startDateStr={getHabitStartDateString(activeHabit)} />
                     </div>
                   </div>
 
@@ -510,7 +526,7 @@ export default function Habits({ user }: { user: any }) {
                     </div>
                     <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-full">
                       <Flame size={14} className="text-emerald-600" />
-                      <span className="text-xs font-black text-emerald-600">{habit.streak}</span>
+                      <span className="text-xs font-black text-emerald-600">{habit.streak || 0}</span>
                     </div>
                   </div>
                 ))}

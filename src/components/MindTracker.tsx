@@ -87,7 +87,11 @@ export default function MindTracker({ user }: { user: any }) {
     try {
       let imageAnalysis = "";
       if (selectedImage) {
-        imageAnalysis = await analyzeImage(selectedImage.data, selectedImage.type, newThought || "Analiza esta imagen.");
+        try {
+          imageAnalysis = await analyzeImage(selectedImage.data, selectedImage.type, newThought || "Analiza esta imagen.");
+        } catch (error) {
+          console.warn("No se pudo analizar la imagen. La entrada se guardara igual.", error);
+        }
       }
 
       const finalContent = buildFinalJournalContent(newThought, reflection, showReflection);
@@ -97,24 +101,34 @@ export default function MindTracker({ user }: { user: any }) {
       // Automatic categorization keeps manual tags as the source of truth when present.
       let categories = selectedCategories;
       if (categories.length === 0 && finalContent.trim()) {
-        const geminiLabels = await categorizeThought(finalContent, MIND_CATEGORIES);
-        // Translate labels back to IDs for consistency.
-        categories = geminiLabels.map(label => {
-          const searchLabel = label.trim().toLowerCase();
-          const cat = MIND_CATEGORIES.find(c => 
-            searchLabel === c.label.toLowerCase() || 
-            searchLabel === c.id.toLowerCase() ||
-            searchLabel.includes(c.label.toLowerCase())
-          );
-          return cat ? cat.id : label;
-        });
+        try {
+          const geminiLabels = await categorizeThought(finalContent, MIND_CATEGORIES);
+          // Translate labels back to IDs for consistency.
+          categories = geminiLabels.map(label => {
+            const searchLabel = label.trim().toLowerCase();
+            const cat = MIND_CATEGORIES.find(c => 
+              searchLabel === c.label.toLowerCase() || 
+              searchLabel === c.id.toLowerCase() ||
+              searchLabel.includes(c.label.toLowerCase())
+            );
+            return cat ? cat.id : label;
+          });
+        } catch (error) {
+          console.warn("No se pudo categorizar automaticamente. La entrada se guardara con categoria general.", error);
+        }
       }
       if (categories.length === 0) categories = [MIND_CATEGORIES[0].id];
 
-      const feedback = await checkHabitProgress(finalContent, activeHabits);
-      if (feedback) {
-        setHabitFeedback(feedback);
-        setTimeout(() => setHabitFeedback(null), 10000);
+      if (finalContent.trim()) {
+        try {
+          const feedback = await checkHabitProgress(finalContent, activeHabits);
+          if (feedback) {
+            setHabitFeedback(feedback);
+            setTimeout(() => setHabitFeedback(null), 10000);
+          }
+        } catch (error) {
+          console.warn("No se pudo cruzar la entrada con habitos. La entrada se guardara igual.", error);
+        }
       }
 
       await createJournalEntry({
@@ -131,7 +145,8 @@ export default function MindTracker({ user }: { user: any }) {
       setReflection({ ...EMPTY_REFLECTION });
       setShowReflection(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'thoughts');
+      const errorInfo = handleFirestoreError(error, OperationType.CREATE, 'thoughts');
+      alert(`No pude guardar la entrada. Detalle: ${errorInfo.error}`);
     } finally {
       setIsAnalyzingImage(false);
       setIsCategorizing(false);
