@@ -367,7 +367,7 @@ export default function Dashboard({ user }: { user: any }) {
               </div>
             </div>
 
-            <LuzCommandCenter user={user} />
+            <LuzCommandCenter user={user} habits={habits} />
 
             <div className="grid gap-3 sm:grid-cols-3">
               <MetricTile label="Objetivos activos" value={goals.filter(goal => goal.status !== 'completed').length} />
