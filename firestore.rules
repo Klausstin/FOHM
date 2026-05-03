@@ -297,7 +297,7 @@ service cloud.firestore {
     }
 
     match /habits/{habitId} {
-      allow read: if isDocOwner() || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'habits'));
+      allow read: if isDocOwner() || isAdmin() || isHouseholdMember(resource.data.householdId);
       allow create: if isAuthenticated() && isValidHabit(request.resource.data);
       allow update: if isDocOwner() && isValidHabit(request.resource.data);
       allow delete: if isDocOwner();
@@ -332,7 +332,7 @@ service cloud.firestore {
     }
 
     match /goals/{goalId} {
-      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'goals')));
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin() || isHouseholdMember(resource.data.householdId));
       allow create: if isAuthenticated() && isValidGoal(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
       allow update: if isAuthenticated() && isValidGoal(request.resource.data, true) && 
                       (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin()) &&
