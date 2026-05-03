@@ -137,13 +137,32 @@ service cloud.firestore {
                (!('habits' in data.sharingConfig) || data.sharingConfig.habits is bool)));
     }
 
+    function isValidVisibility(visibility) {
+      return visibility in ['private', 'shared_with_partner', 'household_shared', 'app_public'];
+    }
+
+    function canReadVisibleDoc(data, feature) {
+      return data.uid == request.auth.uid ||
+             isAdmin() ||
+             (data.visibility in ['shared_with_partner', 'household_shared'] && isHouseholdMember(data.householdId)) ||
+             (!('visibility' in data) && isHouseholdMember(data.householdId) && isSharing(data.uid, feature));
+    }
+
     function isValidThought(data) {
       return hasRequiredFields(['uid', 'content', 'categories', 'timestamp']) &&
-             hasOnlyAllowedFields(['uid', 'content', 'audioUrl', 'imageUrl', 'categories', 'timestamp', 'analysis', 'householdId', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'content', 'audioUrl', 'imageUrl', 'categories', 'timestamp', 'analysis', 'householdId', 'id', 'visibility', 'entryType', 'transcript', 'mood', 'energy', 'attachments', 'title', 'updatedAt']) &&
              data.uid == request.auth.uid &&
              data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
              data.categories is list && data.categories.size() > 0 && data.categories.size() < 20 &&
              data.timestamp is timestamp &&
+             (!('visibility' in data) || isValidVisibility(data.visibility)) &&
+             (!('entryType' in data) || data.entryType in ['text', 'audio', 'photo', 'mixed']) &&
+             (!('transcript' in data) || data.transcript == null || (data.transcript is string && data.transcript.size() < 10000)) &&
+             (!('mood' in data) || data.mood == null || data.mood is number) &&
+             (!('energy' in data) || data.energy == null || data.energy is number) &&
+             (!('attachments' in data) || data.attachments is list) &&
+             (!('title' in data) || data.title == null || (data.title is string && data.title.size() < 200)) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
              (!('audioUrl' in data) || data.audioUrl == null || (data.audioUrl is string && data.audioUrl.size() < 1000000)) &&
              (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() < 1000000)) &&
              (!('analysis' in data) || data.analysis == null || (data.analysis is string && data.analysis.size() < 10000)) &&
@@ -261,7 +280,7 @@ service cloud.firestore {
     }
 
     match /thoughts/{thoughtId} {
-      allow read: if isDocOwner() || isAdmin() || (isHouseholdMember(resource.data.householdId) && isSharing(resource.data.uid, 'mind'));
+      allow read: if isAuthenticated() && canReadVisibleDoc(resource.data, 'mind');
       allow create: if isAuthenticated() && isValidThought(request.resource.data);
       allow update: if isDocOwner() && isValidThought(request.resource.data);
       allow delete: if isDocOwner();
