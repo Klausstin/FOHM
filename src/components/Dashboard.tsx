@@ -19,10 +19,14 @@ import {
   X,
   Target,
   PieChart as PieChartIcon,
-  Calendar
+  Calendar,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Brain
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, startOfYear, endOfYear } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, startOfYear, endOfYear, subDays } from 'date-fns';
 import { 
   BarChart, 
   Bar, 
@@ -52,6 +56,7 @@ export default function Dashboard({ user }: { user: any }) {
   const defaultWidgets = [
     { id: 'balances', title: 'Cuentas', visible: true },
     { id: 'cashflow', title: 'Flujo de efectivo', visible: true },
+    { id: 'alignment', title: 'Alineacion personal', visible: true },
     { id: 'trend', title: 'Tendencia de saldo', visible: true },
     { id: 'expenseStructure', title: 'Estructura de los gastos', visible: true },
     { id: 'recentRecords', title: 'Últimos registros', visible: true },
@@ -61,6 +66,8 @@ export default function Dashboard({ user }: { user: any }) {
 
   const [widgetsConfig, setWidgetsConfig] = useState<any[]>(user.dashboardWidgets || defaultWidgets);
   const [goals, setGoals] = useState<any[]>([]);
+  const [habits, setHabits] = useState<any[]>([]);
+  const [thoughts, setThoughts] = useState<any[]>([]);
 
   const saveDashboardConfig = async (newConfig: any[]) => {
     try {
@@ -131,8 +138,8 @@ export default function Dashboard({ user }: { user: any }) {
     // Fetch Goals
     const qGoals = query(
       collection(db, 'goals'),
-      where('uid', '==', user.uid),
-      where('year', '==', 2026)
+      where('householdId', '==', user.householdId),
+      where('year', '==', new Date().getFullYear())
     );
     const unsubGoals = onSnapshot(qGoals, (snap) => {
       setGoals(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -140,12 +147,35 @@ export default function Dashboard({ user }: { user: any }) {
       handleFirestoreError(error, OperationType.GET, 'goals');
     });
 
+    const qHabits = query(
+      collection(db, 'habits'),
+      where('householdId', '==', user.householdId)
+    );
+    const unsubHabits = onSnapshot(qHabits, (snap) => {
+      setHabits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'habits');
+    });
+
+    const qThoughts = query(
+      collection(db, 'thoughts'),
+      where('uid', '==', user.uid),
+      orderBy('timestamp', 'desc')
+    );
+    const unsubThoughts = onSnapshot(qThoughts, (snap) => {
+      setThoughts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'thoughts');
+    });
+
     return () => {
       unsubAccounts();
       unsubFinances();
       unsubGoals();
+      unsubHabits();
+      unsubThoughts();
     };
-  }, [user.householdId]);
+  }, [user.uid, user.householdId]);
 
   // Calculate stats for the selected period
   const stats = useMemo(() => {
@@ -218,6 +248,101 @@ export default function Dashboard({ user }: { user: any }) {
     };
   }, [finances, accounts, timeRange]);
 
+  const alignment = useMemo(() => {
+    const myGoals = goals.filter(goal => goal.uid === user.uid);
+    const myHabits = habits.filter(habit => habit.uid === user.uid);
+    const activeHabits = myHabits.filter(habit => habit.status === 'active');
+    const goalsWithActiveHabits = myGoals.filter(goal =>
+      activeHabits.some(habit => habit.linkedGoalIds?.includes(goal.id))
+    );
+    const goalsWithoutHabits = myGoals.filter(goal =>
+      !myHabits.some(habit => habit.linkedGoalIds?.includes(goal.id))
+    );
+    const habitsWithoutGoals = activeHabits.filter(habit =>
+      !Array.isArray(habit.linkedGoalIds) || habit.linkedGoalIds.length === 0
+    );
+    const sevenDaysAgo = subDays(new Date(), 7);
+    const recentThoughts = thoughts.filter(thought => {
+      const timestamp = thought.timestamp;
+      const date = typeof timestamp?.toDate === 'function' ? timestamp.toDate() : new Date(timestamp);
+      return !Number.isNaN(date.getTime()) && date >= sevenDaysAgo;
+    });
+
+    const scoreParts = [
+      myGoals.length > 0,
+      goalsWithoutHabits.length === 0 && myGoals.length > 0,
+      habitsWithoutGoals.length === 0 && activeHabits.length > 0,
+      recentThoughts.length > 0,
+      stats.net >= 0 || finances.length === 0,
+    ];
+    const score = Math.round((scoreParts.filter(Boolean).length / scoreParts.length) * 100);
+
+    const signals = [];
+    if (myGoals.length === 0) {
+      signals.push({
+        tone: 'warning',
+        title: 'Faltan objetivos anuales',
+        body: 'Todavia no hay una direccion explicita para cruzar habitos, finanzas y diario.',
+      });
+    }
+    if (goalsWithoutHabits.length > 0) {
+      signals.push({
+        tone: 'warning',
+        title: `${goalsWithoutHabits.length} objetivo(s) sin habitos`,
+        body: 'Hay metas declaradas que todavia no tienen acciones repetibles asociadas.',
+      });
+    }
+    if (habitsWithoutGoals.length > 0) {
+      signals.push({
+        tone: 'neutral',
+        title: `${habitsWithoutGoals.length} habito(s) sin objetivo`,
+        body: 'Conviene decidir si estos habitos sostienen una busqueda real o si son ruido.',
+      });
+    }
+    if (recentThoughts.length === 0) {
+      signals.push({
+        tone: 'neutral',
+        title: 'Sin diario reciente',
+        body: 'No hay entradas de los ultimos 7 dias para entender patrones o preocupaciones actuales.',
+      });
+    }
+    if (stats.net < 0 && finances.length > 0) {
+      signals.push({
+        tone: 'warning',
+        title: 'Flujo mensual negativo',
+        body: 'Los gastos del periodo superan los ingresos. Revisar si ese desbalance responde a una prioridad real.',
+      });
+    }
+    if (signals.length === 0) {
+      signals.push({
+        tone: 'positive',
+        title: 'Base alineada',
+        body: 'Hay objetivos, habitos vinculados, diario reciente y flujo financiero bajo control.',
+      });
+    }
+
+    const weeklyFocus =
+      goalsWithoutHabits[0]?.title
+        ? `Definir un habito concreto para "${goalsWithoutHabits[0].title}".`
+        : habitsWithoutGoals[0]?.title
+          ? `Conectar "${habitsWithoutGoals[0].title}" con un objetivo o soltarlo.`
+          : recentThoughts.length === 0
+            ? 'Registrar al menos una entrada honesta en el diario esta semana.'
+            : stats.net < 0 && finances.length > 0
+              ? 'Revisar los gastos del mes y separar prioridad real de impulso.'
+              : 'Mantener el sistema y revisar si algun objetivo necesita mas soporte.';
+
+    return {
+      score,
+      activeSupportedGoals: goalsWithActiveHabits.length,
+      goalsWithoutHabits,
+      habitsWithoutGoals,
+      recentThoughts: recentThoughts.length,
+      signals: signals.slice(0, 3),
+      weeklyFocus,
+    };
+  }, [goals, habits, thoughts, stats.net, finances.length, user.uid]);
+
   return (
     <div className="space-y-8 bg-neutral-50/50 min-h-screen p-4 md:p-8 pb-24 md:pb-8">
       {/* Summary Header */}
@@ -263,7 +388,7 @@ export default function Dashboard({ user }: { user: any }) {
                 />
               </div>
               <span className={`text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${stats.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {stats.net >= 0 ? 'Saludable' : 'Crítico'}
+                {stats.net >= 0 ? 'Saludable' : 'Critico'}
               </span>
             </div>
           </div>
@@ -387,6 +512,69 @@ export default function Dashboard({ user }: { user: any }) {
                     </div>
                     <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-500">
                       <div className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Gastos
+                    </div>
+                  </div>
+                </div>
+              );
+            case 'alignment':
+              return (
+                <div key="alignment" className="bg-neutral-900 text-white p-6 rounded-3xl shadow-sm border border-neutral-800 lg:col-span-2 overflow-hidden relative">
+                  <div className="absolute right-0 top-0 p-6 opacity-10">
+                    <Sparkles size={120} />
+                  </div>
+                  <div className="relative z-10 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-white">
+                          <Sparkles size={16} className="text-neutral-400" />
+                          Alineacion personal
+                        </h3>
+                        <p className="text-sm text-neutral-400 mt-2 max-w-xl">
+                          Primer cruce entre objetivos, habitos, diario y finanzas. No es IA real todavia: son senales calculadas con tus datos.
+                        </p>
+                      </div>
+                      <div className="bg-white text-neutral-900 rounded-3xl px-5 py-4 min-w-28 text-center">
+                        <p className="text-3xl font-black">{alignment.score}%</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Base</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                        <p className="text-2xl font-black">{alignment.activeSupportedGoals}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Objetivos con habito</p>
+                      </div>
+                      <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                        <p className="text-2xl font-black">{alignment.habitsWithoutGoals.length}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Habitos sueltos</p>
+                      </div>
+                      <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                        <p className="text-2xl font-black">{alignment.recentThoughts}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Diario 7 dias</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {alignment.signals.map((signal, index) => (
+                        <div key={`${signal.title}-${index}`} className="flex items-start gap-3 rounded-2xl bg-white/10 p-4 border border-white/10">
+                          <div className={`mt-0.5 rounded-full p-1 ${
+                            signal.tone === 'positive' ? 'bg-emerald-500 text-white' :
+                            signal.tone === 'warning' ? 'bg-amber-400 text-neutral-900' :
+                            'bg-neutral-700 text-white'
+                          }`}>
+                            {signal.tone === 'positive' ? <CheckCircle2 size={14} /> : signal.tone === 'warning' ? <AlertCircle size={14} /> : <Brain size={14} />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-black">{signal.title}</p>
+                            <p className="text-xs text-neutral-400 mt-1 leading-relaxed">{signal.body}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="rounded-3xl bg-white text-neutral-900 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Foco recomendado de la semana</p>
+                      <p className="mt-2 text-base font-black leading-tight">{alignment.weeklyFocus}</p>
                     </div>
                   </div>
                 </div>
