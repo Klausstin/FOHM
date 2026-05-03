@@ -1,31 +1,72 @@
-# FOHM / Mind & Money
+# VEO / Vida En Orden
 
-FOHM es una app personal/familiar para ordenar mente, hábitos, objetivos, calendario y finanzas. La primera versión nació en Google AI Studio como "Mind & Money" y se está refactorizando por fases, sin rehacerla desde cero.
+VEO significa **Vida En Orden**.
 
-La visión del producto es que todo lo que el usuario registre pueda convertirse en contexto estructurado para una IA de alineación personal: objetivos anuales, diario, hábitos, calendario, finanzas, energía, tiempo y prioridades.
+La app nacio como una primera version llamada "Mind & Money" creada en Google AI Studio. El codigo se esta refactorizando por fases, sin rehacer todo desde cero salvo donde convenga por calidad de producto.
 
-## Estado actual
+## Vision
 
-La app ya corre localmente y tiene estas secciones:
+VEO es un sistema operativo personal para entender quien sos, definir objetivos autenticos y tomar mejores decisiones sin desordenar la vida que queres vivir.
+
+Bajada:
+
+```text
+Entendete mejor. Elegi mejor. Vivi mas alineado.
+```
+
+La capa funcional incluye diario, objetivos, habitos, calendario y finanzas. La idea profunda es ayudar al usuario a revisar si lo que hace, lo que dice que quiere y la vida que esta construyendo estan alineados.
+
+## Luz
+
+La IA dentro de VEO se llama **Luz**.
+
+Luz no debe ser un chatbot generico. Su rol es ayudar a ver patrones, contradicciones, desalineaciones y proximos pasos concretos.
+
+Luz debe poder analizar, cuando haya datos suficientes:
+
+- Si los habitos actuales sostienen los objetivos anuales.
+- Si el calendario refleja las prioridades declaradas.
+- Si los gastos estan al servicio de la vida que el usuario dice querer.
+- Si el diario muestra patrones emocionales, preocupaciones o bloqueos recurrentes.
+- Si un objetivo parece autentico o parece venir de comparacion, presion externa o impulso.
+- Si el usuario avanza en una meta pero descuida salud, pareja, descanso, finanzas o disfrute.
+
+Reglas de producto:
+
+- No empujar productividad por productividad.
+- No asumir que mas eficiencia siempre es mejor.
+- No proponer objetivos genericos.
+- No diagnosticar ni actuar como terapeuta.
+- No inventar datos.
+- Si falta informacion, pedir mejor carga de datos.
+- Respetar privacidad antes de construir contexto para IA.
+
+## Estado Actual
+
+La app corre localmente y tiene estas secciones:
 
 - Inicio
 - Diario Mental
 - Finanzas
 - Objetivos
-- Hábitos
+- Habitos
 - Calendario
 - Ajustes
 
-Fase 1 dejó una base técnica más sólida:
+Avances ya integrados:
 
-- UI principal en español.
-- Layout y navegación separados.
+- UI principal migrando a espanol.
+- Layout y navegacion separados.
 - Componentes UI reutilizables iniciales.
 - Modelos de dominio base.
-- Sistema inicial de visibilidad/permisos.
-- Diario Mental privado por defecto.
-- Base conceptual para household, pareja y grupo familiar.
-- Documentación de fases y riesgos.
+- Sistema inicial de visibilidad y permisos.
+- Diario privado por defecto.
+- Base de household/pareja/grupo.
+- Journal con estructura de feature, servicio, busqueda, edicion y borrado.
+- Objetivos y habitos vinculados.
+- Dashboard con primera lectura de alineacion sin IA real.
+- Servicios separados para journal, goals, habits y finance.
+- Finanzas con base para puesta al dia, movimientos estimados, `needs_review`, `confidence`, `source` y revision.
 
 ## Stack
 
@@ -42,16 +83,7 @@ Fase 1 dejó una base técnica más sólida:
 - lucide-react
 - motion/react
 
-## Requisitos
-
-- Node.js LTS
-- npm
-- Git
-- Proyecto Firebase configurado
-- Google Auth habilitado en Firebase
-- `localhost` agregado como dominio autorizado en Firebase Auth
-
-## Correr localmente
+## Correr Localmente
 
 Instalar dependencias:
 
@@ -77,15 +109,9 @@ Verificar build:
 npm run build
 ```
 
-Verificar TypeScript:
+## Variables De Entorno
 
-```powershell
-npm run lint
-```
-
-## Variables de entorno
-
-Crear `.env` o `.env.local` según el entorno:
+Crear `.env` o `.env.local` segun el entorno:
 
 ```env
 GEMINI_API_KEY=
@@ -97,97 +123,59 @@ SESSION_SECRET=
 
 Notas:
 
-- Sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, la integración de Google Calendar no funciona.
-- Sin `GEMINI_API_KEY`, las features de IA no deberían considerarse listas.
+- Sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, Google Calendar no funciona.
+- Sin `GEMINI_API_KEY`, las features de IA no deben considerarse listas.
 - No subir archivos `.env` reales al repo.
 
-## Warnings conocidos
+## Warnings Conocidos
 
 Durante `npm run build` pueden aparecer warnings de chunks grandes y bundling de Firebase. Hoy no bloquean el build.
 
-También puede aparecer:
+Tambien puede aparecer:
 
 ```text
 WARNING: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set.
 ```
 
-Eso es esperado si todavía no se configuró Google Calendar OAuth.
+Eso es esperado si todavia no se configuro Google Calendar OAuth.
 
 ## Privacidad
 
-Regla crítica del producto:
+Regla critica:
 
 ```text
-El Diario Mental es privado por defecto y no se comparte automáticamente.
+El Diario Mental es privado por defecto y no se comparte automaticamente.
 ```
 
-La app empieza a usar estas visibilidades:
+Visibilidades base:
 
 - `private`
 - `shared_with_partner`
 - `household_shared`
 - `app_public`
 
-La implementación completa de permisos por documento sigue en progreso. Ver `PHASE_TODOS.md`.
-
-## Estructura relevante
+## Estructura Relevante
 
 ```text
 src/
   components/
     layout/
-      AppShell.tsx
-      SidebarNav.tsx
     ui/
-      Button.tsx
-      Card.tsx
-      CategoryPill.tsx
-      EmptyState.tsx
-      PageHeader.tsx
-      SectionTabs.tsx
-      StatCard.tsx
   domain/
     household.ts
     models.ts
     permissions.ts
+  features/
+    finance/
+    goals/
+    habits/
+    journal/
   lib/
-    categories.ts
-    mindCategories.ts
   services/
-    calendarService.ts
-    gemini.ts
 ```
 
-## Documentación del proyecto
+## Documentacion
 
-- `IMPLEMENTATION_PLAN.md`: auditoría técnica y plan por fases.
+- `IMPLEMENTATION_PLAN.md`: auditoria tecnica y plan por fases.
 - `PHASE_TODOS.md`: pendientes operativos por fase.
-
-## Próximas fases
-
-Fase 2:
-
-- CRUD real y más limpio del Diario Mental.
-- Objetivos anuales con métricas, progreso y vínculos.
-- Hábitos por trimestre con estados claros.
-- Vista básica de alineación entre objetivos y hábitos.
-
-Fase 3:
-
-- Finanzas más robustas.
-- Cuentas, movimientos, transferencias e inversiones.
-- Saldos consistentes.
-- Separación personal/compartido.
-
-Fase 4:
-
-- Google Calendar read-only consolidado.
-- Clasificación de eventos.
-- Distribución del tiempo.
-- Cruce con objetivos.
-
-Fase 5:
-
-- IA con contexto estructurado.
-- Insights con fuentes y datos faltantes.
-- Recomendaciones concretas, no diagnósticas.
+- `docs/VEO_PRODUCT_VISION.md`: definicion conceptual de VEO y Luz.
