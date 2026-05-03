@@ -19,6 +19,17 @@ import { format } from 'date-fns';
 import { useDropzone } from 'react-dropzone';
 import * as pdfjsLib from 'pdfjs-dist';
 import { categorizeFinanceFromText, analyzeFinancialState } from '../services/gemini.ts';
+import {
+  applyTransactionToAccountBalances,
+  createFinancialAccount,
+  createFinancialTransaction,
+  deleteFinancialAccount,
+  subscribeToHouseholdFinancialAccounts,
+  subscribeToHouseholdFinancialTransactions,
+  updateFinancialAccount,
+} from '../features/finance/finance.service.ts';
+import { getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
+import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -81,6 +92,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [editingAccount, setEditingAccount] = useState<any | null>(null);
   const [newAccount, setNewAccount] = useState({ name: '', currency: 'ARS', balance: 0, color: '#3B82F6', type: 'bank' });
   const [householdMembers, setHouseholdMembers] = useState<any[]>([]);
+  const [showCatchupPrompt, setShowCatchupPrompt] = useState(false);
   
   // Filtering states
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, day, month, quarter, year, custom
@@ -98,25 +110,15 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [editForm, setEditForm] = useState<any>(null);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'finances'),
-      where('householdId', '==', user.householdId),
-      orderBy('date', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const unsubscribe = subscribeToHouseholdFinancialTransactions(user.householdId, (data) => {
       setFinances(data);
+      setShowCatchupPrompt(shouldSuggestFinanceCatchup(data));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'finances');
     });
 
-    const qAccounts = query(
-      collection(db, 'accounts'),
-      where('householdId', '==', user.householdId)
-    );
-    const unsubAccounts = onSnapshot(qAccounts, (snap) => {
-      setUserAccounts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const unsubAccounts = subscribeToHouseholdFinancialAccounts(user.householdId, setUserAccounts, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'accounts');
     });
 
     return () => {
@@ -166,15 +168,12 @@ export default function FinanceTracker({ user }: { user: any }) {
     e.preventDefault();
     try {
       if (editingAccount) {
-        await updateDoc(doc(db, 'accounts', editingAccount.id), {
-          ...newAccount,
-        });
+        await updateFinancialAccount(editingAccount.id, newAccount);
       } else {
-        await addDoc(collection(db, 'accounts'), {
+        await createFinancialAccount({
           ...newAccount,
           uid: user.uid,
           householdId: user.householdId,
-          createdAt: new Date()
         });
       }
       setIsAddingAccount(false);
@@ -188,8 +187,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const handleDeleteAccount = async (id: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta cuenta? Los registros asociados no se eliminarán, pero la cuenta ya no estará disponible.')) return;
     try {
-      const { deleteDoc } = await import('firebase/firestore');
-      await deleteDoc(doc(db, 'accounts', id));
+      await deleteFinancialAccount(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'accounts');
     }
@@ -212,7 +210,7 @@ export default function FinanceTracker({ user }: { user: any }) {
     if (!amount || !category) return;
 
     try {
-      await addDoc(collection(db, 'finances'), {
+      const transactionInput: CreateFinancialTransactionInput = {
         uid: user.uid,
         householdId: user.householdId,
         amount: parseFloat(amount),
@@ -229,36 +227,21 @@ export default function FinanceTracker({ user }: { user: any }) {
         isFixed,
         date: new Date(date),
         source: 'manual',
+        confidence: 'exact',
+        status: paymentStatus === 'Pendiente' ? 'pending' : paymentStatus === 'Anulado' ? 'ignored' : 'posted',
+        needsReview: false,
+        reconciliationBatchId: null,
+        estimatedReason: null,
         isConfirmed: true,
         generatedBy: generatedBy || user.uid,
         assignedTo: assignedTo || user.uid,
         payer,
         paymentType,
         paymentStatus
-      });
+      };
 
-      // Update account balance
-      if (accountId) {
-        const accountRef = doc(db, 'accounts', accountId);
-        const accountSnap = await getDoc(accountRef);
-        if (accountSnap.exists()) {
-          const currentBalance = accountSnap.data().balance || 0;
-          let newBalance = currentBalance;
-          if (type === 'income') newBalance += parseFloat(amount);
-          else if (type === 'expense' || type === 'transfer') newBalance -= parseFloat(amount);
-          await updateDoc(accountRef, { balance: newBalance });
-        }
-      }
-
-      if (type === 'transfer' && toAccountId) {
-        const toAccountRef = doc(db, 'accounts', toAccountId);
-        const toAccountSnap = await getDoc(toAccountRef);
-        if (toAccountSnap.exists()) {
-          const currentBalance = toAccountSnap.data().balance || 0;
-          const newBalance = currentBalance + parseFloat(amount);
-          await updateDoc(toAccountRef, { balance: newBalance });
-        }
-      }
+      await createFinancialTransaction(transactionInput);
+      await applyTransactionToAccountBalances(transactionInput);
       setAmount('');
       setDescription('');
       setNote('');
@@ -351,24 +334,32 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const confirmTransaction = async (pt: PendingTransaction) => {
     try {
-      await addDoc(collection(db, 'finances'), {
+      await createFinancialTransaction({
         uid: user.uid,
         householdId: user.householdId,
         amount: pt.amount,
+        currency,
         description: pt.description,
+        note: '',
         category: pt.category,
         subCategory: pt.subCategory || '',
         subSubCategory: pt.subSubCategory || '',
         type: pt.type,
+        accountId: '',
+        toAccountId: '',
+        tags: ['pdf'],
         isFixed: pt.isFixed,
         date: new Date(pt.date),
         source: 'pdf',
-        pdfName: pt.fileName,
         isConfirmed: true,
         generatedBy: user.uid,
         assignedTo: user.uid,
-        confidence: pt.confidence,
-        needsReview: false // Once confirmed, it no longer needs review
+        confidence: pt.confidence >= 0.9 ? 'exact' : pt.confidence >= 0.7 ? 'estimated' : 'inferred',
+        status: 'posted',
+        needsReview: false,
+        estimatedReason: null,
+        reconciliationBatchId: null,
+        paymentStatus: 'Contabilizado',
       });
 
       // Save mapping for learning
@@ -556,8 +547,8 @@ export default function FinanceTracker({ user }: { user: any }) {
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Finance Hub</h2>
-          <p className="text-neutral-500 font-medium">Manage your household wealth and track every penny.</p>
+          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Finanzas</h2>
+          <p className="text-neutral-500 font-medium">Ordena cuentas, movimientos y decisiones de plata sin exigir precision imposible.</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -573,10 +564,36 @@ export default function FinanceTracker({ user }: { user: any }) {
             className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200 disabled:opacity-50"
           >
             {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
-            Analyze Finances
+            Analizar finanzas
           </button>
         </div>
       </header>
+
+      {showCatchupPrompt && (
+        <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="bg-amber-400 text-neutral-900 p-3 rounded-2xl">
+              <AlertCircle size={22} />
+            </div>
+            <div>
+              <h3 className="font-black text-neutral-900">Puesta al dia recomendada</h3>
+              <p className="text-sm text-neutral-600 mt-1 max-w-2xl">
+                {getDaysSinceLastFinanceUpdate(finances) === null
+                  ? 'Todavia no hay movimientos cargados.'
+                  : `Pasaron ${getDaysSinceLastFinanceUpdate(finances)} dias desde el ultimo movimiento.`}
+                {' '}La app ya esta preparada para registrar movimientos estimados y marcarlos como supuestos hasta revisarlos.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCatchupPrompt(false)}
+            className="px-5 py-3 rounded-2xl bg-white text-neutral-900 text-sm font-black border border-amber-100 hover:bg-amber-100 transition-all"
+          >
+            Entendido
+          </button>
+        </div>
+      )}
 
       {/* Wallets Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

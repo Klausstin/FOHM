@@ -94,7 +94,12 @@ export interface FinancialTransaction {
   tags: string[];
   note?: string;
   paymentMethod?: string;
-  status: 'pending' | 'posted' | 'ignored';
+  source: 'manual' | 'pdf' | 'csv' | 'catchup_estimate' | 'catchup_inferred';
+  confidence: 'exact' | 'estimated' | 'inferred';
+  status: 'pending' | 'posted' | 'ignored' | 'needs_review';
+  reconciliationBatchId?: string;
+  estimatedReason?: string;
+  needsReview?: boolean;
   date: TimestampLike;
   visibility: Visibility;
   createdAt: TimestampLike;
