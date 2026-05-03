@@ -10,7 +10,7 @@ const ICON_MAP: { [key: string]: any } = {
   Utensils, ShoppingBag, Home, Bus, Car, Monitor, Coins, TrendingUp, List, Banknote, User: UserIcon
 };
 
-const CategoryIcon = ({ name, color, size = 18 }: { name: string, color?: string, size?: number }) => {
+const CategoriaIcon = ({ name, color, size = 18 }: { name: string, color?: string, size?: number }) => {
   const Icon = ICON_MAP[name] || Tag;
   return <Icon size={size} style={{ color: color || 'inherit' }} />;
 };
@@ -42,7 +42,7 @@ const FINANCE_TYPES = [
 ];
 
 const CURRENCIES = ['ARS', 'USD', 'EUR', 'BRL', 'CLP', 'UYU'];
-const PAYMENT_TYPES = ['Efectivo', 'Tarjeta de Débito', 'Tarjeta de Crédito', 'Transferencia', 'Mercado Pago', 'Otro'];
+const PAYMENT_TYPES = ['Efectivo', 'Tarjeta de Débito', 'Tarjeta de credito', 'Transferencia', 'Mercado Pago', 'Otro'];
 const PAYMENT_STATUSES = ['Contabilizado', 'Pendiente', 'Anulado'];
 
 interface PendingTransaction {
@@ -68,15 +68,15 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
   const [category, setCategory] = useState('');
-  const [subCategory, setSubCategory] = useState('');
-  const [subSubCategory, setSubSubCategory] = useState('');
+  const [subCategory, setSubCategoria] = useState('');
+  const [subSubCategory, setSubSubCategoria] = useState('');
   const [type, setType] = useState('expense');
   const [accountId, setAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-  const [isFixed, setIsFixed] = useState(false);
+  const [isFixed, setIsFijo] = useState(false);
   const [payer, setPayer] = useState('');
   const [paymentType, setPaymentType] = useState('Efectivo');
   const [paymentStatus, setPaymentStatus] = useState('Contabilizado');
@@ -262,12 +262,12 @@ export default function FinanceTracker({ user }: { user: any }) {
       if (!keepFields) {
         setCurrency('ARS');
         setCategory('');
-        setSubCategory('');
-        setSubSubCategory('');
+        setSubCategoria('');
+        setSubSubCategoria('');
         setAccountId('');
         setToAccountId('');
         setDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-        setIsFixed(false);
+        setIsFijo(false);
         setPayer('');
         setPaymentType('Efectivo');
         setPaymentStatus('Contabilizado');
@@ -408,7 +408,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this transaction?')) return;
+    if (!confirm('Seguro que queres eliminar este movimiento?')) return;
     try {
       await updateDoc(doc(db, 'finances', id), { isConfirmed: false }); // Or actually delete
       // For this app, let's do actual delete since user asked for it
@@ -506,7 +506,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       if (customEndDate && fDate > new Date(customEndDate)) return false;
     }
 
-    // Category Filter
+    // Categoria Filter
     if (filterCategory !== 'all' && f.category !== filterCategory) return false;
 
     // Amount Filter
@@ -656,7 +656,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
           >
             <Plus size={18} />
-            Nueva Billetera
+            Nueva cuenta
           </button>
           <button
             onClick={runAnalysis}
@@ -901,7 +901,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           <div className="w-10 h-10 rounded-full bg-neutral-50 flex items-center justify-center group-hover:bg-neutral-100 transition-colors">
             <Plus size={20} />
           </div>
-          <span className="text-sm font-bold">Nueva Billetera</span>
+          <span className="text-sm font-bold">Nueva cuenta</span>
         </button>
       </div>
 
@@ -920,7 +920,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             >
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-black text-neutral-900">
-                  {editingAccount ? 'Editar Billetera' : 'Nueva Billetera'}
+                  {editingAccount ? 'Editar cuenta' : 'Nueva cuenta'}
                 </h3>
                 <button onClick={() => setIsAddingAccount(false)} className="text-neutral-400 hover:text-neutral-900">
                   <X size={24} />
@@ -957,10 +957,10 @@ export default function FinanceTracker({ user }: { user: any }) {
                       className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm"
                     >
                       <option value="bank">Banco</option>
-                      <option value="wallet">Billetera Virtual</option>
+                      <option value="wallet">Billetera virtual</option>
                       <option value="cash">Efectivo</option>
-                      <option value="investment">Inversión</option>
-                      <option value="credit_card">Tarjeta de Crédito</option>
+                      <option value="investment">Inversion</option>
+                      <option value="credit_card">Tarjeta de credito</option>
                     </select>
                   </div>
                 </div>
@@ -989,7 +989,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                   type="submit"
                   className="w-full bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg"
                 >
-                  {editingAccount ? 'Guardar Cambios' : 'Crear Billetera'}
+                  {editingAccount ? 'Guardar Cambios' : 'Crear cuenta'}
                 </button>
               </form>
             </motion.div>
@@ -1009,7 +1009,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           <div className="relative z-10">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Sparkles size={20} className="text-neutral-400" />
-              Financial Insights
+              Analisis financiero
             </h3>
             <div className="prose prose-invert max-w-none text-neutral-300 leading-relaxed">
               {analysisResult}
@@ -1018,7 +1018,7 @@ export default function FinanceTracker({ user }: { user: any }) {
               onClick={() => setAnalysisResult(null)}
               className="mt-6 text-sm font-bold text-neutral-400 hover:text-white transition-colors"
             >
-              Dismiss Analysis
+              Cerrar analisis
             </button>
           </div>
         </motion.div>
@@ -1039,9 +1039,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                   <AlertCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-amber-900">Review Transactions</h3>
+                  <h3 className="text-lg font-bold text-amber-900">Revisar registros</h3>
                   <p className="text-sm text-amber-700 font-medium">
-                    {pendingTransactions.length} transactions extracted from PDFs need your confirmation.
+                    {pendingTransactions.length} registros extraidos de PDFs necesitan confirmacion.
                   </p>
                 </div>
               </div>
@@ -1058,7 +1058,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 <div key={pt.id} className="bg-white p-6 rounded-2xl border border-amber-100 shadow-sm space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex-1 min-w-[200px] space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Description</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Descripcion</label>
                       <input 
                         type="text"
                         value={pt.description}
@@ -1076,18 +1076,18 @@ export default function FinanceTracker({ user }: { user: any }) {
                       />
                     </div>
                     <div className="w-48 space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Category</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
                       <select 
                         value={pt.category}
                         onChange={(e) => updatePending(pt.id, { category: e.target.value, subCategory: '' })}
                         className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
                       >
-                        <option value="">Select Category</option>
+                        <option value="">Select Categoria</option>
                         {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
                     <div className="w-48 space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sub-Category</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sub-Categoria</label>
                       <select 
                         value={pt.subCategory}
                         onChange={(e) => updatePending(pt.id, { subCategory: e.target.value, subSubCategory: '' })}
@@ -1131,7 +1131,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           onChange={(e) => updatePending(pt.id, { isFixed: e.target.checked })}
                           className="w-4 h-4 rounded border-neutral-300 text-amber-600 focus:ring-amber-500"
                         />
-                        <span className="text-xs font-bold text-neutral-600">Fixed Expense</span>
+                        <span className="text-xs font-bold text-neutral-600">Gasto fijo</span>
                       </label>
                       <div className="flex gap-2">
                         <button 
@@ -1144,14 +1144,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                           onClick={() => confirmTransaction(pt)}
                           className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-700 transition-all shadow-md flex items-center gap-2"
                         >
-                          <Check size={16} /> Confirm
+                          <Check size={16} /> Confirmar
                         </button>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-amber-600 font-bold">
                     <FileText size={12} />
-                    From: {pt.fileName} • Original: "{pt.originalDescription}"
+                    Desde: {pt.fileName} - Original: "{pt.originalDescription}"
                   </div>
                 </div>
               ))}
@@ -1189,7 +1189,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     <div>
                       <p className="text-sm font-black text-neutral-900">{finance.description || finance.category}</p>
                       <p className="text-xs text-neutral-500 mt-1">
-                        {finance.category} · {finance.currency || 'ARS'} {Number(finance.amount || 0).toLocaleString()}
+                        {finance.category} - {finance.currency || 'ARS'} {Number(finance.amount || 0).toLocaleString()}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700 border border-amber-100">
@@ -1246,18 +1246,18 @@ export default function FinanceTracker({ user }: { user: any }) {
           <div className="bg-neutral-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-neutral-400 mb-1">Total Balance</p>
+                <p className="text-xs font-black uppercase tracking-widest text-neutral-400 mb-1">Saldo total</p>
                 <h3 className="text-4xl font-black tracking-tighter">
                   ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </h3>
               </div>
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-neutral-800">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-green-500 mb-1">Income (Month)</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-green-500 mb-1">Ingresos del mes</p>
                   <p className="text-lg font-bold text-white">+${monthlyIncome.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-1">Expense (Month)</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-1">Gastos del mes</p>
                   <p className="text-lg font-bold text-white">-${monthlyExpense.toLocaleString()}</p>
                 </div>
               </div>
@@ -1348,10 +1348,10 @@ export default function FinanceTracker({ user }: { user: any }) {
                   )}
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Categoría *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Categoria *</label>
                     <select
                       value={category}
-                      onChange={(e) => { setCategory(e.target.value); setSubCategory(''); }}
+                      onChange={(e) => { setCategory(e.target.value); setSubCategoria(''); }}
                       required
                       className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                     >
@@ -1362,10 +1362,10 @@ export default function FinanceTracker({ user }: { user: any }) {
 
                   {category && userCategories.find(c => c.name === category)?.subCategories?.length > 0 && (
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Sub-categoría</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Subcategoria</label>
                       <select
                         value={subCategory}
-                        onChange={(e) => { setSubCategory(e.target.value); setSubSubCategory(''); }}
+                        onChange={(e) => { setSubCategoria(e.target.value); setSubSubCategoria(''); }}
                         className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       >
                         <option value="">Ninguna</option>
@@ -1383,10 +1383,10 @@ export default function FinanceTracker({ user }: { user: any }) {
                     if (sub && typeof sub !== 'string' && sub.subCategories?.length > 0) {
                       return (
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Sub-sub-categoría</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Sub-subcategoria</label>
                           <select
                             value={subSubCategory}
-                            onChange={(e) => setSubSubCategory(e.target.value)}
+                            onChange={(e) => setSubSubCategoria(e.target.value)}
                             className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                           >
                             <option value="">Ninguna</option>
@@ -1446,7 +1446,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha & Hora</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha y hora</label>
                     <input
                       type="datetime-local"
                       value={date}
@@ -1459,7 +1459,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     <input 
                       type="checkbox"
                       checked={isFixed}
-                      onChange={(e) => setIsFixed(e.target.checked)}
+                      onChange={(e) => setIsFijo(e.target.checked)}
                       className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
                     />
                     <span className="text-xs font-bold text-neutral-600">Crear plantilla desde este registro</span>
@@ -1475,7 +1475,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     <textarea
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Describa su registro"
+                      placeholder="Describe el registro"
                       className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all min-h-[80px]"
                     />
                   </div>
@@ -1532,7 +1532,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       >
                         {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
-                        <option value="Both">Ambos</option>
+                        <option value="Ambos">Ambos</option>
                       </select>
                     </div>
                   </div>
@@ -1570,9 +1570,9 @@ export default function FinanceTracker({ user }: { user: any }) {
             </div>
             <div>
               <p className="text-sm font-bold text-neutral-900">
-                {isProcessingPdf ? 'Processing PDFs...' : 'Upload Bank Statements'}
+                {isProcessingPdf ? 'Procesando PDFs...' : 'Subir resumenes bancarios'}
               </p>
-              <p className="text-xs text-neutral-400 font-medium">Drag & drop multiple PDFs here</p>
+              <p className="text-xs text-neutral-400 font-medium">Arrastra o selecciona uno o varios PDFs</p>
             </div>
             {isProcessingPdf && (
               <div className="w-full bg-neutral-100 h-1 rounded-full overflow-hidden">
@@ -1615,7 +1615,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <Filter size={18} className="text-neutral-400" />
-                Filters & Search
+                Filtros y busqueda
               </h3>
               {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
                 <button 
@@ -1630,32 +1630,32 @@ export default function FinanceTracker({ user }: { user: any }) {
                   }}
                   className="text-xs font-bold text-neutral-400 hover:text-neutral-900 transition-colors"
                 >
-                  Reset Filters
+                  Limpiar filtros
                 </button>
               )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Date Range</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Periodo</label>
                 <select 
                   value={filterDateRange}
                   onChange={(e) => setFilterDateRange(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
-                  <option value="all">All Time</option>
-                  <option value="day">Today</option>
-                  <option value="month">This Month</option>
-                  <option value="quarter">This Quarter</option>
-                  <option value="year">This Year</option>
-                  <option value="custom">Custom Range</option>
+                  <option value="all">Todo</option>
+                  <option value="day">Hoy</option>
+                  <option value="month">Este mes</option>
+                  <option value="quarter">Este trimestre</option>
+                  <option value="year">Este ano</option>
+                  <option value="custom">Rango personalizado</option>
                 </select>
               </div>
 
               {filterDateRange === 'custom' && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Start Date</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha inicial</label>
                     <input 
                       type="date"
                       value={customStartDate}
@@ -1664,7 +1664,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">End Date</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha final</label>
                     <input 
                       type="date"
                       value={customEndDate}
@@ -1676,49 +1676,49 @@ export default function FinanceTracker({ user }: { user: any }) {
               )}
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Category</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Categoria</label>
                 <select 
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
-                  <option value="all">All Categories</option>
+                  <option value="all">Todas las categorias</option>
                   {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Generated By</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cargado por</label>
                 <select 
                   value={filterGeneratedBy}
                   onChange={(e) => setFilterGeneratedBy(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
-                  <option value="all">Everyone</option>
+                  <option value="all">Todos</option>
                   {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
                 </select>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Assigned To</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Responsable</label>
                 <select 
                   value={filterAssignedTo}
                   onChange={(e) => setFilterAssignedTo(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
-                  <option value="all">Everyone</option>
+                  <option value="all">Todos</option>
                   {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
-                  <option value="Both">Both</option>
+                  <option value="Ambos">Ambos</option>
                 </select>
               </div>
 
               <div className="space-y-1 lg:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Search Keywords</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Buscar</label>
                 <input 
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search description, category..."
+                  placeholder="Buscar descripcion, categoria..."
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 />
               </div>
@@ -1731,7 +1731,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const typeInfo = FINANCE_TYPES.find(t => t.id === f.type);
                 const isEditing = editingId === f.id;
                 const generator = householdMembers.find(m => m.uid === f.generatedBy);
-                const assignee = f.assignedTo === 'Both' ? 'Both' : householdMembers.find(m => m.uid === f.assignedTo);
+                const assignee = f.assignedTo === 'Ambos' ? 'Ambos' : householdMembers.find(m => m.uid === f.assignedTo);
 
                 return (
                   <motion.div
@@ -1772,7 +1772,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                               onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value, subSubCategory: '' })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
-                              <option value="">No Sub-category</option>
+                              <option value="">Sin subcategoria</option>
                               {(userCategories.find(c => c.name === editForm.category)?.subCategories || []).map((sub: any) => {
                                 const name = typeof sub === 'string' ? sub : sub.name;
                                 return <option key={name} value={name}>{name}</option>;
@@ -1789,7 +1789,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                   onChange={(e) => setEditForm({ ...editForm, subSubCategory: e.target.value })}
                                   className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                                 >
-                                  <option value="">No Sub-sub-category</option>
+                                  <option value="">Sin sub-subcategoria</option>
                                   {(sub?.subCategories || []).map((ss: any) => {
                                     const name = typeof ss === 'string' ? ss : ss.name;
                                     return <option key={name} value={name}>{name}</option>;
@@ -1804,7 +1804,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value })}
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           >
-                            <option value="">No Account</option>
+                            <option value="">Sin cuenta</option>
                             {(userAccounts || []).map(acc => (
                               <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
                             ))}
@@ -1815,7 +1815,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                               onChange={(e) => setEditForm({ ...editForm, toAccountId: e.target.value })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
-                              <option value="">No To Account</option>
+                              <option value="">Sin cuenta destino</option>
                               {(userAccounts || []).map(acc => (
                                 <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
                               ))}
@@ -1833,14 +1833,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                             type="text"
                             value={editForm.description}
                             onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                            placeholder="Description"
+                            placeholder="Descripcion"
                             className="w-full bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           />
                           <input 
                             type="text"
                             value={editForm.note}
                             onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
-                            placeholder="Note"
+                            placeholder="Nota"
                             className="w-full bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           />
                         </div>
@@ -1849,7 +1849,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             type="text"
                             value={editForm.payer}
                             onChange={(e) => setEditForm({ ...editForm, payer: e.target.value })}
-                            placeholder="Payer"
+                            placeholder="Pagador"
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           />
                           <select 
@@ -1889,12 +1889,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
                               {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
-                              <option value="Both">Both</option>
+                              <option value="Ambos">Ambos</option>
                             </select>
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => setEditingId(null)} className="p-2 text-neutral-400 hover:text-neutral-600"><X size={18} /></button>
-                            <button onClick={saveEdit} className="bg-neutral-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"><Save size={14} /> Save</button>
+                            <button onClick={saveEdit} className="bg-neutral-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"><Save size={14} /> Guardar</button>
                           </div>
                         </div>
                       </div>
@@ -1905,7 +1905,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             <div className={`w-10 h-10 ${typeInfo?.bg} rounded-xl flex items-center justify-center relative`}>
                               {(() => {
                                 const cat = userCategories.find(c => c.name === f.category);
-                                if (cat) return <CategoryIcon name={cat.icon} color={cat.color} size={18} />;
+                                if (cat) return <CategoriaIcon name={cat.icon} color={cat.color} size={18} />;
                                 return typeInfo?.icon;
                               })()}
                               <div className={`absolute -bottom-1 -right-1 w-4 h-4 ${typeInfo?.bg} ${typeInfo?.color} rounded-full border-2 border-white flex items-center justify-center`}>
@@ -1940,12 +1940,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 )}
                                 {f.isFixed && (
                                   <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                                    Fixed
+                                    Fijo
                                   </span>
                                 )}
                               </div>
                               <p className="text-xs text-neutral-400 font-medium truncate max-w-[200px]">
-                                {f.description || f.note || 'No description'}
+                                {f.description || f.note || 'Sin descripcion'}
                               </p>
                             </div>
                           </div>
@@ -1997,18 +1997,18 @@ export default function FinanceTracker({ user }: { user: any }) {
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Origen</span>
                               <span className="text-[10px] font-bold text-neutral-500">
-                                {f.source || 'manual'}{f.confidence ? ` · ${f.confidence}` : ''}
+                                {f.source || 'manual'}{f.confidence ? ` - ${f.confidence}` : ''}
                               </span>
                             </div>
                           )}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">By</span>
-                            <span className="text-[10px] font-bold text-neutral-500">{generator?.displayName || 'Unknown'}</span>
+                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Por</span>
+                            <span className="text-[10px] font-bold text-neutral-500">{generator?.displayName || 'Sin dato'}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">For</span>
+                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Para</span>
                             <span className="text-[10px] font-bold text-neutral-500">
-                              {f.assignedTo === 'Both' ? 'Both' : (assignee?.displayName || 'Unknown')}
+                              {f.assignedTo === 'Ambos' ? 'Ambos' : (assignee?.displayName || 'Sin dato')}
                             </span>
                           </div>
                           {f.estimatedReason && (
@@ -2028,7 +2028,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
             {filteredFinances.length === 0 && (
               <div className="text-center py-20 bg-neutral-100 rounded-[2rem] border-2 border-dashed border-neutral-200">
-                <p className="text-neutral-400 font-bold">No transactions match your filters.</p>
+                <p className="text-neutral-400 font-bold">No hay registros que coincidan con los filtros.</p>
               </div>
             )}
           </div>
@@ -2037,3 +2037,5 @@ export default function FinanceTracker({ user }: { user: any }) {
     </div>
   );
 }
+
+
