@@ -12,8 +12,7 @@ import Habits from './components/Habits.tsx';
 import CalendarIntegration from './components/CalendarIntegration.tsx';
 import AppShell from './components/layout/AppShell.tsx';
 import type { AppTab } from './components/layout/SidebarNav.tsx';
-
-const getDefaultHouseholdId = (uid: string) => `personal-${uid}`;
+import { getPersonalHouseholdId } from './domain/household.ts';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -43,7 +42,7 @@ export default function App() {
             photoURL: currentUser.photoURL,
             createdAt: new Date(),
             role: 'client',
-            householdId: getDefaultHouseholdId(currentUser.uid),
+            householdId: getPersonalHouseholdId(currentUser.uid),
             language: 'es',
             primaryCurrency: 'ARS',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -58,7 +57,7 @@ export default function App() {
         } else {
           profileData = userSnap.data();
           if (!profileData.householdId) {
-            profileData.householdId = getDefaultHouseholdId(currentUser.uid);
+            profileData.householdId = getPersonalHouseholdId(currentUser.uid);
             await setDoc(userRef, { householdId: profileData.householdId }, { merge: true });
           }
         }
