@@ -209,11 +209,16 @@ service cloud.firestore {
 
     function isValidFinance(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'amount', 'type', 'date', 'category', 'source']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'accountId', 'toAccountId', 'tags', 'date', 'source', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'createdAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'accountId', 'toAccountId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'createdAt', 'updatedAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.amount is number &&
              data.type in ["expense", "income", "transfer"] &&
-             data.source in ["manual", "pdf"] &&
+             data.source in ["manual", "pdf", "csv", "catchup_estimate", "catchup_inferred"] &&
+             (!('confidence' in data) || data.confidence in ["exact", "estimated", "inferred"]) &&
+             (!('status' in data) || data.status in ["pending", "posted", "ignored", "needs_review"]) &&
+             (!('reconciliationBatchId' in data) || data.reconciliationBatchId == null || (data.reconciliationBatchId is string && data.reconciliationBatchId.size() < 100)) &&
+             (!('estimatedReason' in data) || data.estimatedReason == null || (data.estimatedReason is string && data.estimatedReason.size() < 1000)) &&
+             (!('needsReview' in data) || data.needsReview is bool) &&
              data.date is timestamp &&
              data.category is string && data.category.size() < 100 &&
              (!('subCategory' in data) || (data.subCategory is string && data.subCategory.size() < 100)) &&
@@ -226,13 +231,14 @@ service cloud.firestore {
 
     function isValidAccount(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'name', 'currency']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'currency', 'balance', 'color', 'type', 'createdAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'currency', 'balance', 'color', 'type', 'lastReconciledAt', 'createdAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.currency is string && data.currency.size() > 0 && data.currency.size() < 10 &&
              (!('balance' in data) || data.balance is number) &&
              (!('color' in data) || (data.color is string && data.color.size() < 20)) &&
              (!('type' in data) || (data.type is string && data.type.size() < 50)) &&
+             (!('lastReconciledAt' in data) || data.lastReconciledAt == null || data.lastReconciledAt is timestamp) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
