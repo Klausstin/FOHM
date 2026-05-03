@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Target, Plus, Trash2, CheckCircle2, Circle, Calendar, Filter, LayoutGrid, List as ListIcon, AlertCircle, MessageSquare, Send, User as UserIcon, X, Pencil, Check } from 'lucide-react';
 import { MIND_CATEGORIES } from '../lib/mindCategories.ts';
 import { format } from 'date-fns';
-
-interface GoalComment {
-  id: string;
-  goalId: string;
-  uid: string;
-  userName: string;
-  userPhoto: string;
-  content: string;
-  createdAt: any;
-}
+import {
+  createGoal,
+  createGoalComment,
+  deleteGoal,
+  deleteGoalComment,
+  subscribeToGoalComments,
+  subscribeToHouseholdGoals,
+  updateGoalComment,
+  updateGoalStatus,
+} from '../features/goals/goal.service.ts';
+import type { GoalCommentRecord, GoalRecord } from '../features/goals/goal.types.ts';
 
 const GOAL_CATEGORIES = [
   { id: 'avatar-personaje', label: 'Yo (Avatar)', icon: '👤', color: 'bg-neutral-50 text-neutral-600' },
@@ -28,18 +29,6 @@ const GOAL_CATEGORIES = [
   { id: 'ocio-entretenimiento', label: 'Ocio', icon: '🎮', color: 'bg-purple-50 text-purple-600' },
 ];
 
-interface Goal {
-  id: string;
-  uid: string;
-  householdId?: string;
-  year: number;
-  title: string;
-  description?: string;
-  categories: string[];
-  status: 'pending' | 'in_progress' | 'completed';
-  createdAt: any;
-}
-
 interface HabitSupport {
   id: string;
   uid: string;
@@ -51,11 +40,11 @@ interface HabitSupport {
 }
 
 export default function AnnualGoals({ user }: { user: any }) {
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [goals, setGoals] = useState<GoalRecord[]>([]);
   const [habits, setHabits] = useState<HabitSupport[]>([]);
   const [isAdding, setIsAdding] = useState(false);
-  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
-  const [comments, setComments] = useState<GoalComment[]>([]);
+  const [selectedGoal, setSelectedGoal] = useState<GoalRecord | null>(null);
+  const [comments, setComments] = useState<GoalCommentRecord[]>([]);
   const [newComment, setNewComment] = useState('');
   const [members, setMembers] = useState<{ [key: string]: any }>({});
   const [newGoal, setNewGoal] = useState({
@@ -81,13 +70,8 @@ export default function AnnualGoals({ user }: { user: any }) {
     });
 
     const currentYear = new Date().getFullYear();
-    const q = query(
-      collection(db, 'goals'),
-      where('householdId', '==', user.householdId),
-      where('year', '==', currentYear)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setGoals(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Goal)));
+    const unsubscribe = subscribeToHouseholdGoals(user.householdId, currentYear, setGoals, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'goals');
     });
 
     const qHabits = query(collection(db, 'habits'), where('householdId', '==', user.householdId));
@@ -108,13 +92,8 @@ export default function AnnualGoals({ user }: { user: any }) {
       return;
     }
 
-    const q = query(
-      collection(db, 'goalComments'),
-      where('goalId', '==', selectedGoal.id),
-      orderBy('createdAt', 'asc')
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GoalComment)));
+    const unsubscribe = subscribeToGoalComments(selectedGoal.id, setComments, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'goalComments');
     });
 
     return () => unsubscribe();
@@ -125,13 +104,12 @@ export default function AnnualGoals({ user }: { user: any }) {
     if (!newComment.trim() || !selectedGoal) return;
 
     try {
-      await addDoc(collection(db, 'goalComments'), {
+      await createGoalComment({
         goalId: selectedGoal.id,
         uid: user.uid,
         userName: user.displayName || 'Usuario',
         userPhoto: user.photoURL || '',
         content: newComment,
-        createdAt: serverTimestamp()
       });
       setNewComment('');
     } catch (error) {
@@ -142,9 +120,7 @@ export default function AnnualGoals({ user }: { user: any }) {
   const handleUpdateComment = async (commentId: string) => {
     if (!editCommentContent.trim()) return;
     try {
-      await updateDoc(doc(db, 'goalComments', commentId), {
-        content: editCommentContent.trim()
-      });
+      await updateGoalComment(commentId, editCommentContent);
       setEditingCommentId(null);
       setEditCommentContent('');
     } catch (error) {
@@ -155,7 +131,7 @@ export default function AnnualGoals({ user }: { user: any }) {
   const handleDeleteComment = async (commentId: string) => {
     if (!confirm('¿Borrar este comentario?')) return;
     try {
-      await deleteDoc(doc(db, 'goalComments', commentId));
+      await deleteGoalComment(commentId);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `goalComments/${commentId}`);
     }
@@ -167,15 +143,13 @@ export default function AnnualGoals({ user }: { user: any }) {
     if (!newGoal.title) return;
 
     try {
-      await addDoc(collection(db, 'goals'), {
+      await createGoal({
         uid: user.uid,
         householdId: user.householdId || null,
         year: newGoal.year,
         title: newGoal.title,
         description: newGoal.description,
         categories: newGoal.categories,
-        status: 'pending',
-        createdAt: serverTimestamp()
       });
       setNewGoal({ title: '', description: '', categories: [MIND_CATEGORIES[0].id], year: new Date().getFullYear() });
       setIsAdding(false);
@@ -184,13 +158,13 @@ export default function AnnualGoals({ user }: { user: any }) {
     }
   };
 
-  const toggleStatus = async (goal: Goal) => {
-    const nextStatus: Goal['status'] = 
+  const toggleStatus = async (goal: GoalRecord) => {
+    const nextStatus: GoalRecord['status'] = 
       goal.status === 'pending' ? 'in_progress' : 
       goal.status === 'in_progress' ? 'completed' : 'pending';
     
     try {
-      await updateDoc(doc(db, 'goals', goal.id), { status: nextStatus });
+      await updateGoalStatus(goal.id, nextStatus);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `goals/${goal.id}`);
     }
@@ -199,7 +173,7 @@ export default function AnnualGoals({ user }: { user: any }) {
   const handleDelete = async (id: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar este objetivo?')) return;
     try {
-      await deleteDoc(doc(db, 'goals', id));
+      await deleteGoal(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `goals/${id}`);
     }
