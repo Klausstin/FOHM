@@ -4,7 +4,7 @@ import { createFinancialTransaction } from '../features/finance/finance.service'
 import { createHabitLog } from '../features/habits/habit.service';
 import type { HabitRecord } from '../features/habits/habit.types';
 import { createJournalEntry } from '../features/journal/journal.service';
-import { routeLuzMessage, type LuzAction, type LuzRouteResult } from '../features/luz/luzRouter';
+import { routeLuzMessage, type LuzAction, type LuzFinancialAccountOption, type LuzRouteResult } from '../features/luz/luzRouter';
 
 interface LuzCommandCenterProps {
   user: {
@@ -12,9 +12,10 @@ interface LuzCommandCenterProps {
     householdId?: string | null;
   };
   habits?: HabitRecord[];
+  accounts?: LuzFinancialAccountOption[];
 }
 
-export default function LuzCommandCenter({ user, habits = [] }: LuzCommandCenterProps) {
+export default function LuzCommandCenter({ user, habits = [], accounts = [] }: LuzCommandCenterProps) {
   const [message, setMessage] = useState('');
   const [draft, setDraft] = useState<LuzRouteResult | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -23,14 +24,14 @@ export default function LuzCommandCenter({ user, habits = [] }: LuzCommandCenter
 
   const preview = useMemo(() => {
     if (!message.trim()) return null;
-    return routeLuzMessage(message, habits);
-  }, [message, habits]);
+    return routeLuzMessage(message, habits, accounts);
+  }, [message, habits, accounts]);
 
   const handleSubmit = (event?: React.FormEvent) => {
     event?.preventDefault();
     if (!message.trim() || isSaving) return;
 
-    const nextDraft = routeLuzMessage(message, habits);
+    const nextDraft = routeLuzMessage(message, habits, accounts);
     setDraft(nextDraft);
     setStatus(nextDraft.summary);
   };
@@ -71,6 +72,7 @@ export default function LuzCommandCenter({ user, habits = [] }: LuzCommandCenter
         note: message.trim(),
         category: action.finance.category,
         type: action.finance.type,
+        accountId: action.finance.accountId || '',
         date: new Date(),
         source: 'manual',
         confidence: action.confidence === 'high' ? 'exact' : 'inferred',
@@ -79,6 +81,7 @@ export default function LuzCommandCenter({ user, habits = [] }: LuzCommandCenter
         isConfirmed: !action.finance.needsReview,
         generatedBy: user.uid,
         assignedTo: user.uid,
+        paymentType: action.finance.paymentMethod || '',
         paymentStatus: action.finance.needsReview ? 'Pendiente de revisar' : 'Contabilizado',
       });
     }
@@ -217,7 +220,7 @@ export default function LuzCommandCenter({ user, habits = [] }: LuzCommandCenter
               onClick={() => setDraft(null)}
               className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-white/50 transition hover:bg-white/10 hover:text-white"
             >
-              Editar texto
+              Editar y reinterpretar
             </button>
             <button
               type="button"

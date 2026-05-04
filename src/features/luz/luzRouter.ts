@@ -10,6 +10,9 @@ export interface LuzFinanceDraft {
   type: 'expense' | 'income';
   category: string;
   description: string;
+  accountId?: string;
+  accountName?: string;
+  paymentMethod?: string;
   needsReview: boolean;
 }
 
@@ -44,17 +47,25 @@ export interface LuzRouteResult {
   summary: string;
 }
 
+export interface LuzFinancialAccountOption {
+  id: string;
+  name: string;
+  currency?: string;
+  type?: string;
+}
+
 const MONEY_WORDS = ['gaste', 'gasto', 'pague', 'compre', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron'];
 const INCOME_WORDS = ['cobre', 'ingreso', 'me pagaron', 'me depositaron', 'sueldo', 'honorarios'];
 const NEGATIVE_HABIT_WORDS = ['no cumpli', 'falle', 'me comi las unas', 'me mordi las unas'];
 const POSITIVE_HABIT_WORDS = ['cumpli', 'hice', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
+const PAYMENT_HINTS = ['con ', 'tarjeta', 'visa', 'master', 'mastercard', 'amex', 'mercado pago', 'mp', 'uala', 'brubank', 'galicia', 'santander', 'bbva', 'naranja', 'efectivo', 'debito', 'credito'];
 
-export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = []): LuzRouteResult {
+export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], accounts: LuzFinancialAccountOption[] = []): LuzRouteResult {
   const message = rawMessage.trim();
   const normalized = normalize(message);
   const actions: LuzAction[] = [];
 
-  const finance = parseFinanceAction(message, normalized);
+  const finance = parseFinanceAction(message, normalized, accounts);
   if (finance) actions.push(finance);
 
   const habit = parseHabitAction(message, normalized, habits);
@@ -93,7 +104,7 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = []):
   };
 }
 
-function parseFinanceAction(message: string, normalized: string): LuzAction | null {
+function parseFinanceAction(message: string, normalized: string, accounts: LuzFinancialAccountOption[]): LuzAction | null {
   const amount = parseAmount(normalized);
   const looksLikeMoney = amount > 0 && (
     MONEY_WORDS.some(word => normalized.includes(normalize(word))) ||
@@ -108,20 +119,30 @@ function parseFinanceAction(message: string, normalized: string): LuzAction | nu
   const category = inferFinanceCategory(normalized);
   const currency = normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares') ? 'USD' : 'ARS';
   const description = inferDescription(message, amount) || category;
+  const payment = inferPayment(normalized, accounts);
+  const needsReview = !payment.accountId;
+  const paymentDetail = payment.accountName
+    ? `Cuenta sugerida: ${payment.accountName}.`
+    : payment.paymentMethod
+      ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
+      : 'Falta confirmar cuenta o billetera.';
 
   return {
     id: createActionId('finance'),
     type: 'create_finance_transaction',
     title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
-    detail: `${amount.toLocaleString()} ${currency} - ${category}. Falta confirmar cuenta o billetera.`,
-    confidence: 'medium',
+    detail: `${amount.toLocaleString()} ${currency} - ${category}. ${paymentDetail}`,
+    confidence: payment.accountId ? 'high' : 'medium',
     finance: {
       amount,
       currency,
       type,
       category,
       description,
-      needsReview: true,
+      accountId: payment.accountId,
+      accountName: payment.accountName,
+      paymentMethod: payment.paymentMethod,
+      needsReview,
     },
   };
 }
@@ -161,14 +182,21 @@ function buildFollowUps(message: string, normalized: string, actions: LuzAction[
   const hasCinema = normalized.includes('cine') || normalized.includes('pelicula');
 
   if (hasFinance) {
-    followUps.push({
-      id: createActionId('question'),
-      type: 'ask_follow_up',
-      title: 'Dato pendiente',
-      detail: 'Con que cuenta, tarjeta o billetera lo pagaste?',
-      confidence: 'high',
-      question: 'Con que cuenta, tarjeta o billetera lo pagaste?',
-    });
+    const financeAction = actions.find(action => action.type === 'create_finance_transaction');
+    if (financeAction?.finance?.needsReview) {
+      followUps.push({
+        id: createActionId('question'),
+        type: 'ask_follow_up',
+        title: 'Dato pendiente',
+        detail: financeAction.finance.paymentMethod
+          ? `Detecte ${financeAction.finance.paymentMethod}, pero necesito saber a que cuenta corresponde.`
+          : 'Con que cuenta, tarjeta o billetera lo pagaste?',
+        confidence: 'high',
+        question: financeAction.finance.paymentMethod
+          ? `A que cuenta de Finanzas asociamos ${financeAction.finance.paymentMethod}?`
+          : 'Con que cuenta, tarjeta o billetera lo pagaste?',
+      });
+    }
   }
 
   if (hasCinema) {
@@ -260,6 +288,42 @@ function inferFinanceCategory(normalized: string) {
   if (includesAny(normalized, ['curso', 'libro', 'educacion', 'clase'])) return 'Educacion';
   if (includesAny(normalized, INCOME_WORDS.map(normalize))) return 'Ingresos';
   return 'Sin clasificar';
+}
+
+function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[]) {
+  const account = accounts.find(option => {
+    const accountName = normalize(option.name || '');
+    return accountName && (normalized.includes(accountName) || accountName.split(/\s+/).some(part => part.length > 3 && normalized.includes(part)));
+  });
+
+  if (account) {
+    return {
+      accountId: account.id,
+      accountName: account.name,
+      paymentMethod: account.name,
+    };
+  }
+
+  const paymentMethod = inferPaymentMethodLabel(normalized);
+  return { paymentMethod };
+}
+
+function inferPaymentMethodLabel(normalized: string) {
+  if (!includesAny(normalized, PAYMENT_HINTS)) return undefined;
+  if (normalized.includes('mercado pago') || normalized.includes(' mp')) return 'Mercado Pago';
+  if (normalized.includes('visa')) return 'Visa';
+  if (normalized.includes('mastercard') || normalized.includes('master')) return 'Mastercard';
+  if (normalized.includes('amex')) return 'Amex';
+  if (normalized.includes('uala')) return 'Uala';
+  if (normalized.includes('brubank')) return 'Brubank';
+  if (normalized.includes('galicia')) return 'Galicia';
+  if (normalized.includes('santander')) return 'Santander';
+  if (normalized.includes('bbva')) return 'BBVA';
+  if (normalized.includes('naranja')) return 'Naranja';
+  if (normalized.includes('efectivo')) return 'Efectivo';
+  if (normalized.includes('debito')) return 'Tarjeta de debito';
+  if (normalized.includes('credito') || normalized.includes('tarjeta')) return 'Tarjeta';
+  return undefined;
 }
 
 function inferDescription(message: string, amount: number) {
