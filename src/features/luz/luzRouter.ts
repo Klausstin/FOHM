@@ -1,4 +1,8 @@
-export type LuzRouteType = 'finance' | 'journal';
+import { format } from 'date-fns';
+import type { HabitRecord } from '../habits/habit.types';
+
+export type LuzActionType = 'create_finance_transaction' | 'create_journal_entry' | 'create_habit_checkin' | 'ask_follow_up';
+export type LuzConfidence = 'high' | 'medium' | 'low';
 
 export interface LuzFinanceDraft {
   amount: number;
@@ -6,50 +10,249 @@ export interface LuzFinanceDraft {
   type: 'expense' | 'income';
   category: string;
   description: string;
+  accountId?: string;
+  accountName?: string;
+  paymentMethod?: string;
+  needsReview: boolean;
+}
+
+export interface LuzJournalDraft {
+  content: string;
+  categories: string[];
+}
+
+export interface LuzHabitCheckinDraft {
+  habitId?: string;
+  habitTitle: string;
+  status: 'green' | 'yellow' | 'red';
+  date: string;
+  note: string;
+  needsReview: boolean;
+}
+
+export interface LuzAction {
+  id: string;
+  type: LuzActionType;
+  title: string;
+  detail: string;
+  confidence: LuzConfidence;
+  finance?: LuzFinanceDraft;
+  journal?: LuzJournalDraft;
+  habitCheckin?: LuzHabitCheckinDraft;
+  question?: string;
 }
 
 export interface LuzRouteResult {
-  type: LuzRouteType;
-  confidence: 'high' | 'medium' | 'low';
-  finance?: LuzFinanceDraft;
-  journalContent?: string;
+  actions: LuzAction[];
   summary: string;
 }
 
-const MONEY_WORDS = ['gaste', 'gasté', 'pague', 'pagué', 'compre', 'compré', 'transferi', 'transferí', 'cobre', 'cobré', 'ingreso', 'me pagaron'];
-const INCOME_WORDS = ['cobre', 'cobré', 'ingreso', 'me pagaron', 'me depositaron', 'sueldo', 'honorarios'];
+export interface LuzFinancialAccountOption {
+  id: string;
+  name: string;
+  currency?: string;
+  type?: string;
+}
 
-export function routeLuzMessage(rawMessage: string): LuzRouteResult {
+const MONEY_WORDS = ['gaste', 'gasto', 'pague', 'compre', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron'];
+const INCOME_WORDS = ['cobre', 'ingreso', 'me pagaron', 'me depositaron', 'sueldo', 'honorarios'];
+const NEGATIVE_HABIT_WORDS = ['no cumpli', 'falle', 'me comi las unas', 'me mordi las unas'];
+const POSITIVE_HABIT_WORDS = ['cumpli', 'hice', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
+const PAYMENT_HINTS = ['con ', 'tarjeta', 'visa', 'master', 'mastercard', 'amex', 'mercado pago', 'mp', 'uala', 'brubank', 'galicia', 'santander', 'bbva', 'naranja', 'efectivo', 'debito', 'credito'];
+
+export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], accounts: LuzFinancialAccountOption[] = []): LuzRouteResult {
   const message = rawMessage.trim();
   const normalized = normalize(message);
-  const amount = parseAmount(normalized);
-  const looksLikeMoney = amount > 0 && MONEY_WORDS.some(word => normalized.includes(normalize(word)));
+  const actions: LuzAction[] = [];
 
-  if (looksLikeMoney) {
-    const type = INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense';
-    const category = inferFinanceCategory(normalized);
-    const description = inferDescription(message, amount) || category;
+  const finance = parseFinanceAction(message, normalized, accounts);
+  if (finance) actions.push(finance);
 
-    return {
-      type: 'finance',
-      confidence: 'medium',
-      finance: {
-        amount,
-        currency: normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares') ? 'USD' : 'ARS',
-        type,
-        category,
-        description,
+  const habit = parseHabitAction(message, normalized, habits);
+  if (habit) actions.push(habit);
+
+  if (shouldCreateJournal(normalized, Boolean(finance), Boolean(habit))) {
+    actions.push({
+      id: createActionId('journal'),
+      type: 'create_journal_entry',
+      title: 'Guardar en Diario Mental',
+      detail: 'Registrar el contexto completo para que Luz pueda detectar patrones mas adelante.',
+      confidence: finance || habit ? 'medium' : 'high',
+      journal: {
+        content: message,
+        categories: inferJournalCategories(normalized),
       },
-      summary: `${type === 'income' ? 'Ingreso' : 'Gasto'} registrado: ${amount.toLocaleString()} ${normalized.includes('usd') ? 'USD' : 'ARS'} en ${category}.`,
-    };
+    });
+  }
+
+  actions.push(...buildFollowUps(message, normalized, actions));
+
+  if (actions.length === 0) {
+    actions.push({
+      id: createActionId('journal'),
+      type: 'create_journal_entry',
+      title: 'Guardar en Diario Mental',
+      detail: 'No detecte una accion concreta, pero puedo guardar esto como entrada privada.',
+      confidence: 'medium',
+      journal: { content: message, categories: ['yo'] },
+    });
   }
 
   return {
-    type: 'journal',
-    confidence: 'medium',
-    journalContent: message,
-    summary: 'Entrada guardada en Diario Mental.',
+    actions,
+    summary: summarizeActions(actions),
   };
+}
+
+function parseFinanceAction(message: string, normalized: string, accounts: LuzFinancialAccountOption[]): LuzAction | null {
+  const amount = parseAmount(normalized);
+  const looksLikeMoney = amount > 0 && (
+    MONEY_WORDS.some(word => normalized.includes(normalize(word))) ||
+    normalized.includes('pesos') ||
+    normalized.includes('$') ||
+    normalized.includes('usd')
+  );
+
+  if (!looksLikeMoney) return null;
+
+  const type = INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense';
+  const category = inferFinanceCategory(normalized);
+  const currency = normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares') ? 'USD' : 'ARS';
+  const description = inferDescription(message, amount) || category;
+  const payment = inferPayment(normalized, accounts);
+  const needsReview = !payment.accountId;
+  const paymentDetail = payment.accountName
+    ? `Cuenta sugerida: ${payment.accountName}.`
+    : payment.paymentMethod
+      ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
+      : 'Falta confirmar cuenta o billetera.';
+
+  return {
+    id: createActionId('finance'),
+    type: 'create_finance_transaction',
+    title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
+    detail: `${amount.toLocaleString()} ${currency} - ${category}. ${paymentDetail}`,
+    confidence: payment.accountId ? 'high' : 'medium',
+    finance: {
+      amount,
+      currency,
+      type,
+      category,
+      description,
+      accountId: payment.accountId,
+      accountName: payment.accountName,
+      paymentMethod: payment.paymentMethod,
+      needsReview,
+    },
+  };
+}
+
+function parseHabitAction(message: string, normalized: string, habits: HabitRecord[]): LuzAction | null {
+  const isNegative = NEGATIVE_HABIT_WORDS.some(word => normalized.includes(normalize(word)));
+  const isPositive = POSITIVE_HABIT_WORDS.some(word => normalized.includes(normalize(word)));
+  if (!isNegative && !isPositive) return null;
+
+  const matchingHabit = findMatchingHabit(normalized, habits);
+  const status = isNegative ? 'red' : 'green';
+  const habitTitle = matchingHabit?.title || inferHabitTitle(normalized, status);
+
+  return {
+    id: createActionId('habit'),
+    type: matchingHabit ? 'create_habit_checkin' : 'ask_follow_up',
+    title: matchingHabit ? 'Marcar habito' : 'Completar habito detectado',
+    detail: matchingHabit
+      ? `${habitTitle}: ${status === 'red' ? 'no cumplido' : 'cumplido'} hoy.`
+      : `Detecte un habito, pero no encontre cual deberia actualizar.`,
+    confidence: matchingHabit ? 'medium' : 'low',
+    habitCheckin: {
+      habitId: matchingHabit?.id,
+      habitTitle,
+      status,
+      date: format(new Date(), 'yyyy-MM-dd'),
+      note: message,
+      needsReview: !matchingHabit,
+    },
+    question: matchingHabit ? undefined : 'A que habito queres asociar esto?',
+  };
+}
+
+function buildFollowUps(message: string, normalized: string, actions: LuzAction[]) {
+  const followUps: LuzAction[] = [];
+  const hasFinance = actions.some(action => action.type === 'create_finance_transaction');
+  const hasCinema = normalized.includes('cine') || normalized.includes('pelicula');
+
+  if (hasFinance) {
+    const financeAction = actions.find(action => action.type === 'create_finance_transaction');
+    if (financeAction?.finance?.needsReview) {
+      followUps.push({
+        id: createActionId('question'),
+        type: 'ask_follow_up',
+        title: 'Dato pendiente',
+        detail: financeAction.finance.paymentMethod
+          ? `Detecte ${financeAction.finance.paymentMethod}, pero necesito saber a que cuenta corresponde.`
+          : 'Con que cuenta, tarjeta o billetera lo pagaste?',
+        confidence: 'high',
+        question: financeAction.finance.paymentMethod
+          ? `A que cuenta de Finanzas asociamos ${financeAction.finance.paymentMethod}?`
+          : 'Con que cuenta, tarjeta o billetera lo pagaste?',
+      });
+    }
+  }
+
+  if (hasCinema) {
+    followUps.push({
+      id: createActionId('question'),
+      type: 'ask_follow_up',
+      title: 'Reflexion opcional',
+      detail: 'Te gusto la pelicula? Que puntaje le pondrias y que te quedo dando vueltas?',
+      confidence: 'medium',
+      question: 'Te gusto la pelicula? Que puntaje le pondrias y que te quedo dando vueltas?',
+    });
+  }
+
+  return followUps.slice(0, 2);
+}
+
+function shouldCreateJournal(normalized: string, hasFinance: boolean, hasHabit: boolean) {
+  if (!hasFinance && !hasHabit) return true;
+  return includesAny(normalized, ['me senti', 'me siento', 'pense', 'pensando', 'me gusto', 'me encanto', 'con ', 'pareja', 'trabajo', 'vicky', 'familia', 'cine', 'pelicula']);
+}
+
+function inferJournalCategories(normalized: string) {
+  const categories = new Set<string>(['yo']);
+  if (includesAny(normalized, ['pareja', 'vicky', 'novia', 'novio'])) categories.add('pareja');
+  if (includesAny(normalized, ['trabajo', 'laburo', 'jefe', 'cliente'])) categories.add('trabajo');
+  if (includesAny(normalized, ['gaste', 'pague', 'plata', 'finanzas', 'pesos', 'usd'])) categories.add('finanzas');
+  if (includesAny(normalized, ['salud', 'gym', 'entrene', 'dormir', 'energia', 'unas'])) categories.add('salud');
+  if (includesAny(normalized, ['cine', 'pelicula', 'salida', 'juego'])) categories.add('ocio');
+  return Array.from(categories);
+}
+
+function findMatchingHabit(normalized: string, habits: HabitRecord[]) {
+  const activeHabits = habits.filter(habit => habit.status === 'active');
+  return activeHabits.find(habit => {
+    const title = normalize(habit.title);
+    if (title && normalized.includes(title)) return true;
+    if (includesAny(normalized, ['unas']) && includesAny(title, ['unas'])) return true;
+    if (includesAny(normalized, ['entrene', 'gym', 'correr']) && includesAny(title, ['entren', 'gym', 'correr'])) return true;
+    if (normalized.includes('medite') && title.includes('medit')) return true;
+    return false;
+  });
+}
+
+function inferHabitTitle(normalized: string, status: 'green' | 'yellow' | 'red') {
+  if (includesAny(normalized, ['unas'])) return 'No comerse las unas';
+  if (includesAny(normalized, ['entrene', 'gym', 'correr'])) return 'Entrenamiento';
+  if (normalized.includes('medite')) return 'Meditacion';
+  return status === 'red' ? 'Habito no cumplido' : 'Habito cumplido';
+}
+
+function summarizeActions(actions: LuzAction[]) {
+  const executable = actions.filter(action => action.type !== 'ask_follow_up');
+  const questions = actions.filter(action => action.type === 'ask_follow_up');
+  if (executable.length === 0 && questions.length > 0) return 'Necesito un dato mas antes de guardar.';
+  if (executable.length === 1) return `Entendi 1 accion: ${executable[0].title}.`;
+  return `Entendi ${executable.length} acciones y ${questions.length} pregunta(s) opcionales.`;
 }
 
 function normalize(value: string) {
@@ -61,29 +264,23 @@ function normalize(value: string) {
 
 function parseAmount(normalized: string) {
   const compactMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(k|mil)\b/);
-  if (compactMatch) {
-    return parseLocaleNumber(compactMatch[1]) * 1000;
-  }
+  if (compactMatch) return parseLocaleNumber(compactMatch[1]) * 1000;
 
   const moneyMatch = normalized.match(/(?:\$|ars|usd|pesos?|dolares?)?\s*(\d[\d.,]*)/);
   if (!moneyMatch) return 0;
-
   return parseLocaleNumber(moneyMatch[1]);
 }
 
 function parseLocaleNumber(value: string) {
   const cleaned = value.replace(/\s/g, '');
-  if (cleaned.includes('.') && cleaned.includes(',')) {
-    return Number(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
-  }
-  if (cleaned.includes('.') && /^\d{1,3}(\.\d{3})+$/.test(cleaned)) {
-    return Number(cleaned.replace(/\./g, '')) || 0;
-  }
+  if (cleaned.includes('.') && cleaned.includes(',')) return Number(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
+  if (cleaned.includes('.') && /^\d{1,3}(\.\d{3})+$/.test(cleaned)) return Number(cleaned.replace(/\./g, '')) || 0;
   return Number(cleaned.replace(',', '.')) || 0;
 }
 
 function inferFinanceCategory(normalized: string) {
   if (includesAny(normalized, ['cine', 'netflix', 'spotify', 'teatro', 'salida'])) return 'Ocio';
+  if (includesAny(normalized, ['pasaje', 'pasajes', 'vuelo', 'hotel', 'viaje'])) return 'Viajes';
   if (includesAny(normalized, ['super', 'mercado', 'comida', 'almuerzo', 'cena', 'delivery', 'restaurant'])) return 'Comida';
   if (includesAny(normalized, ['uber', 'cabify', 'taxi', 'nafta', 'subte', 'tren', 'bondi', 'colectivo'])) return 'Transporte';
   if (includesAny(normalized, ['alquiler', 'expensas', 'luz', 'gas', 'internet', 'telefono'])) return 'Hogar';
@@ -93,15 +290,55 @@ function inferFinanceCategory(normalized: string) {
   return 'Sin clasificar';
 }
 
+function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[]) {
+  const account = accounts.find(option => {
+    const accountName = normalize(option.name || '');
+    return accountName && (normalized.includes(accountName) || accountName.split(/\s+/).some(part => part.length > 3 && normalized.includes(part)));
+  });
+
+  if (account) {
+    return {
+      accountId: account.id,
+      accountName: account.name,
+      paymentMethod: account.name,
+    };
+  }
+
+  const paymentMethod = inferPaymentMethodLabel(normalized);
+  return { paymentMethod };
+}
+
+function inferPaymentMethodLabel(normalized: string) {
+  if (!includesAny(normalized, PAYMENT_HINTS)) return undefined;
+  if (normalized.includes('mercado pago') || normalized.includes(' mp')) return 'Mercado Pago';
+  if (normalized.includes('visa')) return 'Visa';
+  if (normalized.includes('mastercard') || normalized.includes('master')) return 'Mastercard';
+  if (normalized.includes('amex')) return 'Amex';
+  if (normalized.includes('uala')) return 'Uala';
+  if (normalized.includes('brubank')) return 'Brubank';
+  if (normalized.includes('galicia')) return 'Galicia';
+  if (normalized.includes('santander')) return 'Santander';
+  if (normalized.includes('bbva')) return 'BBVA';
+  if (normalized.includes('naranja')) return 'Naranja';
+  if (normalized.includes('efectivo')) return 'Efectivo';
+  if (normalized.includes('debito')) return 'Tarjeta de debito';
+  if (normalized.includes('credito') || normalized.includes('tarjeta')) return 'Tarjeta';
+  return undefined;
+}
+
 function inferDescription(message: string, amount: number) {
   return message
     .replace(new RegExp(String(amount), 'i'), '')
     .replace(/\$|\bars\b|\busd\b|\bpesos?\b|\bdolares?\b/gi, '')
-    .replace(/\b(gaste|gasté|pague|pagué|compre|compré|cobre|cobré|ingreso)\b/gi, '')
+    .replace(/\b(gaste|gasto|pague|compre|cobre|ingreso)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 function includesAny(value: string, terms: string[]) {
   return terms.some(term => value.includes(term));
+}
+
+function createActionId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
