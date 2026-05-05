@@ -1,5 +1,5 @@
 {
-  "name": "Mind & Money Tracker",
-  "description": "An integrated app for tracking thoughts, finances, and time. Uses Gemini to analyze mental consistency, automate financial categorization, and suggest schedule optimizations via Google Calendar integration.",
+  "name": "VEO - Vida en Orden",
+  "description": "Un sistema personal de claridad para entenderte mejor, decidir mejor y vivir mas alineado.",
   "requestFramePermissions": ["microphone"]
 }
