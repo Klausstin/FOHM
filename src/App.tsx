@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, doc, getDoc, setDoc, collection, query, where, onSnapshot } from './firebase.ts';
 import Auth from './components/Auth.tsx';
 import Dashboard from './components/Dashboard.tsx';
+import LuzWorkspace from './components/LuzWorkspace.tsx';
 import MindTracker from './components/MindTracker.tsx';
 import FinanceTracker from './components/FinanceTracker.tsx';
 import AnnualGoals from './components/AnnualGoals.tsx';
@@ -108,6 +109,7 @@ export default function App() {
         >
           <ErrorBoundary screenName={activeTab}>
             {activeTab === 'home' && <Dashboard user={userProfile} />}
+            {activeTab === 'luz' && <LuzWorkspace user={userProfile} />}
             {activeTab === 'mind' && <MindTracker user={userProfile} />}
             {activeTab === 'finance' && <FinanceTracker user={userProfile} />}
             {activeTab === 'goals' && <AnnualGoals user={userProfile} />}
