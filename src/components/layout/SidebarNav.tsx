@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Brain, Calendar, CheckCircle2, Home, LogOut, Settings, Sparkles, Target, User as UserIcon, Wallet } from 'lucide-react';
+import { Brain, Calendar, CheckCircle2, Home, LogOut, MessageCircle, Settings, Sparkles, Target, User as UserIcon, Wallet } from 'lucide-react';
 import { auth } from '../../firebase.ts';
 
-export type AppTab = 'home' | 'mind' | 'finance' | 'settings' | 'goals' | 'habits' | 'calendar';
+export type AppTab = 'home' | 'luz' | 'mind' | 'finance' | 'settings' | 'goals' | 'habits' | 'calendar';
 
 interface NavItemConfig {
   id: AppTab;
@@ -12,6 +12,7 @@ interface NavItemConfig {
 
 const NAV_ITEMS: NavItemConfig[] = [
   { id: 'home', label: 'Inicio', icon: <Home size={20} /> },
+  { id: 'luz', label: 'Luz', icon: <MessageCircle size={20} /> },
   { id: 'mind', label: 'Diario Mental', icon: <Brain size={20} /> },
   { id: 'finance', label: 'Finanzas', icon: <Wallet size={20} /> },
   { id: 'goals', label: 'Objetivos', icon: <Target size={20} /> },
