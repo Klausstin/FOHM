@@ -30,6 +30,9 @@ export default function MindTracker({ user }: { user: any }) {
   const [reflection, setReflection] = useState<JournalReflection>(EMPTY_REFLECTION);
 
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<'all' | '7d' | '30d' | 'year'>('all');
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [showQuickEntry, setShowQuickEntry] = useState(false);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -290,6 +293,7 @@ export default function MindTracker({ user }: { user: any }) {
   const filteredThoughts = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const targetCat = filterCategory ? MIND_CATEGORIES.find(cat => cat.id === filterCategory) : null;
+    const now = new Date();
 
     const targetId = targetCat?.id.toLowerCase();
     const targetLabel = targetCat?.label.toLowerCase();
@@ -308,512 +312,511 @@ export default function MindTracker({ user }: { user: any }) {
         .toLowerCase();
       const matchesSearch = !normalizedSearch ||
         (t.content || '').toLowerCase().includes(normalizedSearch) ||
-        categoryLabels.includes(normalizedSearch);
+        categoryLabels.includes(normalizedSearch) ||
+        softMatch(t.content || '', normalizedSearch);
 
-      return matchesCategory && matchesSearch;
+      const entryDate = getEntryDate(t);
+      const matchesDate =
+        dateFilter === 'all' ||
+        (dateFilter === '7d' && entryDate && daysBetween(entryDate, now) <= 7) ||
+        (dateFilter === '30d' && entryDate && daysBetween(entryDate, now) <= 30) ||
+        (dateFilter === 'year' && entryDate && entryDate.getFullYear() === now.getFullYear());
+
+      return matchesCategory && matchesSearch && matchesDate;
     });
-  }, [thoughts, filterCategory, searchTerm]);
+  }, [thoughts, filterCategory, searchTerm, dateFilter]);
+
+  const selectedEntry = useMemo(
+    () => filteredThoughts.find(entry => entry.id === selectedEntryId) || filteredThoughts[0] || null,
+    [filteredThoughts, selectedEntryId],
+  );
+
+  const entriesByMonth = useMemo(() => {
+    return filteredThoughts.reduce((acc: Record<string, JournalEntryRecord[]>, entry) => {
+      const date = getEntryDate(entry);
+      const key = date ? format(date, 'MMMM yyyy') : 'Sin fecha';
+      acc[key] = acc[key] || [];
+      acc[key].push(entry);
+      return acc;
+    }, {});
+  }, [filteredThoughts]);
+
+  const categoryCounts = useMemo(() => {
+    return MIND_CATEGORIES.map(category => ({
+      ...category,
+      count: thoughts.filter(entry => (entry.categories || []).includes(category.id)).length,
+    }));
+  }, [thoughts]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterCategory(null);
+    setDateFilter('all');
+  };
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-[2rem] bg-white p-6 shadow-sm border border-neutral-200 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Entendete mejor</p>
-          <h2 className="text-4xl font-black text-neutral-900 tracking-tight">Diario Mental</h2>
-          <p className="mt-2 max-w-2xl text-neutral-500 font-medium">Registra pensamientos, emociones, gustos, bloqueos y aprendizajes para que Luz pueda ayudarte a ver patrones sin diagnosticarte.</p>
-        </div>
-        <button
-          onClick={runAnalysis}
-          disabled={isAnalyzing}
-          className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200 disabled:opacity-50"
-        >
-          {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
-          Analizar consistencia
-        </button>
-        </div>
-      </header>
-
-      {analysisResult && (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-neutral-900 text-white p-8 rounded-[2rem] shadow-2xl relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Brain size={120} />
+    <div className="grid min-h-[calc(100vh-5rem)] gap-5 xl:grid-cols-[320px_minmax(0,1fr)_420px]">
+      <aside className="space-y-5">
+        <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Diario</p>
+          <h2 className="mt-1 text-3xl font-black tracking-tight text-neutral-950">Biblioteca</h2>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <LibraryStat label="Entradas" value={thoughts.length} />
+            <LibraryStat label="Filtradas" value={filteredThoughts.length} />
+            <LibraryStat label="7 dias" value={thoughts.filter(entry => {
+              const date = getEntryDate(entry);
+              return date && daysBetween(date, new Date()) <= 7;
+            }).length} />
           </div>
-          <div className="relative z-10">
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Sparkles size={20} className="text-neutral-400" />
-              Analisis con IA
-            </h3>
-            <div className="prose prose-invert max-w-none text-neutral-300 leading-relaxed">
-              {analysisResult}
-            </div>
-            <button 
-              onClick={() => setAnalysisResult(null)}
-              className="mt-6 text-sm font-bold text-neutral-400 hover:text-white transition-colors"
+        </div>
+
+        <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 rounded-2xl bg-neutral-50 px-3 py-3">
+            <Search size={17} className="text-neutral-400" />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar tema, persona, palabra..."
+              className="w-full bg-transparent text-sm font-semibold text-neutral-900 outline-none placeholder:text-neutral-400"
+            />
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {[
+              { id: 'all', label: 'Todo' },
+              { id: '7d', label: '7 dias' },
+              { id: '30d', label: '30 dias' },
+              { id: 'year', label: 'Este anio' },
+            ].map(option => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setDateFilter(option.id as typeof dateFilter)}
+                className={`rounded-2xl px-3 py-2 text-xs font-black transition ${
+                  dateFilter === option.id ? 'bg-neutral-950 text-white' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFilterCategory(null)}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+                !filterCategory ? 'bg-neutral-950 text-white' : 'bg-neutral-100 text-neutral-500'
+              }`}
             >
-              Cerrar analisis
+              Todas
+            </button>
+            {categoryCounts.map(category => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setFilterCategory(category.id)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+                  filterCategory === category.id ? 'bg-neutral-950 text-white' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'
+                }`}
+              >
+                {category.label} {category.count > 0 ? category.count : ''}
+              </button>
+            ))}
+          </div>
+
+          {(searchTerm || filterCategory || dateFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-4 w-full rounded-2xl border border-neutral-200 py-2 text-xs font-black uppercase tracking-widest text-neutral-500 transition hover:bg-neutral-50"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowQuickEntry(prev => !prev)}
+          className="flex w-full items-center justify-center gap-2 rounded-[1.5rem] bg-neutral-950 px-4 py-4 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+        >
+          <MessageSquare size={16} />
+          {showQuickEntry ? 'Cerrar entrada' : 'Entrada manual'}
+        </button>
+      </aside>
+
+      <section className="min-h-0 rounded-[1.75rem] border border-neutral-200 bg-white p-4 shadow-sm">
+        {showQuickEntry && (
+          <QuickJournalEntry
+            newThought={newThought}
+            setNewThought={setNewThought}
+            selectedCategories={selectedCategories}
+            setSelectedCategories={setSelectedCategories}
+            handleSubmit={handleSubmit}
+            isSaving={isAnalyzingImage || isCategorizing}
+          />
+        )}
+
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Archivo</p>
+            <h3 className="mt-1 text-xl font-black text-neutral-950">{filteredThoughts.length} entradas</h3>
+          </div>
+          <button
+            type="button"
+            onClick={runAnalysis}
+            disabled={isAnalyzing}
+            className="inline-flex h-11 items-center gap-2 rounded-2xl border border-neutral-200 px-4 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
+          >
+            {isAnalyzing ? <Sparkles className="animate-spin" size={15} /> : <Sparkles size={15} />}
+            Analizar
+          </button>
+        </div>
+
+        {analysisResult && (
+          <div className="mb-4 rounded-[1.5rem] bg-neutral-950 p-5 text-white">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">Analisis</p>
+              <button type="button" onClick={() => setAnalysisResult(null)} className="text-white/40 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="whitespace-pre-wrap text-sm font-semibold leading-6 text-white/72">{analysisResult}</p>
+          </div>
+        )}
+
+        <div className="max-h-[calc(100vh-12rem)] space-y-5 overflow-y-auto pr-2">
+          {Object.entries(entriesByMonth).map(([month, entries]) => (
+            <div key={month}>
+              <p className="sticky top-0 z-10 mb-2 bg-white/95 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400 backdrop-blur">
+                {month}
+              </p>
+              <div className="space-y-3">
+                {entries.map(entry => (
+                  <JournalListItem
+                    key={entry.id}
+                    entry={entry}
+                    active={selectedEntry?.id === entry.id}
+                    onClick={() => setSelectedEntryId(entry.id)}
+                    formatDate={formatEntryDate}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {filteredThoughts.length === 0 && (
+            <div className="rounded-[1.5rem] border border-dashed border-neutral-200 bg-neutral-50 p-10 text-center">
+              <p className="text-sm font-black text-neutral-400">No hay entradas para estos filtros.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <aside className="min-h-0 rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
+        {selectedEntry ? (
+          <EntryReader
+            entry={selectedEntry}
+            members={members}
+            user={user}
+            editingEntryId={editingEntryId}
+            editContent={editContent}
+            setEditContent={setEditContent}
+            editCategories={editCategories}
+            toggleEditCategory={toggleEditCategory}
+            startEditingEntry={startEditingEntry}
+            cancelEditingEntry={cancelEditingEntry}
+            saveEditingEntry={saveEditingEntry}
+            handleDeleteEntry={handleDeleteEntry}
+            isMutatingEntry={isMutatingEntry}
+            formatDate={formatEntryDate}
+          />
+        ) : (
+          <div className="flex h-full min-h-[320px] items-center justify-center rounded-[1.5rem] bg-neutral-50 p-6 text-center">
+            <p className="text-sm font-black text-neutral-400">Elegir una entrada</p>
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function LibraryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-neutral-50 p-3">
+      <p className="text-2xl font-black text-neutral-950">{value}</p>
+      <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+    </div>
+  );
+}
+
+function QuickJournalEntry({
+  newThought,
+  setNewThought,
+  selectedCategories,
+  setSelectedCategories,
+  handleSubmit,
+  isSaving,
+}: {
+  newThought: string;
+  setNewThought: (value: string) => void;
+  selectedCategories: string[];
+  setSelectedCategories: React.Dispatch<React.SetStateAction<string[]>>;
+  handleSubmit: (event?: React.FormEvent) => Promise<void>;
+  isSaving: boolean;
+}) {
+  return (
+    <form onSubmit={handleSubmit} className="mb-4 rounded-[1.5rem] bg-neutral-50 p-4">
+      <textarea
+        value={newThought}
+        onChange={(event) => setNewThought(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            handleSubmit();
+          }
+        }}
+        placeholder="Entrada rapida..."
+        className="min-h-28 w-full resize-none rounded-2xl border border-neutral-200 bg-white p-4 text-sm font-semibold leading-6 text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-900/10"
+      />
+      <div className="mt-3 flex flex-wrap gap-2">
+        {MIND_CATEGORIES.map(category => (
+          <button
+            key={category.id}
+            type="button"
+            onClick={() => {
+              setSelectedCategories(prev =>
+                prev.includes(category.id)
+                  ? prev.filter(id => id !== category.id)
+                  : [...prev, category.id],
+              );
+            }}
+            className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+              selectedCategories.includes(category.id) ? 'bg-neutral-950 text-white' : 'bg-white text-neutral-500'
+            }`}
+          >
+            {category.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 flex justify-end">
+        <button
+          type="submit"
+          disabled={isSaving || !newThought.trim()}
+          className="inline-flex h-11 items-center gap-2 rounded-2xl bg-neutral-950 px-5 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:opacity-40"
+        >
+          {isSaving ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
+          Guardar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function JournalListItem({
+  entry,
+  active,
+  onClick,
+  formatDate,
+}: {
+  entry: JournalEntryRecord;
+  active: boolean;
+  onClick: () => void;
+  formatDate: (entry: JournalEntryRecord) => string;
+}) {
+  const preview = (entry.content || '').replace(/\s+/g, ' ').trim();
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-[1.5rem] border p-4 text-left transition ${
+        active ? 'border-neutral-950 bg-neutral-950 text-white' : 'border-neutral-100 bg-white hover:border-neutral-200 hover:bg-neutral-50'
+      }`}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${active ? 'text-white/38' : 'text-neutral-400'}`}>
+          {formatDate(entry)}
+        </p>
+        <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${active ? 'bg-white/10 text-white/50' : 'bg-neutral-100 text-neutral-400'}`}>
+          {VISIBILITY_LABELS[entry.visibility || DEFAULT_PRIVATE_VISIBILITY]}
+        </span>
+      </div>
+      <p className={`line-clamp-3 text-sm font-semibold leading-6 ${active ? 'text-white/76' : 'text-neutral-700'}`}>
+        {preview || 'Entrada sin texto'}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(entry.categories || []).slice(0, 4).map(categoryId => {
+          const category = findMindCategory(categoryId);
+          return (
+            <span key={categoryId} className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${active ? 'bg-white/10 text-white/45' : 'bg-neutral-100 text-neutral-400'}`}>
+              {category?.label || categoryId}
+            </span>
+          );
+        })}
+      </div>
+    </button>
+  );
+}
+
+function EntryReader({
+  entry,
+  members,
+  user,
+  editingEntryId,
+  editContent,
+  setEditContent,
+  editCategories,
+  toggleEditCategory,
+  startEditingEntry,
+  cancelEditingEntry,
+  saveEditingEntry,
+  handleDeleteEntry,
+  isMutatingEntry,
+  formatDate,
+}: {
+  entry: JournalEntryRecord;
+  members: { [key: string]: any };
+  user: any;
+  editingEntryId: string | null;
+  editContent: string;
+  setEditContent: (value: string) => void;
+  editCategories: string[];
+  toggleEditCategory: (categoryId: string) => void;
+  startEditingEntry: (entry: JournalEntryRecord) => void;
+  cancelEditingEntry: () => void;
+  saveEditingEntry: () => Promise<void>;
+  handleDeleteEntry: (entry: JournalEntryRecord) => Promise<void>;
+  isMutatingEntry: boolean;
+  formatDate: (entry: JournalEntryRecord) => string;
+}) {
+  const isEditing = editingEntryId === entry.id;
+  const isOwner = entry.uid === user.uid;
+
+  return (
+    <div className="flex h-full min-h-[520px] flex-col">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">{formatDate(entry)}</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Entrada</h3>
+          {entry.uid !== user.uid && (
+            <p className="mt-1 text-xs font-bold text-neutral-400">{members[entry.uid]?.displayName || 'Compartida'}</p>
+          )}
+        </div>
+        {isOwner && !isEditing && (
+          <div className="flex gap-1">
+            <button type="button" onClick={() => startEditingEntry(entry)} className="rounded-full p-2 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-950">
+              <Edit3 size={16} />
+            </button>
+            <button type="button" onClick={() => handleDeleteEntry(entry)} disabled={isMutatingEntry} className="rounded-full p-2 text-neutral-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40">
+              <Trash2 size={16} />
             </button>
           </div>
-        </motion.div>
-      )}
-
-      {habitFeedback && (
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-emerald-50 border border-emerald-100 p-6 rounded-[2rem] shadow-sm flex items-start gap-4"
-        >
-          <div className="bg-emerald-500 text-white p-2 rounded-full">
-            <CheckCircle2 size={20} />
-          </div>
-          <div>
-            <h4 className="text-emerald-900 font-bold mb-1">Progreso de habito detectado</h4>
-            <p className="text-emerald-700 text-sm">{habitFeedback}</p>
-          </div>
-        </motion.div>
-      )}
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        {/* Input Section */}
-        <div className="space-y-5 xl:col-span-4">
-          <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm xl:sticky xl:top-8">
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <MessageSquare size={18} className="text-neutral-400" />
-              Nuevo pensamiento
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Categorias</label>
-                  <button 
-                    type="button"
-                    onClick={() => setShowReflection(!showReflection)}
-                    className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg transition-all ${
-                      showReflection ? 'bg-amber-500 text-white shadow-lg' : 'bg-neutral-100 text-neutral-400'
-                    }`}
-                  >
-                    {showReflection ? 'Cerrar reflexion' : 'Reflexion guiada'}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1">
-                  {MIND_CATEGORIES.map(cat => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategories(prev => 
-                          prev.includes(cat.id) 
-                            ? prev.filter(id => id !== cat.id)
-                            : [...prev, cat.id]
-                        );
-                      }}
-                      className={`flex items-center gap-2 p-2 rounded-xl text-[10px] font-bold transition-all border ${
-                        selectedCategories.includes(cat.id) 
-                          ? 'bg-neutral-900 text-white border-neutral-900 shadow-md' 
-                          : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
-                      }`}
-                    >
-                      <span className="truncate">{cat.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <AnimatePresence>
-                  {showReflection && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="space-y-3 overflow-hidden border-l-2 border-amber-200 pl-4 py-2"
-                    >
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">Que emociones tuviste hoy?</label>
-                        <input 
-                          type="text" 
-                          value={reflection.emotions}
-                          onChange={(e) => setReflection({...reflection, emotions: e.target.value})}
-                          placeholder="Ej: alegria, nostalgia..."
-                          className="w-full text-xs p-2 bg-neutral-50 rounded-lg border-none focus:ring-1 focus:ring-amber-500"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">Por que te sentiste asi?</label>
-                        <textarea 
-                          value={reflection.explanation}
-                          onChange={(e) => setReflection({...reflection, explanation: e.target.value})}
-                          className="w-full text-xs p-2 bg-neutral-50 rounded-lg border-none focus:ring-1 focus:ring-amber-500 h-16 resize-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">Que fue lo mas importante hoy?</label>
-                        <textarea 
-                          value={reflection.highlights}
-                          onChange={(e) => setReflection({...reflection, highlights: e.target.value})}
-                          className="w-full text-xs p-2 bg-neutral-50 rounded-lg border-none focus:ring-1 focus:ring-amber-500 h-16 resize-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-neutral-400">Hiciste lo que te propusiste?</label>
-                        <div className="flex gap-2">
-                          {REFLECTION_PRODUCTIVITY_OPTIONS.map(option => (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() => setReflection({...reflection, productivity: option})}
-                              className={`text-[9px] px-2 py-1 rounded-lg transition-all ${
-                                reflection.productivity === option ? 'bg-neutral-900 text-white' : 'bg-neutral-50 text-neutral-500'
-                              }`}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div className="relative group/input">
-                  <textarea
-                    value={newThought}
-                    onChange={(e) => setNewThought(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault();
-                        handleSubmit();
-                      }
-                    }}
-                    placeholder={showReflection ? "Comentarios adicionales..." : "Que tenes en mente?"}
-                    className="w-full h-40 bg-neutral-50 border border-neutral-100 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-none mb-2"
-                  />
-                  
-                  <AnimatePresence>
-                    {(isRecording || isTranscribing || isCategorizing) && (
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center gap-4 z-20"
-                      >
-                        {isRecording ? (
-                          <>
-                            <div className="relative">
-                              <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-20" />
-                              <div className="relative bg-red-500 text-white p-4 rounded-full">
-                                <Mic size={32} />
-                              </div>
-                            </div>
-                            <p className="text-red-500 font-bold animate-pulse">Grabando audio...</p>
-                            <button 
-                              type="button"
-                              onClick={stopRecording}
-                              className="mt-4 bg-neutral-900 text-white px-6 py-2 rounded-full text-sm font-bold"
-                            >
-                              Detener grabacion
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <Loader2 size={32} className="text-neutral-900 animate-spin" />
-                            <p className="text-neutral-900 font-bold">
-                              {isTranscribing ? "Transcribiendo audio..." : "Categorizando entrada..."}
-                            </p>
-                          </>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  
-                  {selectedImage && (
-                    <div className="absolute top-4 right-4 group">
-                      <img 
-                        src={`data:${selectedImage.type};base64,${selectedImage.data}`} 
-                        alt="Preview" 
-                        className="w-20 h-20 object-cover rounded-xl border-2 border-white shadow-lg"
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => setSelectedImage(null)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Actions Row - Moved outside to prevent overlap */}
-                  <div className="flex items-center justify-between p-1">
-                    <div className="flex gap-2">
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        onChange={handleImageSelect} 
-                        accept="image/*" 
-                        className="hidden" 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="p-3 bg-neutral-100 text-neutral-500 rounded-full hover:bg-neutral-200 transition-all"
-                        title="Agregar imagen"
-                      >
-                        <Image size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={isRecording ? stopRecording : startRecording}
-                        className={`p-3 rounded-full transition-all ${
-                          isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200'
-                        }`}
-                        title="Grabar audio"
-                      >
-                        {isTranscribing ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
-                      </button>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isAnalyzingImage || (!newThought.trim() && !selectedImage && !showReflection)}
-                      className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg disabled:opacity-50"
-                    >
-                      {isAnalyzingImage ? <Loader2 size={18} className="animate-spin" /> : (
-                        <>
-                          <span>Enviar</span>
-                          <Send size={18} />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        {/* List Section */}
-        <div className="space-y-5 xl:col-span-8">
-          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-            <h3 className="text-lg font-bold flex items-center gap-2">
-              <History size={18} className="text-neutral-400" />
-              Entradas recientes
-            </h3>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <label className="flex items-center gap-2 bg-white border border-neutral-200 rounded-2xl px-3 py-2 text-sm text-neutral-500">
-                <Search size={16} className="text-neutral-400 shrink-0" />
-                <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar en el diario"
-                  className="bg-transparent border-none focus:ring-0 p-0 w-full sm:w-44 text-sm font-medium"
-                />
-              </label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryFilter(prev => !prev)}
-                  className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-600 shadow-sm transition hover:border-neutral-300"
-                >
-                  <Filter size={16} className="text-neutral-400 shrink-0" />
-                  {filterCategory ? MIND_CATEGORIES.find(cat => cat.id === filterCategory)?.label : 'Todas las categorias'}
-                </button>
-                <AnimatePresence>
-                  {showCategoryFilter && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                      className="absolute right-0 top-12 z-30 grid w-64 grid-cols-2 gap-2 rounded-3xl border border-neutral-200 bg-white p-3 shadow-2xl shadow-neutral-200"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFilterCategory(null);
-                          setShowCategoryFilter(false);
-                        }}
-                        className={`col-span-2 rounded-2xl px-3 py-2 text-left text-xs font-black uppercase tracking-widest transition ${
-                          !filterCategory ? 'bg-neutral-900 text-white' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'
-                        }`}
-                      >
-                        Todas
-                      </button>
-                      {MIND_CATEGORIES.map(cat => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => {
-                            setFilterCategory(cat.id);
-                            setShowCategoryFilter(false);
-                          }}
-                          className={`rounded-2xl px-3 py-2 text-left text-xs font-black transition ${
-                            filterCategory === cat.id ? 'bg-neutral-900 text-white' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'
-                          }`}
-                        >
-                          {cat.label}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <AnimatePresence initial={false}>
-              {filteredThoughts.map((thought) => (
-                <motion.div
-                  key={thought.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm hover:shadow-md transition-all group"
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex flex-wrap gap-2 items-center">
-                      {thought.uid !== user.uid && (
-                        <div className="flex items-center gap-1 bg-neutral-900 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest">
-                          <UserIcon size={8} />
-                          <span>{members[thought.uid]?.displayName?.split(' ')?.[0] || 'Socio'}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 bg-neutral-900 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest">
-                        <span>{VISIBILITY_LABELS[thought.visibility || DEFAULT_PRIVATE_VISIBILITY]}</span>
-                      </div>
-                      {thought.categories?.map((catId: string) => {
-                        const search = (catId || '').trim().toLowerCase();
-                        const cat = MIND_CATEGORIES.find(c => 
-                          search === c.id.toLowerCase() || 
-                          search === c.label.toLowerCase() ||
-                          search.includes(c.label.toLowerCase())
-                        );
-                        return (
-                          <div key={catId} className="flex items-center gap-1 bg-neutral-50 px-2 py-1 rounded-lg border border-neutral-100">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                              {cat?.label || catId}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-[10px] text-neutral-300 font-bold">
-                        {formatEntryDate(thought)}
-                      </p>
-                      {thought.uid === user.uid && editingEntryId !== thought.id && (
-                        <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => startEditingEntry(thought)}
-                            className="p-2 rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 transition-all"
-                            title="Editar entrada"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteEntry(thought)}
-                            disabled={isMutatingEntry}
-                            className="p-2 rounded-full text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-40"
-                            title="Eliminar entrada"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {editingEntryId === thought.id ? (
-                    <div className="space-y-4 mb-4">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                            e.preventDefault();
-                            saveEditingEntry();
-                          }
-                        }}
-                        className="w-full min-h-36 bg-neutral-50 border border-neutral-200 rounded-2xl p-4 text-sm text-neutral-800 focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all resize-y"
-                      />
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {MIND_CATEGORIES.map(cat => (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => toggleEditCategory(cat.id)}
-                            className={`flex items-center gap-2 p-2 rounded-xl text-[10px] font-bold transition-all border ${
-                              editCategories.includes(cat.id)
-                                ? 'bg-neutral-900 text-white border-neutral-900'
-                                : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
-                            }`}
-                          >
-                            <span className="truncate">{cat.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={cancelEditingEntry}
-                          disabled={isMutatingEntry}
-                          className="px-4 py-2 rounded-xl text-sm font-bold text-neutral-500 hover:bg-neutral-100 transition-all disabled:opacity-40"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={saveEditingEntry}
-                          disabled={isMutatingEntry || !editContent.trim() || editCategories.length === 0}
-                          className="px-5 py-2 rounded-xl text-sm font-bold bg-neutral-900 text-white hover:bg-neutral-800 transition-all disabled:opacity-40"
-                        >
-                          {isMutatingEntry ? 'Guardando...' : 'Guardar'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-neutral-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">
-                      {thought.content}
-                    </p>
-                  )}
-                  
-                  {thought.imageUrl && (
-                    <div className="mt-4 space-y-4">
-                      <img 
-                        src={thought.imageUrl} 
-                        alt="Imagen de la entrada" 
-                        className="w-full h-48 object-cover rounded-2xl border border-neutral-100"
-                        referrerPolicy="no-referrer"
-                      />
-                      {thought.analysis && (
-                        <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-100">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2 flex items-center gap-1">
-                            <Sparkles size={10} /> Lectura visual
-                          </p>
-                          <p className="text-xs text-neutral-600 italic leading-relaxed">
-                            {thought.analysis}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-
-            {filteredThoughts.length === 0 && (
-              <div className="text-center py-20 bg-neutral-100 rounded-[2rem] border-2 border-dashed border-neutral-200">
-                <p className="text-neutral-400 font-bold">No hay entradas en esta categoria.</p>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <span className="rounded-full bg-neutral-950 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white">
+          {VISIBILITY_LABELS[entry.visibility || DEFAULT_PRIVATE_VISIBILITY]}
+        </span>
+        {(entry.categories || []).map(categoryId => {
+          const category = findMindCategory(categoryId);
+          return (
+            <span key={categoryId} className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+              {category?.label || categoryId}
+            </span>
+          );
+        })}
+      </div>
+
+      {isEditing ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <textarea
+            value={editContent}
+            onChange={(event) => setEditContent(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                saveEditingEntry();
+              }
+            }}
+            className="min-h-72 flex-1 resize-none rounded-[1.5rem] border border-neutral-200 bg-neutral-50 p-4 text-sm font-semibold leading-7 text-neutral-800 outline-none focus:ring-2 focus:ring-neutral-900/10"
+          />
+          <div className="flex flex-wrap gap-2">
+            {MIND_CATEGORIES.map(category => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => toggleEditCategory(category.id)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+                  editCategories.includes(category.id) ? 'bg-neutral-950 text-white' : 'bg-neutral-100 text-neutral-500'
+                }`}
+              >
+                {category.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={cancelEditingEntry} className="rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-500 transition hover:bg-neutral-100">
+              Cancelar
+            </button>
+            <button type="button" onClick={saveEditingEntry} disabled={isMutatingEntry || !editContent.trim() || editCategories.length === 0} className="rounded-2xl bg-neutral-950 px-5 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:opacity-40">
+              Guardar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-[1.5rem] bg-neutral-50 p-5">
+          <p className="whitespace-pre-wrap text-base font-medium leading-8 text-neutral-800">{entry.content}</p>
+          {entry.imageUrl && (
+            <img src={entry.imageUrl} alt="Imagen de la entrada" className="mt-5 max-h-80 w-full rounded-2xl object-cover" referrerPolicy="no-referrer" />
+          )}
+          {entry.analysis && (
+            <div className="mt-5 rounded-2xl bg-white p-4">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">Lectura visual</p>
+              <p className="text-sm font-semibold leading-6 text-neutral-600">{entry.analysis}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function getEntryDate(entry: JournalEntryRecord) {
+  const rawTimestamp = entry.timestamp;
+  const date = typeof rawTimestamp?.toDate === 'function'
+    ? rawTimestamp.toDate()
+    : new Date(rawTimestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysBetween(a: Date, b: Date) {
+  return Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
+}
+
+function softMatch(content: string, search: string) {
+  const terms = normalizeText(search)
+    .split(/[^a-z0-9]+/i)
+    .filter(term => term.length > 2);
+  if (terms.length === 0) return false;
+  const normalizedContent = normalizeText(content);
+  return terms.some(term => normalizedContent.includes(term));
+}
+
+function normalizeText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function findMindCategory(categoryId: string) {
+  const search = (categoryId || '').trim().toLowerCase();
+  return MIND_CATEGORIES.find(category =>
+    search === category.id.toLowerCase() ||
+    search === category.label.toLowerCase() ||
+    search.includes(category.label.toLowerCase()),
   );
 }
