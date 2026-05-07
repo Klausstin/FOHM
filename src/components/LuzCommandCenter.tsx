@@ -132,14 +132,11 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
 
   return (
     <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.08] p-4">
-      <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="mb-3 flex items-center justify-between gap-4">
         <div>
           <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
             <Sparkles size={13} />
-            Hablar con Luz
-          </p>
-          <p className="mt-1 text-sm font-medium text-white/60">
-            Escribi o dicta. Luz propone acciones y vos confirmas antes de guardar.
+            Luz
           </p>
         </div>
         {currentActions.length > 0 && (
@@ -163,13 +160,13 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
               handleSubmit();
             }
           }}
-          placeholder='Ej: "Gaste 50 mil pesos en el cine" o "Hoy me comi las unas"'
-          className="min-h-28 w-full resize-none rounded-[1.25rem] border border-white/10 bg-white p-4 text-sm font-medium leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-white/30"
+          placeholder="Escribi o dicta..."
+          className="min-h-40 w-full resize-none rounded-[1.25rem] border border-white/10 bg-white p-4 text-base font-medium leading-7 text-neutral-900 outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-white/30"
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-h-6 text-xs font-semibold text-white/62">
-            {status || preview?.summary || 'Luz te ayuda a ver patrones, contradicciones y proximos pasos.'}
+            {status || preview?.summary || ''}
           </div>
           <div className="flex gap-2">
             <button
@@ -186,7 +183,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
               className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100 disabled:opacity-45"
             >
               <Send size={16} />
-              Interpretar
+              Enviar
             </button>
           </div>
         </div>
@@ -196,8 +193,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
         <div className="mt-4 space-y-3 rounded-[1.25rem] border border-white/10 bg-black/15 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">Luz entendio esto</p>
-              <p className="mt-1 text-xs font-semibold text-white/60">Confirmo lo claro y dejo lo incompleto para revisar.</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">Antes de guardar</p>
             </div>
             <button
               type="button"
