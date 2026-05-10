@@ -56,6 +56,9 @@ export interface FinancialTransactionRecord {
   payer?: string;
   paymentType?: string;
   paymentStatus?: string;
+  merchantName?: string;
+  merchantKey?: string;
+  importSource?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -98,6 +101,9 @@ export interface CreateFinancialTransactionInput {
   payer?: string;
   paymentType?: string;
   paymentStatus?: string;
+  merchantName?: string;
+  merchantKey?: string;
+  importSource?: string;
 }
 
 export interface CatchupDraftInput {

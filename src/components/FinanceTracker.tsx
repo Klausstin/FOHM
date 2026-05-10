@@ -32,6 +32,7 @@ import {
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
+import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -85,6 +86,9 @@ interface PendingTransaction {
   fileName: string;
   confidence: number;
   needsReview: boolean;
+  merchantName?: string;
+  merchantKey?: string;
+  importSource?: string;
 }
 
 export default function FinanceTracker({ user }: { user: any }) {
@@ -131,6 +135,7 @@ export default function FinanceTracker({ user }: { user: any }) {
     estimatedReason: '',
   });
   const [isSavingCatchup, setIsSavingCatchup] = useState(false);
+  const [inflationMonthlyRate, setInflationMonthlyRate] = useState<number | null>(null);
   
   // Filtering states
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, day, month, quarter, year, custom
@@ -146,6 +151,17 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
+
+  useEffect(() => {
+    const cachedInflation = getCachedArgentinaInflationSnapshot();
+    setInflationMonthlyRate(getLatestMonthlyInflationRate(cachedInflation));
+
+    fetchArgentinaInflationSnapshot()
+      .then(snapshot => setInflationMonthlyRate(getLatestMonthlyInflationRate(snapshot)))
+      .catch(() => {
+        // VEO keeps local projections if the official IPC source is not reachable.
+      });
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToHouseholdFinancialTransactions(user.householdId, (data) => {
@@ -411,6 +427,9 @@ export default function FinanceTracker({ user }: { user: any }) {
         estimatedReason: null,
         reconciliationBatchId: null,
         paymentStatus: 'Contabilizado',
+        merchantName: pt.merchantName || '',
+        merchantKey: pt.merchantKey || '',
+        importSource: pt.importSource || pt.fileName,
       });
 
       // Save mapping for learning
@@ -421,7 +440,9 @@ export default function FinanceTracker({ user }: { user: any }) {
           category: pt.category,
           subCategory: pt.subCategory || '',
           subSubCategory: pt.subSubCategory || '',
-          isFixed: pt.isFixed
+          isFixed: pt.isFixed,
+          merchantName: pt.merchantName || '',
+          merchantKey: pt.merchantKey || '',
         });
       } else {
         await addDoc(collection(db, 'mappings'), {
@@ -432,7 +453,9 @@ export default function FinanceTracker({ user }: { user: any }) {
           category: pt.category,
           subCategory: pt.subCategory || '',
           subSubCategory: pt.subSubCategory || '',
-          isFixed: pt.isFixed
+          isFixed: pt.isFixed,
+          merchantName: pt.merchantName || '',
+          merchantKey: pt.merchantKey || '',
         });
       }
 
@@ -651,7 +674,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
-  const financialInsights = useMemo(() => buildFinancialInsights(finances), [finances]);
+  const financialInsights = useMemo(() => buildFinancialInsights(finances, inflationMonthlyRate), [finances, inflationMonthlyRate]);
   const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
 
   const handleConfirmReviewedFinance = async (finance: any) => {
@@ -2430,9 +2453,12 @@ function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buil
           <ProjectionRow label="Promedio mensual" value={insights.projection.monthlyNetAverage} />
           <ProjectionRow label="6 meses" value={insights.projection.projectedNet6Months} />
           <ProjectionRow label="12 meses" value={insights.projection.projectedNet12Months} />
+          {insights.projection.inflationAdjustedExpense6Months && (
+            <ProjectionRow label="Gasto 6 meses con IPC" value={-insights.projection.inflationAdjustedExpense6Months} />
+          )}
         </div>
         <p className="mt-5 text-xs font-semibold leading-5 text-white/45">
-          Es una proyeccion simple con el promedio reciente. Va a mejorar cuando haya mas meses de datos y conectemos IA real.
+          Usa el promedio reciente y, cuando esta disponible, el IPC oficial nacional para tensionar la proyeccion.
         </p>
       </div>
     </section>
