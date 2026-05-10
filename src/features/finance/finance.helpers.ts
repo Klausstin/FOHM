@@ -1,6 +1,13 @@
 import type { CatchupDraftInput, CreateFinancialTransactionInput } from './finance.types';
 
 export const FINANCE_STALE_DAYS = 10;
+export const CATCHUP_BLOCK_MINUTES = [15, 30, 45, 60, 75, 90];
+
+export interface FinanceCatchupEstimateInput {
+  pendingReviewCount: number;
+  daysSinceLastUpdate: number | null;
+  averageMinutesPerItem?: number | null;
+}
 
 export function getLastFinanceUpdate(transactions: { date?: any; createdAt?: any }[]) {
   const dates = transactions
@@ -26,6 +33,18 @@ export function getDaysSinceLastFinanceUpdate(transactions: { date?: any; create
 export function shouldSuggestFinanceCatchup(transactions: { date?: any; createdAt?: any }[], thresholdDays = FINANCE_STALE_DAYS) {
   const days = getDaysSinceLastFinanceUpdate(transactions);
   return days === null || days >= thresholdDays;
+}
+
+export function estimateFinanceCatchupMinutes(input: FinanceCatchupEstimateInput) {
+  const pendingMinutes = input.pendingReviewCount * (input.averageMinutesPerItem || 3);
+  const staleDays = input.daysSinceLastUpdate ?? FINANCE_STALE_DAYS;
+  const staleMinutes = staleDays >= FINANCE_STALE_DAYS ? Math.min(45, Math.ceil(staleDays / 7) * 15) : 0;
+  const rawMinutes = Math.max(15, pendingMinutes + staleMinutes);
+  return roundToCatchupBlock(rawMinutes);
+}
+
+export function roundToCatchupBlock(minutes: number) {
+  return CATCHUP_BLOCK_MINUTES.find(block => minutes <= block) || CATCHUP_BLOCK_MINUTES[CATCHUP_BLOCK_MINUTES.length - 1];
 }
 
 export function buildCatchupEstimatedTransaction(input: CatchupDraftInput): CreateFinancialTransactionInput {
