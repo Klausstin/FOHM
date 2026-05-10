@@ -31,10 +31,35 @@ import {
 } from '../features/finance/finance.service.ts';
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
+import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+function buildPdfPageText(items: any[]) {
+  const rows = new Map<number, { x: number; text: string }[]>();
+
+  for (const item of items) {
+    const text = String(item.str || '').trim();
+    if (!text) continue;
+    const y = Math.round(item.transform?.[5] || 0);
+    const x = Number(item.transform?.[4] || 0);
+    rows.set(y, [...(rows.get(y) || []), { x, text }]);
+  }
+
+  return Array.from(rows.entries())
+    .sort(([a], [b]) => b - a)
+    .map(([, rowItems]) =>
+      rowItems
+        .sort((a, b) => a.x - b.x)
+        .map(item => item.text)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+    .join('\n');
+}
 
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
@@ -292,8 +317,21 @@ export default function FinanceTracker({ user }: { user: any }) {
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            const pageText = buildPdfPageText(textContent.items as any[]);
             fullText += pageText + '\n';
+          }
+
+          const parsedStatement = parseFinanceStatementText(fullText, file.name);
+          if (parsedStatement.transactions.length > 0) {
+            const mapped = parsedStatement.transactions.map((transaction: any) => ({
+              ...transaction,
+              id: Math.random().toString(36).substr(2, 9),
+              originalDescription: transaction.description,
+              fileName: file.name,
+              needsReview: transaction.needsReview || false,
+            }));
+            resolve(mapped);
+            return;
           }
 
           const transactions = await categorizeFinanceFromText(fullText, userMappings);
