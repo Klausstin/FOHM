@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, collection, addDoc, query, where, orderBy, onSnapshot, handleFirestoreError, OperationType, doc, updateDoc, getDocs, getDoc } from '../firebase.ts';
 import { User } from 'firebase/auth';
 import { 
@@ -29,7 +29,8 @@ import {
   updateFinancialAccount,
   updateFinancialTransaction,
 } from '../features/finance/finance.service.ts';
-import { buildCatchupEstimatedTransaction, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
+import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
+import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -612,10 +613,27 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
+  const financialInsights = useMemo(() => buildFinancialInsights(finances), [finances]);
+  const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
 
   const handleConfirmReviewedFinance = async (finance: any) => {
     try {
       await updateFinancialTransaction(finance.id, {
+        status: 'posted',
+        confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
+        needsReview: false,
+        isConfirmed: true,
+        paymentStatus: 'Contabilizado',
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+    }
+  };
+
+  const handleResolveReviewedFinance = async (finance: any, accountId?: string) => {
+    try {
+      await updateFinancialTransaction(finance.id, {
+        accountId: accountId ?? finance.accountId ?? '',
         status: 'posted',
         confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
         needsReview: false,
@@ -695,6 +713,29 @@ export default function FinanceTracker({ user }: { user: any }) {
           </button>
         </div>
       )}
+
+      <FinanceReviewCenter
+        reviewFinances={reviewFinances}
+        accounts={userAccounts}
+        onConfirm={handleResolveReviewedFinance}
+        onEdit={(finance) => {
+          setEditingId(finance.id);
+          setEditForm({ ...finance, date: format(finance.date.toDate(), "yyyy-MM-dd'T'HH:mm") });
+          setActiveListTab('reviews');
+        }}
+        onIgnore={handleIgnoreReviewedFinance}
+        onViewAll={() => setActiveListTab('reviews')}
+      />
+
+      <FinanceCatchupSessionPanel
+        userId={user.uid}
+        pendingCount={reviewCount}
+        daysSinceLastUpdate={daysSinceLastUpdate}
+        hasNoMovements={finances.length === 0}
+        onOpenCatchupWizard={openCatchupWizard}
+      />
+
+      <FinancialInsightsPanel insights={financialInsights} />
 
       <AnimatePresence>
         {showCatchupWizard && (
@@ -2038,5 +2079,367 @@ export default function FinanceTracker({ user }: { user: any }) {
     </div>
   );
 }
+
+function FinanceReviewCenter({
+  reviewFinances,
+  accounts,
+  onConfirm,
+  onEdit,
+  onIgnore,
+  onViewAll,
+}: {
+  reviewFinances: any[];
+  accounts: any[];
+  onConfirm: (finance: any, accountId?: string) => void;
+  onEdit: (finance: any) => void;
+  onIgnore: (finance: any) => void;
+  onViewAll: () => void;
+}) {
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
+  const visibleReviews = reviewFinances.slice(0, 3);
+  const luzReviews = reviewFinances.filter(finance => finance.source === 'manual' && finance.needsReview);
+  const estimatedReviews = reviewFinances.filter(finance => finance.source === 'catchup_estimate' || finance.confidence === 'estimated' || finance.confidence === 'inferred');
+
+  if (reviewFinances.length === 0) {
+    return (
+      <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Revision</p>
+            <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Sin pendientes</h3>
+          </div>
+          <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">
+            Caja al dia
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-[2rem] border border-amber-100 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-600">Revision</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">{reviewFinances.length} pendiente(s)</h3>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <ReviewMiniStat label="Luz" value={luzReviews.length} />
+          <ReviewMiniStat label="Supuestos" value={estimatedReviews.length} />
+          <ReviewMiniStat label="Sin cuenta" value={reviewFinances.filter(finance => !finance.accountId).length} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        {visibleReviews.map(finance => {
+          const selectedAccount = selectedAccounts[finance.id] ?? finance.accountId ?? '';
+          const account = accounts.find(item => item.id === selectedAccount);
+
+          return (
+            <article key={finance.id} className="rounded-[1.5rem] border border-amber-100 bg-amber-50/70 p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black text-neutral-950">{finance.description || finance.category || 'Movimiento'}</p>
+                  <p className="mt-1 text-sm font-black text-neutral-700">
+                    {Number(finance.amount || 0).toLocaleString()} {finance.currency || 'ARS'}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                  {finance.confidence || finance.source || 'review'}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-amber-700">Cuenta</label>
+                <select
+                  value={selectedAccount}
+                  onChange={(event) => setSelectedAccounts(prev => ({ ...prev, [finance.id]: event.target.value }))}
+                  className="w-full rounded-2xl border border-amber-100 bg-white px-3 py-3 text-sm font-bold text-neutral-900 outline-none"
+                >
+                  <option value="">Sin cuenta</option>
+                  {accounts.map(account => (
+                    <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+                  ))}
+                </select>
+                <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                  <span>{finance.category || 'Sin categoria'}</span>
+                  {finance.paymentType && <span>{finance.paymentType}</span>}
+                  {account?.type && <span>{account.type}</span>}
+                </div>
+              </div>
+
+              {finance.estimatedReason && (
+                <p className="mt-3 rounded-2xl bg-white/70 p-3 text-xs font-semibold leading-5 text-amber-800">
+                  {finance.estimatedReason}
+                </p>
+              )}
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onConfirm(finance, selectedAccount)}
+                  className="rounded-2xl bg-neutral-950 px-3 py-2 text-xs font-black text-white transition hover:bg-neutral-800"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEdit(finance)}
+                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-neutral-700 transition hover:bg-amber-100"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onIgnore(finance)}
+                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-neutral-400 transition hover:bg-white/70"
+                >
+                  Ignorar
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {reviewFinances.length > 3 && (
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="mt-4 w-full rounded-2xl border border-neutral-200 py-3 text-xs font-black uppercase tracking-widest text-neutral-500 transition hover:bg-neutral-50"
+        >
+          Ver todos los pendientes
+        </button>
+      )}
+    </section>
+  );
+}
+
+function ReviewMiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-neutral-50 px-4 py-3">
+      <p className="text-xl font-black text-neutral-950">{value}</p>
+      <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+    </div>
+  );
+}
+
+function FinanceCatchupSessionPanel({
+  userId,
+  pendingCount,
+  daysSinceLastUpdate,
+  hasNoMovements,
+  onOpenCatchupWizard,
+}: {
+  userId: string;
+  pendingCount: number;
+  daysSinceLastUpdate: number | null;
+  hasNoMovements: boolean;
+  onOpenCatchupWizard: () => void;
+}) {
+  const storageKey = `veo.financeCatchupSessions.${userId}`;
+  const [sessions, setSessions] = useState<any[]>(() => readCatchupSessions(storageKey));
+  const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
+
+  const averageMinutesPerItem = useMemo(() => {
+    const usable = sessions.filter(session => session.pendingCount > 0 && session.actualMinutes > 0);
+    if (usable.length === 0) return null;
+    const average = usable.reduce((sum, session) => sum + (session.actualMinutes / session.pendingCount), 0) / usable.length;
+    return Math.max(1, Math.min(15, average));
+  }, [sessions]);
+
+  const suggestedMinutes = estimateFinanceCatchupMinutes({
+    pendingReviewCount: pendingCount,
+    daysSinceLastUpdate,
+    averageMinutesPerItem,
+  });
+
+  const shouldShow = hasNoMovements || pendingCount > 0 || (daysSinceLastUpdate !== null && daysSinceLastUpdate >= 10);
+
+  const ensureSessionStarted = () => {
+    setSessionStartedAt(prev => prev || Date.now());
+  };
+
+  const finishSession = () => {
+    if (!sessionStartedAt) return;
+    const actualMinutes = Math.max(1, Math.round((Date.now() - sessionStartedAt) / 60000));
+    const nextSession = {
+      id: `finance-catchup-${Date.now()}`,
+      type: 'finance_update',
+      estimatedMinutes: suggestedMinutes,
+      actualMinutes,
+      pendingCount,
+      daysSinceLastUpdate,
+      createdAt: new Date().toISOString(),
+    };
+    const nextSessions = [nextSession, ...sessions].slice(0, 12);
+    setSessions(nextSessions);
+    localStorage.setItem(storageKey, JSON.stringify(nextSessions));
+    setSessionStartedAt(null);
+  };
+
+  if (!shouldShow) return null;
+
+  return (
+    <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Puesta al dia</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">{suggestedMinutes} min sugeridos</h3>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <ReviewMiniStat label="Pendientes" value={pendingCount} />
+            <ReviewMiniStat label="Dias" value={daysSinceLastUpdate ?? 0} />
+            <ReviewMiniStat label="Ritmo" value={averageMinutesPerItem ? Math.round(averageMinutesPerItem) : 3} />
+          </div>
+        </div>
+
+        <div className="rounded-[1.5rem] bg-neutral-950 p-4 text-white">
+          <p className="text-[10px] font-black uppercase tracking-widest text-white/35">Acciones</p>
+          <p className="mt-2 text-sm font-semibold leading-5 text-white/55">
+            {sessionStartedAt ? 'VEO esta midiendo esta puesta al dia en segundo plano.' : 'Empeza por revisar pendientes o cargar un supuesto.'}
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={ensureSessionStarted}
+              className="rounded-2xl bg-white px-3 py-3 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100"
+            >
+              Revisar
+            </button>
+            <button
+              type="button"
+              onClick={finishSession}
+              disabled={!sessionStartedAt}
+              className="rounded-2xl border border-white/10 px-3 py-3 text-xs font-black uppercase tracking-widest text-white/60 transition hover:bg-white/10 disabled:opacity-30"
+            >
+              Listo
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              ensureSessionStarted();
+              onOpenCatchupWizard();
+            }}
+            className="mt-2 w-full rounded-2xl border border-white/10 px-3 py-3 text-xs font-black uppercase tracking-widest text-white/60 transition hover:bg-white/10"
+          >
+            Cargar supuesto
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buildFinancialInsights> }) {
+  const topRecurring = insights.recurringDetected.slice(0, 4);
+  const topFixed = insights.fixedDeclared.slice(0, 3);
+  const topUnusual = insights.unusualExpenses.slice(0, 3);
+
+  return (
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+      <div className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Lectura de Luz</p>
+            <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Personalidad financiera</h3>
+          </div>
+          <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+            Base local
+          </span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {insights.summaryBullets.map((bullet, index) => (
+            <div key={`${bullet}-${index}`} className="rounded-2xl bg-neutral-50 p-4">
+              <p className="text-sm font-bold leading-6 text-neutral-700">{bullet}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <InsightList
+            title="Fijos declarados"
+            empty="Sin fijos marcados"
+            items={topFixed.map(item => ({
+              title: item.label,
+              detail: `${item.monthsSeen} mes(es) - ${item.averageAmount.toLocaleString()} ${item.currency}`,
+            }))}
+          />
+          <InsightList
+            title="Recurrentes detectados"
+            empty="Sin recurrentes nuevos"
+            items={topRecurring.map(item => ({
+              title: item.label,
+              detail: `${item.monthsSeen} mes(es) - ${item.averageAmount.toLocaleString()} ${item.currency}`,
+            }))}
+          />
+          <InsightList
+            title="Inusuales"
+            empty="Sin alertas claras"
+            items={topUnusual.map(item => ({
+              title: item.label,
+              detail: `${item.amount.toLocaleString()} ${item.currency} - ${item.category}`,
+            }))}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] border border-neutral-200 bg-neutral-950 p-5 text-white shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Proyeccion</p>
+        <h3 className="mt-1 text-2xl font-black tracking-tight">Si seguis igual</h3>
+        <div className="mt-5 grid gap-3">
+          <ProjectionRow label="Promedio mensual" value={insights.projection.monthlyNetAverage} />
+          <ProjectionRow label="6 meses" value={insights.projection.projectedNet6Months} />
+          <ProjectionRow label="12 meses" value={insights.projection.projectedNet12Months} />
+        </div>
+        <p className="mt-5 text-xs font-semibold leading-5 text-white/45">
+          Es una proyeccion simple con el promedio reciente. Va a mejorar cuando haya mas meses de datos y conectemos IA real.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function InsightList({ title, empty, items }: { title: string; empty: string; items: { title: string; detail: string }[] }) {
+  return (
+    <div className="rounded-[1.5rem] border border-neutral-100 p-4">
+      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{title}</p>
+      <div className="space-y-2">
+        {items.length > 0 ? items.map(item => (
+          <div key={`${item.title}-${item.detail}`} className="rounded-2xl bg-neutral-50 p-3">
+            <p className="truncate text-sm font-black text-neutral-900">{item.title}</p>
+            <p className="mt-1 text-xs font-semibold text-neutral-500">{item.detail}</p>
+          </div>
+        )) : (
+          <p className="rounded-2xl bg-neutral-50 p-3 text-sm font-bold text-neutral-400">{empty}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectionRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
+      <p className="text-[10px] font-black uppercase tracking-widest text-white/35">{label}</p>
+      <p className={`mt-1 text-3xl font-black tracking-tight ${value >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {value >= 0 ? '+' : ''}{value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+      </p>
+    </div>
+  );
+}
+
+function readCatchupSessions(storageKey: string) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 
 
