@@ -82,6 +82,9 @@ export async function createFinancialTransaction(input: CreateFinancialTransacti
     payer: input.payer || '',
     paymentType: input.paymentType || '',
     paymentStatus: input.paymentStatus || 'Contabilizado',
+    merchantName: input.merchantName || '',
+    merchantKey: input.merchantKey || '',
+    importSource: input.importSource || '',
     createdAt: new Date(),
   });
 }

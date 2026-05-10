@@ -1,3 +1,5 @@
+import { suggestMerchant } from './finance.merchants';
+
 export interface ImportedFinanceTransaction {
   amount: number;
   description: string;
@@ -9,6 +11,9 @@ export interface ImportedFinanceTransaction {
   isFixed: boolean;
   confidence: number;
   needsReview: boolean;
+  merchantName?: string;
+  merchantKey?: string;
+  importSource?: string;
 }
 
 export interface FinanceImportResult {
@@ -49,17 +54,21 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): ImportedFinance
       const amount = parseArgentineMoney(rawAmount);
       const description = cleanMovementDescription(rawDescription);
       const suggestion = suggestMovementClassification(description, amount);
+      const merchant = suggestMerchant(description);
 
       return {
         amount: Math.abs(amount),
         description,
-        category: suggestion.category,
-        subCategory: suggestion.subCategory,
+        category: merchant.confidence >= 0.8 && suggestion.canUseMerchantCategory ? merchant.category : suggestion.category,
+        subCategory: merchant.confidence >= 0.8 && suggestion.canUseMerchantCategory ? merchant.subCategory : suggestion.subCategory,
         type: suggestion.type,
         date: buildIsoDate(year, datePart),
-        isFixed: suggestion.isFixed,
-        confidence: suggestion.confidence,
-        needsReview: suggestion.needsReview,
+        isFixed: suggestion.isFixed || merchant.isLikelyRecurring,
+        confidence: Math.max(suggestion.confidence, merchant.confidence),
+        needsReview: suggestion.needsReview || merchant.confidence < 0.8,
+        merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : '',
+        merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : '',
+        importSource: 'bbva_caja_ahorro_ars',
       };
     })
     .filter(transaction => transaction.amount > 0);
@@ -76,6 +85,7 @@ function suggestMovementClassification(description: string, signedAmount: number
       isFixed: true,
       confidence: 0.92,
       needsReview: false,
+      canUseMerchantCategory: false,
     };
   }
 
@@ -87,6 +97,7 @@ function suggestMovementClassification(description: string, signedAmount: number
       isFixed: false,
       confidence: 0.9,
       needsReview: false,
+      canUseMerchantCategory: false,
     };
   }
 
@@ -98,6 +109,7 @@ function suggestMovementClassification(description: string, signedAmount: number
       isFixed: false,
       confidence: 0.75,
       needsReview: true,
+      canUseMerchantCategory: false,
     };
   }
 
@@ -109,6 +121,7 @@ function suggestMovementClassification(description: string, signedAmount: number
       isFixed: false,
       confidence: 0.65,
       needsReview: true,
+      canUseMerchantCategory: false,
     };
   }
 
@@ -119,6 +132,7 @@ function suggestMovementClassification(description: string, signedAmount: number
     isFixed: false,
     confidence: 0.45,
     needsReview: true,
+    canUseMerchantCategory: signedAmount < 0,
   };
 }
 

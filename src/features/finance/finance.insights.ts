@@ -1,4 +1,5 @@
 import type { FinancialTransactionRecord } from './finance.types';
+import { buildMerchantRecurringKey, suggestMerchant } from './finance.merchants';
 
 export interface RecurringExpenseInsight {
   key: string;
@@ -28,6 +29,9 @@ export interface FinancialProjection {
   monthlyIncomeAverage: number;
   projectedNet6Months: number;
   projectedNet12Months: number;
+  inflationMonthlyRate?: number | null;
+  inflationAdjustedExpense6Months?: number;
+  inflationAdjustedExpense12Months?: number;
 }
 
 export interface FinancialInsights {
@@ -38,7 +42,7 @@ export interface FinancialInsights {
   summaryBullets: string[];
 }
 
-export function buildFinancialInsights(transactions: FinancialTransactionRecord[]): FinancialInsights {
+export function buildFinancialInsights(transactions: FinancialTransactionRecord[], inflationMonthlyRate?: number | null): FinancialInsights {
   const posted = transactions.filter(transaction => transaction.status !== 'ignored');
   const expenses = posted.filter(transaction => transaction.type === 'expense');
   const income = posted.filter(transaction => transaction.type === 'income');
@@ -47,7 +51,7 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
   const fixedDeclared = recurring.filter(item => item.declaredFixed);
   const recurringDetected = recurring.filter(item => !item.declaredFixed);
   const unusualExpenses = detectUnusualExpenses(expenses, recurring);
-  const projection = buildProjection(monthly);
+  const projection = buildProjection(monthly, inflationMonthlyRate);
 
   const summaryBullets = [
     fixedDeclared.length > 0
@@ -96,7 +100,7 @@ function detectRecurringExpenses(expenses: FinancialTransactionRecord[]) {
 
       return {
         key,
-        label: first.description || first.category || 'Gasto recurrente',
+        label: displayRecurringLabel(first),
         category: first.category || 'Sin categoria',
         averageAmount,
         currency: first.currency || 'ARS',
@@ -163,7 +167,7 @@ function buildMonthlyTotals(transactions: FinancialTransactionRecord[]) {
     .map(([month, total]) => ({ month, ...total, net: total.income - total.expenses }));
 }
 
-function buildProjection(monthly: { income: number; expenses: number; net: number }[]): FinancialProjection {
+function buildProjection(monthly: { income: number; expenses: number; net: number }[], inflationMonthlyRate?: number | null): FinancialProjection {
   const sample = monthly.slice(-6);
   const monthlyIncomeAverage = average(sample.map(item => item.income));
   const monthlyExpenseAverage = average(sample.map(item => item.expenses));
@@ -175,17 +179,29 @@ function buildProjection(monthly: { income: number; expenses: number; net: numbe
     monthlyIncomeAverage,
     projectedNet6Months: monthlyNetAverage * 6,
     projectedNet12Months: monthlyNetAverage * 12,
+    inflationMonthlyRate,
+    inflationAdjustedExpense6Months: inflationMonthlyRate ? projectInflatedMonthlyValue(monthlyExpenseAverage, inflationMonthlyRate, 6) : undefined,
+    inflationAdjustedExpense12Months: inflationMonthlyRate ? projectInflatedMonthlyValue(monthlyExpenseAverage, inflationMonthlyRate, 12) : undefined,
   };
 }
 
 function buildRecurringKey(transaction: FinancialTransactionRecord) {
-  const text = normalize(`${transaction.description || ''} ${transaction.category || ''}`);
-  const important = text
-    .split(/[^a-z0-9]+/i)
-    .filter(part => part.length > 3)
-    .slice(0, 4)
-    .join('-');
-  return important || normalize(transaction.category || '');
+  return transaction.merchantKey || buildMerchantRecurringKey(transaction.description || '', transaction.category || '');
+}
+
+function displayRecurringLabel(transaction: FinancialTransactionRecord) {
+  if (transaction.merchantName) return transaction.merchantName;
+  const merchant = suggestMerchant(transaction.description || '');
+  if (merchant.confidence >= 0.8) return merchant.merchantName;
+  return transaction.description || transaction.category || 'Gasto recurrente';
+}
+
+function projectInflatedMonthlyValue(monthlyValue: number, monthlyInflationRate: number, months: number) {
+  let projected = 0;
+  for (let month = 1; month <= months; month += 1) {
+    projected += monthlyValue * Math.pow(1 + monthlyInflationRate, month);
+  }
+  return projected;
 }
 
 function toDate(value: any) {
