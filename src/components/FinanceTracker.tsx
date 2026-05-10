@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, collection, addDoc, query, where, orderBy, onSnapshot, handleFirestoreError, OperationType, doc, updateDoc, getDocs, getDoc } from '../firebase.ts';
 import { User } from 'firebase/auth';
 import { 
@@ -30,6 +30,7 @@ import {
   updateFinancialTransaction,
 } from '../features/finance/finance.service.ts';
 import { buildCatchupEstimatedTransaction, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
+import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -612,6 +613,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
+  const financialInsights = useMemo(() => buildFinancialInsights(finances), [finances]);
 
   const handleConfirmReviewedFinance = async (finance: any) => {
     try {
@@ -723,6 +725,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         onIgnore={handleIgnoreReviewedFinance}
         onViewAll={() => setActiveListTab('reviews')}
       />
+
+      <FinancialInsightsPanel insights={financialInsights} />
 
       <AnimatePresence>
         {showCatchupWizard && (
@@ -2207,6 +2211,105 @@ function ReviewMiniStat({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl bg-neutral-50 px-4 py-3">
       <p className="text-xl font-black text-neutral-950">{value}</p>
       <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+    </div>
+  );
+}
+
+function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buildFinancialInsights> }) {
+  const topRecurring = insights.recurringDetected.slice(0, 4);
+  const topFixed = insights.fixedDeclared.slice(0, 3);
+  const topUnusual = insights.unusualExpenses.slice(0, 3);
+
+  return (
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+      <div className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Lectura de Luz</p>
+            <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Personalidad financiera</h3>
+          </div>
+          <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+            Base local
+          </span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {insights.summaryBullets.map((bullet, index) => (
+            <div key={`${bullet}-${index}`} className="rounded-2xl bg-neutral-50 p-4">
+              <p className="text-sm font-bold leading-6 text-neutral-700">{bullet}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <InsightList
+            title="Fijos declarados"
+            empty="Sin fijos marcados"
+            items={topFixed.map(item => ({
+              title: item.label,
+              detail: `${item.monthsSeen} mes(es) - ${item.averageAmount.toLocaleString()} ${item.currency}`,
+            }))}
+          />
+          <InsightList
+            title="Recurrentes detectados"
+            empty="Sin recurrentes nuevos"
+            items={topRecurring.map(item => ({
+              title: item.label,
+              detail: `${item.monthsSeen} mes(es) - ${item.averageAmount.toLocaleString()} ${item.currency}`,
+            }))}
+          />
+          <InsightList
+            title="Inusuales"
+            empty="Sin alertas claras"
+            items={topUnusual.map(item => ({
+              title: item.label,
+              detail: `${item.amount.toLocaleString()} ${item.currency} - ${item.category}`,
+            }))}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] border border-neutral-200 bg-neutral-950 p-5 text-white shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Proyeccion</p>
+        <h3 className="mt-1 text-2xl font-black tracking-tight">Si seguis igual</h3>
+        <div className="mt-5 grid gap-3">
+          <ProjectionRow label="Promedio mensual" value={insights.projection.monthlyNetAverage} />
+          <ProjectionRow label="6 meses" value={insights.projection.projectedNet6Months} />
+          <ProjectionRow label="12 meses" value={insights.projection.projectedNet12Months} />
+        </div>
+        <p className="mt-5 text-xs font-semibold leading-5 text-white/45">
+          Es una proyeccion simple con el promedio reciente. Va a mejorar cuando haya mas meses de datos y conectemos IA real.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function InsightList({ title, empty, items }: { title: string; empty: string; items: { title: string; detail: string }[] }) {
+  return (
+    <div className="rounded-[1.5rem] border border-neutral-100 p-4">
+      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{title}</p>
+      <div className="space-y-2">
+        {items.length > 0 ? items.map(item => (
+          <div key={`${item.title}-${item.detail}`} className="rounded-2xl bg-neutral-50 p-3">
+            <p className="truncate text-sm font-black text-neutral-900">{item.title}</p>
+            <p className="mt-1 text-xs font-semibold text-neutral-500">{item.detail}</p>
+          </div>
+        )) : (
+          <p className="rounded-2xl bg-neutral-50 p-3 text-sm font-bold text-neutral-400">{empty}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectionRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
+      <p className="text-[10px] font-black uppercase tracking-widest text-white/35">{label}</p>
+      <p className={`mt-1 text-3xl font-black tracking-tight ${value >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {value >= 0 ? '+' : ''}{value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+      </p>
     </div>
   );
 }
