@@ -627,6 +627,21 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleResolveReviewedFinance = async (finance: any, accountId?: string) => {
+    try {
+      await updateFinancialTransaction(finance.id, {
+        accountId: accountId ?? finance.accountId ?? '',
+        status: 'posted',
+        confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
+        needsReview: false,
+        isConfirmed: true,
+        paymentStatus: 'Contabilizado',
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+    }
+  };
+
   const handleIgnoreReviewedFinance = async (finance: any) => {
     const confirmed = window.confirm('Ignorar este movimiento supuesto? No se borra, pero deja de contar como pendiente.');
     if (!confirmed) return;
@@ -695,6 +710,19 @@ export default function FinanceTracker({ user }: { user: any }) {
           </button>
         </div>
       )}
+
+      <FinanceReviewCenter
+        reviewFinances={reviewFinances}
+        accounts={userAccounts}
+        onConfirm={handleResolveReviewedFinance}
+        onEdit={(finance) => {
+          setEditingId(finance.id);
+          setEditForm({ ...finance, date: format(finance.date.toDate(), "yyyy-MM-dd'T'HH:mm") });
+          setActiveListTab('reviews');
+        }}
+        onIgnore={handleIgnoreReviewedFinance}
+        onViewAll={() => setActiveListTab('reviews')}
+      />
 
       <AnimatePresence>
         {showCatchupWizard && (
@@ -2035,6 +2063,150 @@ export default function FinanceTracker({ user }: { user: any }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FinanceReviewCenter({
+  reviewFinances,
+  accounts,
+  onConfirm,
+  onEdit,
+  onIgnore,
+  onViewAll,
+}: {
+  reviewFinances: any[];
+  accounts: any[];
+  onConfirm: (finance: any, accountId?: string) => void;
+  onEdit: (finance: any) => void;
+  onIgnore: (finance: any) => void;
+  onViewAll: () => void;
+}) {
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
+  const visibleReviews = reviewFinances.slice(0, 3);
+  const luzReviews = reviewFinances.filter(finance => finance.source === 'manual' && finance.needsReview);
+  const estimatedReviews = reviewFinances.filter(finance => finance.source === 'catchup_estimate' || finance.confidence === 'estimated' || finance.confidence === 'inferred');
+
+  if (reviewFinances.length === 0) {
+    return (
+      <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Revision</p>
+            <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Sin pendientes</h3>
+          </div>
+          <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">
+            Caja al dia
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-[2rem] border border-amber-100 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-600">Revision</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">{reviewFinances.length} pendiente(s)</h3>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <ReviewMiniStat label="Luz" value={luzReviews.length} />
+          <ReviewMiniStat label="Supuestos" value={estimatedReviews.length} />
+          <ReviewMiniStat label="Sin cuenta" value={reviewFinances.filter(finance => !finance.accountId).length} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        {visibleReviews.map(finance => {
+          const selectedAccount = selectedAccounts[finance.id] ?? finance.accountId ?? '';
+          const account = accounts.find(item => item.id === selectedAccount);
+
+          return (
+            <article key={finance.id} className="rounded-[1.5rem] border border-amber-100 bg-amber-50/70 p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black text-neutral-950">{finance.description || finance.category || 'Movimiento'}</p>
+                  <p className="mt-1 text-sm font-black text-neutral-700">
+                    {Number(finance.amount || 0).toLocaleString()} {finance.currency || 'ARS'}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                  {finance.confidence || finance.source || 'review'}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-amber-700">Cuenta</label>
+                <select
+                  value={selectedAccount}
+                  onChange={(event) => setSelectedAccounts(prev => ({ ...prev, [finance.id]: event.target.value }))}
+                  className="w-full rounded-2xl border border-amber-100 bg-white px-3 py-3 text-sm font-bold text-neutral-900 outline-none"
+                >
+                  <option value="">Sin cuenta</option>
+                  {accounts.map(account => (
+                    <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+                  ))}
+                </select>
+                <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                  <span>{finance.category || 'Sin categoria'}</span>
+                  {finance.paymentType && <span>{finance.paymentType}</span>}
+                  {account?.type && <span>{account.type}</span>}
+                </div>
+              </div>
+
+              {finance.estimatedReason && (
+                <p className="mt-3 rounded-2xl bg-white/70 p-3 text-xs font-semibold leading-5 text-amber-800">
+                  {finance.estimatedReason}
+                </p>
+              )}
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onConfirm(finance, selectedAccount)}
+                  className="rounded-2xl bg-neutral-950 px-3 py-2 text-xs font-black text-white transition hover:bg-neutral-800"
+                >
+                  OK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEdit(finance)}
+                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-neutral-700 transition hover:bg-amber-100"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onIgnore(finance)}
+                  className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-neutral-400 transition hover:bg-white/70"
+                >
+                  Ignorar
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {reviewFinances.length > 3 && (
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="mt-4 w-full rounded-2xl border border-neutral-200 py-3 text-xs font-black uppercase tracking-widest text-neutral-500 transition hover:bg-neutral-50"
+        >
+          Ver todos los pendientes
+        </button>
+      )}
+    </section>
+  );
+}
+
+function ReviewMiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-neutral-50 px-4 py-3">
+      <p className="text-xl font-black text-neutral-950">{value}</p>
+      <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
     </div>
   );
 }
