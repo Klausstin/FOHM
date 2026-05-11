@@ -15,6 +15,8 @@ export interface ImportedFinanceTransaction {
   merchantKey?: string;
   importSource?: string;
   balanceDelta?: number;
+  transactionFingerprint?: string;
+  statementFingerprint?: string;
 }
 
 export interface FinanceImportResult {
@@ -38,6 +40,7 @@ export interface ImportedFinanceStatement {
     difference: number;
     isBalanced: boolean;
   };
+  statementFingerprint?: string;
 }
 
 const BBVA_MOVEMENT_RE =
@@ -66,7 +69,7 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
   const statementHeader = parseBbvaStatementHeader(text, year);
   const warnings: string[] = [];
 
-  const transactions = text
+  const transactions: ImportedFinanceTransaction[] = text
     .split(/\r?\n/)
     .map(line => line.trim())
     .map(stripPdfLineNoise)
@@ -98,6 +101,12 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
     .filter(transaction => transaction.amount > 0);
 
   const statement = buildStatementMetadata(statementHeader, transactions);
+  const statementFingerprint = buildStatementFingerprint('bbva_caja_ahorro_ars', statement);
+  statement.statementFingerprint = statementFingerprint;
+  transactions.forEach(transaction => {
+    transaction.statementFingerprint = statementFingerprint;
+    transaction.transactionFingerprint = buildTransactionFingerprint(transaction);
+  });
 
   if (statement.balanceCheck && !statement.balanceCheck.isBalanced) {
     warnings.push(`La conciliacion del resumen no cierra por ${statement.balanceCheck.difference.toFixed(2)}.`);
@@ -256,6 +265,33 @@ function buildStatementMetadata(
   };
 }
 
+export function buildTransactionFingerprint(transaction: Pick<ImportedFinanceTransaction, 'date' | 'description' | 'amount' | 'type' | 'balanceDelta'>) {
+  const date = new Date(transaction.date);
+  const dayKey = Number.isNaN(date.getTime()) ? String(transaction.date).slice(0, 10) : date.toISOString().slice(0, 10);
+  const amountKey = Math.round(Number(transaction.amount || 0) * 100);
+  const deltaKey = typeof transaction.balanceDelta === 'number' ? Math.round(transaction.balanceDelta * 100) : amountKey;
+  return [
+    dayKey,
+    normalizeFingerprintText(transaction.description || ''),
+    transaction.type || '',
+    amountKey,
+    deltaKey,
+  ].join('|');
+}
+
+export function buildStatementFingerprint(source: string, statement: Pick<ImportedFinanceStatement, 'accountLabel' | 'periodEnd' | 'previousBalance' | 'closingBalance' | 'totalDebits' | 'totalCredits' | 'transactionCount'>) {
+  return [
+    source,
+    normalizeFingerprintText(statement.accountLabel || ''),
+    statement.periodEnd ? new Date(statement.periodEnd).toISOString().slice(0, 10) : '',
+    Math.round(Number(statement.previousBalance || 0) * 100),
+    Math.round(Number(statement.closingBalance || 0) * 100),
+    Math.round(Number(statement.totalDebits || 0) * 100),
+    Math.round(Number(statement.totalCredits || 0) * 100),
+    statement.transactionCount || 0,
+  ].join('|');
+}
+
 function parsePeriodEnd(line: string, year: number) {
   const match = /SALDO AL\s+(\d{1,2})\s+DE\s+([A-ZÁÉÍÓÚÑ]+)/i.exec(line);
   if (!match) return undefined;
@@ -303,4 +339,13 @@ function normalizeText(value: string) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizeFingerprintText(value: string) {
+  return normalizeText(value)
+    .replace(/\b(nro|numero|comprobante|compbte)\b/g, ' ')
+    .replace(/[0-9]{5,}/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

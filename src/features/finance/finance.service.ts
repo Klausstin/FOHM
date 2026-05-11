@@ -85,6 +85,10 @@ export async function createFinancialTransaction(input: CreateFinancialTransacti
     merchantName: input.merchantName || '',
     merchantKey: input.merchantKey || '',
     importSource: input.importSource || '',
+    transactionFingerprint: input.transactionFingerprint || '',
+    statementFingerprint: input.statementFingerprint || '',
+    duplicateOfId: input.duplicateOfId || '',
+    duplicateReason: input.duplicateReason || '',
     createdAt: new Date(),
   });
 }
