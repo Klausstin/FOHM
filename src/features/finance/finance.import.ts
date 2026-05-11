@@ -20,7 +20,7 @@ export interface ImportedFinanceTransaction {
 }
 
 export interface FinanceImportResult {
-  source: 'bbva_caja_ahorro_ars' | 'unknown';
+  source: 'bbva_caja_ahorro_ars' | 'bbva_visa' | 'unknown';
   transactions: ImportedFinanceTransaction[];
   statement?: ImportedFinanceStatement;
   warnings?: string[];
@@ -45,14 +45,30 @@ export interface ImportedFinanceStatement {
 
 const BBVA_MOVEMENT_RE =
   /^(\d{2}\/\d{2})\s+(?:(\d{3})\s+)?(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})$/;
+const BBVA_VISA_TRANSACTION_RE =
+  /^(\d{1,2})-([A-Za-zÁÉÍÓÚáéíóú]{3})-(\d{2})\s+(.+?)\s+(?:(\d{3,})\s+)?(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})(?:\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}))?$/;
 
 export function parseFinanceStatementText(text: string, fileName = ''): FinanceImportResult {
   const normalizedText = normalizeWhitespace(text);
+  const comparableText = normalizeLooseText(normalizedText);
   const isBbvaCajaAhorroArs =
     (/Movimientos en cuentas/i.test(normalizedText) || /FECHA\s+ORIGEN\s+CONCEPTO/i.test(normalizedText)) &&
     /SALDO ANTERIOR/i.test(normalizedText) &&
     /TOTAL MOVIMIENTOS/i.test(normalizedText) &&
     /CA \$|Caja de Ahorro|Cuenta Sueldo|Banco BBVA Argentina/i.test(normalizedText);
+
+  const isBbvaVisa =
+    comparableText.includes('tarjetas de credito') &&
+    comparableText.includes('visa') &&
+    comparableText.includes('cierre actual') &&
+    comparableText.includes('saldo actual');
+
+  if (isBbvaVisa) {
+    return {
+      source: 'bbva_visa',
+      ...parseBbvaVisa(normalizedText, fileName),
+    };
+  }
 
   if (!isBbvaCajaAhorroArs) {
     return { source: 'unknown', transactions: [] };
@@ -61,6 +77,178 @@ export function parseFinanceStatementText(text: string, fileName = ''): FinanceI
   return {
     source: 'bbva_caja_ahorro_ars',
     ...parseBbvaCajaAhorroArs(normalizedText, fileName),
+  };
+}
+
+function parseBbvaVisa(text: string, fileName: string): Omit<FinanceImportResult, 'source'> {
+  const year = inferYearFromFileName(fileName) || inferYearFromStatementText(text) || new Date().getFullYear();
+  const statement = parseBbvaVisaStatementHeader(text, year);
+  const warnings: string[] = [];
+  const transactions = parseBbvaVisaTransactions(text, year);
+
+  const totalExpenses = roundMoney(transactions.filter(transaction => transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0));
+  if (typeof statement.totalDebits === 'number' && Math.abs(roundMoney(totalExpenses - statement.totalDebits)) >= 0.02) {
+    warnings.push(`Los consumos detectados suman ${totalExpenses.toFixed(2)} y el resumen informa ${statement.totalDebits.toFixed(2)}.`);
+  }
+
+  const statementFingerprint = buildStatementFingerprint('bbva_visa', statement);
+  statement.statementFingerprint = statementFingerprint;
+  transactions.forEach(transaction => {
+    transaction.statementFingerprint = statementFingerprint;
+    transaction.transactionFingerprint = buildTransactionFingerprint(transaction);
+  });
+
+  return { transactions, statement, warnings };
+}
+
+function parseBbvaVisaTransactions(text: string, fallbackYear: number): ImportedFinanceTransaction[] {
+  const lines = text.split(/\r?\n/).map(line => stripPdfLineNoise(line.trim())).filter(Boolean);
+  const transactions: ImportedFinanceTransaction[] = [];
+  let inConsumptionSection = false;
+
+  for (const line of lines) {
+    const comparableLine = normalizeLooseText(line);
+    if (comparableLine.startsWith('consumos ')) {
+      inConsumptionSection = true;
+      continue;
+    }
+    if (inConsumptionSection && (
+      comparableLine.startsWith('total consumos') ||
+      comparableLine.startsWith('saldo actual') ||
+      comparableLine.startsWith('legales') ||
+      comparableLine.startsWith('plan v')
+    )) {
+      inConsumptionSection = false;
+    }
+    if (!inConsumptionSection) continue;
+    if (isVisaNonMovementLine(line)) continue;
+    const match = BBVA_VISA_TRANSACTION_RE.exec(line);
+    if (!match) continue;
+
+    const [, dayText, monthText, yearText, rawDescription, , rawPesos, rawDollars] = match;
+    const description = cleanVisaDescription(rawDescription);
+    if (!description || isVisaNonMovementDescription(description)) continue;
+
+    const pesos = parseArgentineMoney(rawPesos);
+    const dollars = rawDollars ? parseArgentineMoney(rawDollars) : 0;
+    const amount = Math.abs(pesos || dollars);
+    if (!amount) continue;
+
+    const type = pesos < 0 || dollars < 0 ? 'income' as const : 'expense' as const;
+    const merchant = suggestMerchant(description);
+    const categorySuggestion = suggestVisaCategory(description, merchant);
+
+    transactions.push({
+      amount,
+      description,
+      category: categorySuggestion.category,
+      subCategory: categorySuggestion.subCategory,
+      type,
+      date: buildIsoDate(resolveTwoDigitYear(yearText, fallbackYear), `${dayText.padStart(2, '0')}/${String(monthNumber(monthText) || 1).padStart(2, '0')}`),
+      isFixed: merchant.isLikelyRecurring || categorySuggestion.isLikelyRecurring,
+      confidence: Math.max(merchant.confidence, categorySuggestion.confidence),
+      needsReview: merchant.confidence < 0.8 && categorySuggestion.confidence < 0.8,
+      merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : cleanVisaMerchantName(description),
+      merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : normalizeFingerprintText(description).replace(/\s+/g, '-'),
+      importSource: 'bbva_visa',
+      balanceDelta: type === 'expense' ? -amount : amount,
+    });
+  }
+
+  return transactions;
+}
+
+function parseBbvaVisaStatementHeader(text: string, year: number): ImportedFinanceStatement {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const accountLine = lines.find(line => /Visa/i.test(line) && /cuenta/i.test(line)) || 'Visa BBVA';
+  const compactHeaderIndex = lines.findIndex(line => normalizeLooseText(line).includes('cierre actual vencimiento actual saldo actual'));
+  const compactHeaderValues = compactHeaderIndex >= 0 ? parseHeaderValueLine(lines[compactHeaderIndex + 1] || '') : null;
+  const closeLineIndex = lines.findIndex(line => normalizeLooseText(line) === 'cierre actual');
+  const closeDateLine = compactHeaderValues?.closeDate || (closeLineIndex >= 0 ? lines[closeLineIndex + 1] : '');
+  const currentBalanceLineIndex = lines.findIndex(line => normalizeLooseText(line) === 'saldo actual $');
+  const currentBalance = compactHeaderValues?.currentBalancePesos ?? (currentBalanceLineIndex >= 0 ? parseLastMoney(lines[currentBalanceLineIndex + 1] || '') : undefined);
+  const totalConsumptionLine = lines.find(line => /^TOTAL CONSUMOS DE/i.test(line));
+  const totalDebits = totalConsumptionLine ? parseTotalsMoney(totalConsumptionLine)[0] : undefined;
+  const previousBalanceLine = lines.find(line => /^SALDO ANTERIOR/i.test(line));
+
+  return {
+    accountLabel: accountLine.replace(/\s+/g, ' '),
+    currency: 'ARS',
+    periodEnd: parseVisaDate(closeDateLine, year),
+    previousBalance: previousBalanceLine ? parseTotalsMoney(previousBalanceLine)[0] : undefined,
+    closingBalance: currentBalance,
+    totalDebits,
+    transactionCount: 0,
+  };
+}
+
+function suggestVisaCategory(description: string, merchant: ReturnType<typeof suggestMerchant>) {
+  const normalized = normalizeText(description);
+  if (merchant.confidence >= 0.8) {
+    return {
+      category: merchant.category,
+      subCategory: merchant.subCategory,
+      isLikelyRecurring: merchant.isLikelyRecurring,
+      confidence: merchant.confidence,
+    };
+  }
+  if (/osde|medic|farmacia|hospital|clinica|salud/i.test(normalized)) {
+    return { category: 'Salud', subCategory: 'Medicina', isLikelyRecurring: normalized.includes('osde'), confidence: 0.82 };
+  }
+  if (/personal|flow|edenor|metrogas|aysa|internet|telefono|celular/i.test(normalized)) {
+    return { category: 'Servicios', subCategory: 'Hogar', isLikelyRecurring: true, confidence: 0.82 };
+  }
+  if (/hoyts|cinema|cine|teatro|ticket/i.test(normalized)) {
+    return { category: 'Ocio', subCategory: 'Entretenimiento', isLikelyRecurring: false, confidence: 0.82 };
+  }
+  if (/kfc|restaurant|resto|bar|cafe|express|panader|super|market|carrefour|coto|dia/i.test(normalized)) {
+    return { category: 'Comida', subCategory: 'Comidas y compras', isLikelyRecurring: false, confidence: 0.75 };
+  }
+  if (/autopista|peaje|ypf|shell|axion|estacionamiento/i.test(normalized)) {
+    return { category: 'Transporte', subCategory: 'Auto', isLikelyRecurring: false, confidence: 0.75 };
+  }
+  if (/seguro|cia seg/i.test(normalized)) {
+    return { category: 'Finanzas', subCategory: 'Seguros', isLikelyRecurring: true, confidence: 0.75 };
+  }
+  return { category: 'Sin categorizar', subCategory: '', isLikelyRecurring: false, confidence: 0.45 };
+}
+
+function isVisaNonMovementLine(line: string) {
+  const normalized = normalizeLooseText(line);
+  return normalized.startsWith('fecha descripcion') ||
+    normalized.startsWith('total consumos') ||
+    normalized.startsWith('saldo actual') ||
+    normalized.startsWith('saldo anterior') ||
+    normalized.startsWith('cierre') ||
+    normalized.startsWith('vencimiento') ||
+    normalized.startsWith('pago minimo');
+}
+
+function isVisaNonMovementDescription(description: string) {
+  return /^(TOTAL|SALDO|CIERRE|VENCIMIENTO|PAGO MINIMO|TNA|TEM)/i.test(description);
+}
+
+function cleanVisaDescription(description: string) {
+  return description
+    .replace(/\s+/g, ' ')
+    .replace(/\bID:\s*/i, 'ID:')
+    .trim();
+}
+
+function cleanVisaMerchantName(description: string) {
+  return description
+    .replace(/\bID:[^\s]+/i, '')
+    .replace(/\b\d{6,}\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseHeaderValueLine(line: string) {
+  const closeDateMatch = /\d{1,2}-[A-Za-zÁÉÍÓÚáéíóú]{3}-\d{2}/.exec(line);
+  const moneyValues = line.match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g) || [];
+  return {
+    closeDate: closeDateMatch?.[0],
+    currentBalancePesos: moneyValues[0] ? parseArgentineMoney(moneyValues[0]) : undefined,
   };
 }
 
@@ -203,6 +391,21 @@ function buildIsoDate(year: number, datePart: string) {
   return new Date(year, month - 1, day, 12).toISOString();
 }
 
+function parseVisaDate(value: string, fallbackYear: number) {
+  const match = /(\d{1,2})-([A-Za-zÁÉÍÓÚáéíóú]{3})-(\d{2})/.exec(value);
+  if (!match) return undefined;
+  const [, day, monthText, yearText] = match;
+  const month = monthNumber(monthText);
+  if (!month) return undefined;
+  return buildIsoDate(resolveTwoDigitYear(yearText, fallbackYear), `${day.padStart(2, '0')}/${String(month).padStart(2, '0')}`);
+}
+
+function resolveTwoDigitYear(value: string, fallbackYear: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallbackYear;
+  return parsed >= 70 ? 1900 + parsed : 2000 + parsed;
+}
+
 function inferYearFromFileName(fileName: string) {
   const match = /(\d{2})-\d{2}-\d{2}/.exec(fileName);
   if (!match) return null;
@@ -317,15 +520,27 @@ function monthNumber(value: string) {
     enero: 1,
     febrero: 2,
     marzo: 3,
+    mar: 3,
     abril: 4,
+    abr: 4,
     mayo: 5,
+    may: 5,
     junio: 6,
+    jun: 6,
     julio: 7,
+    jul: 7,
     agosto: 8,
+    ago: 8,
     septiembre: 9,
+    sep: 9,
     octubre: 10,
+    oct: 10,
     noviembre: 11,
+    nov: 11,
     diciembre: 12,
+    dic: 12,
+    ene: 1,
+    feb: 2,
   };
   return months[normalized];
 }
@@ -339,6 +554,16 @@ function normalizeText(value: string) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizeLooseText(value: string) {
+  return normalizeText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\bcr e dito\b/g, 'credito')
+    .replace(/\bdescripci o n\b/g, 'descripcion')
+    .replace(/\bd o lares\b/g, 'dolares')
+    .replace(/\bp i nimo\b/g, 'minimo')
+    .trim();
 }
 
 function normalizeFingerprintText(value: string) {
