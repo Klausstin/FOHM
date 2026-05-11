@@ -1,4 +1,4 @@
-import { suggestMerchant } from './finance.merchants';
+import { suggestMerchant } from './finance.merchants.ts';
 
 export interface ImportedFinanceTransaction {
   amount: number;
@@ -14,11 +14,33 @@ export interface ImportedFinanceTransaction {
   merchantName?: string;
   merchantKey?: string;
   importSource?: string;
+  balanceDelta?: number;
+  transactionFingerprint?: string;
+  statementFingerprint?: string;
 }
 
 export interface FinanceImportResult {
   source: 'bbva_caja_ahorro_ars' | 'unknown';
   transactions: ImportedFinanceTransaction[];
+  statement?: ImportedFinanceStatement;
+  warnings?: string[];
+}
+
+export interface ImportedFinanceStatement {
+  accountLabel?: string;
+  currency: 'ARS' | 'USD' | string;
+  periodEnd?: string;
+  previousBalance?: number;
+  closingBalance?: number;
+  totalDebits?: number;
+  totalCredits?: number;
+  transactionCount: number;
+  balanceCheck?: {
+    expectedClosingBalance: number;
+    difference: number;
+    isBalanced: boolean;
+  };
+  statementFingerprint?: string;
 }
 
 const BBVA_MOVEMENT_RE =
@@ -27,9 +49,10 @@ const BBVA_MOVEMENT_RE =
 export function parseFinanceStatementText(text: string, fileName = ''): FinanceImportResult {
   const normalizedText = normalizeWhitespace(text);
   const isBbvaCajaAhorroArs =
-    /Banco BBVA Argentina/i.test(normalizedText) &&
-    /Movimientos en cuentas/i.test(normalizedText) &&
-    /CA \$|Caja de Ahorro|Cuenta Sueldo/i.test(normalizedText);
+    (/Movimientos en cuentas/i.test(normalizedText) || /FECHA\s+ORIGEN\s+CONCEPTO/i.test(normalizedText)) &&
+    /SALDO ANTERIOR/i.test(normalizedText) &&
+    /TOTAL MOVIMIENTOS/i.test(normalizedText) &&
+    /CA \$|Caja de Ahorro|Cuenta Sueldo|Banco BBVA Argentina/i.test(normalizedText);
 
   if (!isBbvaCajaAhorroArs) {
     return { source: 'unknown', transactions: [] };
@@ -37,16 +60,19 @@ export function parseFinanceStatementText(text: string, fileName = ''): FinanceI
 
   return {
     source: 'bbva_caja_ahorro_ars',
-    transactions: parseBbvaCajaAhorroArs(normalizedText, fileName),
+    ...parseBbvaCajaAhorroArs(normalizedText, fileName),
   };
 }
 
-function parseBbvaCajaAhorroArs(text: string, fileName: string): ImportedFinanceTransaction[] {
+function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImportResult, 'source'> {
   const year = inferYearFromFileName(fileName) || inferYearFromStatementText(text) || new Date().getFullYear();
+  const statementHeader = parseBbvaStatementHeader(text, year);
+  const warnings: string[] = [];
 
-  return text
+  const transactions: ImportedFinanceTransaction[] = text
     .split(/\r?\n/)
     .map(line => line.trim())
+    .map(stripPdfLineNoise)
     .map(line => BBVA_MOVEMENT_RE.exec(line))
     .filter((match): match is RegExpExecArray => Boolean(match))
     .map(match => {
@@ -65,13 +91,28 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): ImportedFinance
         date: buildIsoDate(year, datePart),
         isFixed: suggestion.isFixed || merchant.isLikelyRecurring,
         confidence: Math.max(suggestion.confidence, merchant.confidence),
-        needsReview: suggestion.needsReview || merchant.confidence < 0.8,
+        needsReview: suggestion.needsReview || (suggestion.canUseMerchantCategory && merchant.confidence < 0.8),
         merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : '',
         merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : '',
         importSource: 'bbva_caja_ahorro_ars',
+        balanceDelta: amount,
       };
     })
     .filter(transaction => transaction.amount > 0);
+
+  const statement = buildStatementMetadata(statementHeader, transactions);
+  const statementFingerprint = buildStatementFingerprint('bbva_caja_ahorro_ars', statement);
+  statement.statementFingerprint = statementFingerprint;
+  transactions.forEach(transaction => {
+    transaction.statementFingerprint = statementFingerprint;
+    transaction.transactionFingerprint = buildTransactionFingerprint(transaction);
+  });
+
+  if (statement.balanceCheck && !statement.balanceCheck.isBalanced) {
+    warnings.push(`La conciliacion del resumen no cierra por ${statement.balanceCheck.difference.toFixed(2)}.`);
+  }
+
+  return { transactions, statement, warnings };
 }
 
 function suggestMovementClassification(description: string, signedAmount: number) {
@@ -147,6 +188,12 @@ function cleanMovementDescription(description: string) {
   return description.replace(/\s+/g, ' ').trim();
 }
 
+function stripPdfLineNoise(line: string) {
+  const dateIndex = line.search(/\d{2}\/\d{2}\s+/);
+  if (dateIndex > 0) return line.slice(dateIndex).trim();
+  return line;
+}
+
 function parseArgentineMoney(value: string) {
   return Number(value.replace(/\./g, '').replace(',', '.'));
 }
@@ -169,9 +216,136 @@ function inferYearFromStatementText(text: string) {
   return yearMatch ? Number(yearMatch[1]) : null;
 }
 
+function parseBbvaStatementHeader(text: string, year: number) {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const accountLine = lines.find(line => /CA \$/.test(line) && /Saldo/i.test(line));
+  const previousBalanceLine = lines.find(line => /^SALDO ANTERIOR\s+/i.test(line));
+  const closingBalanceLine = lines.find(line => /^SALDO AL\s+/i.test(line));
+  const totalsLine = lines.find(line => /^TOTAL MOVIMIENTOS\s+/i.test(line));
+
+  return {
+    accountLabel: accountLine?.replace(/\s+/g, ' '),
+    currency: 'ARS',
+    periodEnd: closingBalanceLine ? parsePeriodEnd(closingBalanceLine, year) : undefined,
+    previousBalance: previousBalanceLine ? parseLastMoney(previousBalanceLine) : undefined,
+    closingBalance: closingBalanceLine ? parseLastMoney(closingBalanceLine) : undefined,
+    totalDebits: totalsLine ? parseTotalsMoney(totalsLine)[0] : undefined,
+    totalCredits: totalsLine ? parseTotalsMoney(totalsLine)[1] : undefined,
+  };
+}
+
+function buildStatementMetadata(
+  header: ReturnType<typeof parseBbvaStatementHeader>,
+  transactions: ImportedFinanceTransaction[],
+): ImportedFinanceStatement {
+  const signedMovementTotal = transactions.reduce((sum, transaction) => {
+    if (typeof transaction.balanceDelta === 'number') return sum + transaction.balanceDelta;
+    if (transaction.type === 'income') return sum + transaction.amount;
+    return sum - transaction.amount;
+  }, 0);
+
+  const expectedClosingBalance =
+    typeof header.previousBalance === 'number' ? roundMoney(header.previousBalance + signedMovementTotal) : undefined;
+  const difference =
+    typeof expectedClosingBalance === 'number' && typeof header.closingBalance === 'number'
+      ? roundMoney(expectedClosingBalance - header.closingBalance)
+      : undefined;
+
+  return {
+    ...header,
+    transactionCount: transactions.length,
+    balanceCheck:
+      typeof expectedClosingBalance === 'number' && typeof difference === 'number'
+        ? {
+            expectedClosingBalance,
+            difference,
+            isBalanced: Math.abs(difference) < 0.02,
+          }
+        : undefined,
+  };
+}
+
+export function buildTransactionFingerprint(transaction: Pick<ImportedFinanceTransaction, 'date' | 'description' | 'amount' | 'type' | 'balanceDelta'>) {
+  const date = new Date(transaction.date);
+  const dayKey = Number.isNaN(date.getTime()) ? String(transaction.date).slice(0, 10) : date.toISOString().slice(0, 10);
+  const amountKey = Math.round(Number(transaction.amount || 0) * 100);
+  const deltaKey = typeof transaction.balanceDelta === 'number' ? Math.round(transaction.balanceDelta * 100) : amountKey;
+  return [
+    dayKey,
+    normalizeFingerprintText(transaction.description || ''),
+    transaction.type || '',
+    amountKey,
+    deltaKey,
+  ].join('|');
+}
+
+export function buildStatementFingerprint(source: string, statement: Pick<ImportedFinanceStatement, 'accountLabel' | 'periodEnd' | 'previousBalance' | 'closingBalance' | 'totalDebits' | 'totalCredits' | 'transactionCount'>) {
+  return [
+    source,
+    normalizeFingerprintText(statement.accountLabel || ''),
+    statement.periodEnd ? new Date(statement.periodEnd).toISOString().slice(0, 10) : '',
+    Math.round(Number(statement.previousBalance || 0) * 100),
+    Math.round(Number(statement.closingBalance || 0) * 100),
+    Math.round(Number(statement.totalDebits || 0) * 100),
+    Math.round(Number(statement.totalCredits || 0) * 100),
+    statement.transactionCount || 0,
+  ].join('|');
+}
+
+function parsePeriodEnd(line: string, year: number) {
+  const match = /SALDO AL\s+(\d{1,2})\s+DE\s+([A-ZÁÉÍÓÚÑ]+)/i.exec(line);
+  if (!match) return undefined;
+  const day = Number(match[1]);
+  const month = monthNumber(match[2]);
+  if (!month) return undefined;
+  return buildIsoDate(year, `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`);
+}
+
+function parseLastMoney(line: string) {
+  const matches = line.match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g);
+  return matches?.length ? parseArgentineMoney(matches[matches.length - 1]) : undefined;
+}
+
+function parseTotalsMoney(line: string) {
+  const matches = line.match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g) || [];
+  return [matches[0] ? Math.abs(parseArgentineMoney(matches[0])) : undefined, matches[1] ? parseArgentineMoney(matches[1]) : undefined];
+}
+
+function monthNumber(value: string) {
+  const normalized = normalizeText(value);
+  const months: Record<string, number> = {
+    enero: 1,
+    febrero: 2,
+    marzo: 3,
+    abril: 4,
+    mayo: 5,
+    junio: 6,
+    julio: 7,
+    agosto: 8,
+    septiembre: 9,
+    octubre: 10,
+    noviembre: 11,
+    diciembre: 12,
+  };
+  return months[normalized];
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 function normalizeText(value: string) {
   return value
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizeFingerprintText(value: string) {
+  return normalizeText(value)
+    .replace(/\b(nro|numero|comprobante|compbte)\b/g, ' ')
+    .replace(/[0-9]{5,}/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

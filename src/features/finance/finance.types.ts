@@ -59,6 +59,10 @@ export interface FinancialTransactionRecord {
   merchantName?: string;
   merchantKey?: string;
   importSource?: string;
+  transactionFingerprint?: string;
+  statementFingerprint?: string;
+  duplicateOfId?: string;
+  duplicateReason?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -104,6 +108,10 @@ export interface CreateFinancialTransactionInput {
   merchantName?: string;
   merchantKey?: string;
   importSource?: string;
+  transactionFingerprint?: string;
+  statementFingerprint?: string;
+  duplicateOfId?: string;
+  duplicateReason?: string;
 }
 
 export interface CatchupDraftInput {

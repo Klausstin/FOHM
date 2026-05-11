@@ -39,20 +39,25 @@ import type { CreateFinancialTransactionInput } from '../features/finance/financ
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 function buildPdfPageText(items: any[]) {
-  const rows = new Map<number, { x: number; text: string }[]>();
+  const rows: { y: number; items: { x: number; text: string }[] }[] = [];
 
   for (const item of items) {
     const text = String(item.str || '').trim();
     if (!text) continue;
     const y = Math.round(item.transform?.[5] || 0);
     const x = Number(item.transform?.[4] || 0);
-    rows.set(y, [...(rows.get(y) || []), { x, text }]);
+    const row = rows.find(candidate => Math.abs(candidate.y - y) <= 2);
+    if (row) {
+      row.items.push({ x, text });
+    } else {
+      rows.push({ y, items: [{ x, text }] });
+    }
   }
 
-  return Array.from(rows.entries())
-    .sort(([a], [b]) => b - a)
-    .map(([, rowItems]) =>
-      rowItems
+  return rows
+    .sort((a, b) => b.y - a.y)
+    .map(row =>
+      row.items
         .sort((a, b) => a.x - b.x)
         .map(item => item.text)
         .join(' ')
@@ -60,6 +65,49 @@ function buildPdfPageText(items: any[]) {
         .trim()
     )
     .join('\n');
+}
+
+function findLikelyDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
+  if (candidate.statementFingerprint) {
+    const sameStatement = existingTransactions.find(transaction => transaction.statementFingerprint === candidate.statementFingerprint);
+    if (sameStatement) return 'Este resumen parece ya importado.';
+  }
+
+  if (candidate.transactionFingerprint) {
+    const sameFingerprint = existingTransactions.find(transaction => transaction.transactionFingerprint === candidate.transactionFingerprint);
+    if (sameFingerprint) return 'Ya existe un movimiento identico.';
+  }
+
+  const candidateDate = toDayKey(candidate.date);
+  const candidateAmount = Number(candidate.amount || 0);
+  const candidateText = normalizeDuplicateText(candidate.description || '');
+  if (!candidateDate || !candidateAmount || !candidateText) return '';
+
+  const possibleDuplicate = existingTransactions.find(transaction => {
+    const sameDay = toDayKey(transaction.date) === candidateDate;
+    const sameAmount = Math.abs(Number(transaction.amount || 0) - candidateAmount) < 0.01;
+    const sameText = normalizeDuplicateText(transaction.description || '') === candidateText;
+    return sameDay && sameAmount && sameText;
+  });
+
+  return possibleDuplicate ? 'Coincide en fecha, importe y concepto con un movimiento existente.' : '';
+}
+
+function toDayKey(value: any) {
+  if (!value) return '';
+  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+}
+
+function normalizeDuplicateText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[0-9]{5,}/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const FINANCE_TYPES = [
@@ -89,6 +137,10 @@ interface PendingTransaction {
   merchantName?: string;
   merchantKey?: string;
   importSource?: string;
+  transactionFingerprint?: string;
+  statementFingerprint?: string;
+  duplicateOfId?: string;
+  duplicateReason?: string;
 }
 
 export default function FinanceTracker({ user }: { user: any }) {
@@ -339,13 +391,22 @@ export default function FinanceTracker({ user }: { user: any }) {
 
           const parsedStatement = parseFinanceStatementText(fullText, file.name);
           if (parsedStatement.transactions.length > 0) {
-            const mapped = parsedStatement.transactions.map((transaction: any) => ({
-              ...transaction,
-              id: Math.random().toString(36).substr(2, 9),
-              originalDescription: transaction.description,
-              fileName: file.name,
-              needsReview: transaction.needsReview || false,
-            }));
+            const duplicateStatement = parsedStatement.statement?.statementFingerprint
+              ? finances.some(finance => finance.statementFingerprint === parsedStatement.statement?.statementFingerprint)
+              : false;
+            const mapped = parsedStatement.transactions.map((transaction: any) => {
+              const duplicateReason = duplicateStatement
+                ? 'Este resumen parece ya importado.'
+                : findLikelyDuplicateReason(transaction, finances);
+              return {
+                ...transaction,
+                id: Math.random().toString(36).substr(2, 9),
+                originalDescription: transaction.description,
+                fileName: file.name,
+                duplicateReason,
+                needsReview: transaction.needsReview || duplicateStatement || Boolean(duplicateReason),
+              };
+            });
             resolve(mapped);
             return;
           }
@@ -356,14 +417,18 @@ export default function FinanceTracker({ user }: { user: any }) {
             throw new Error("La IA no devolvió una lista de transacciones válida.");
           }
 
-          const mapped = transactions.map((t: any) => ({
-            ...t,
-            id: Math.random().toString(36).substr(2, 9),
-            originalDescription: t.description,
-            fileName: file.name,
-            confidence: t.confidence || 0,
-            needsReview: t.needsReview || false
-          }));
+          const mapped = transactions.map((t: any) => {
+            const duplicateReason = findLikelyDuplicateReason(t, finances);
+            return {
+              ...t,
+              id: Math.random().toString(36).substr(2, 9),
+              originalDescription: t.description,
+              fileName: file.name,
+              confidence: t.confidence || 0,
+              duplicateReason,
+              needsReview: t.needsReview || Boolean(duplicateReason),
+            };
+          });
           resolve(mapped);
         } catch (error) {
           reject(error);
@@ -430,32 +495,31 @@ export default function FinanceTracker({ user }: { user: any }) {
         merchantName: pt.merchantName || '',
         merchantKey: pt.merchantKey || '',
         importSource: pt.importSource || pt.fileName,
+        transactionFingerprint: pt.transactionFingerprint || '',
+        statementFingerprint: pt.statementFingerprint || '',
+        duplicateReason: pt.duplicateReason || '',
       });
 
       // Save mapping for learning
       const existingMapping = userMappings.find(m => m.originalDescription.toLowerCase() === pt.originalDescription.toLowerCase());
+      const mappingPatch = {
+        mappedDescription: pt.description,
+        category: pt.category,
+        subCategory: pt.subCategory || '',
+        subSubCategory: pt.subSubCategory || '',
+        isFixed: pt.isFixed,
+        merchantName: pt.merchantName || '',
+        merchantKey: pt.merchantKey || '',
+        transactionFingerprint: pt.transactionFingerprint || '',
+      };
       if (existingMapping) {
-        await updateDoc(doc(db, 'mappings', existingMapping.id), {
-          mappedDescription: pt.description,
-          category: pt.category,
-          subCategory: pt.subCategory || '',
-          subSubCategory: pt.subSubCategory || '',
-          isFixed: pt.isFixed,
-          merchantName: pt.merchantName || '',
-          merchantKey: pt.merchantKey || '',
-        });
+        await updateDoc(doc(db, 'mappings', existingMapping.id), mappingPatch);
       } else {
         await addDoc(collection(db, 'mappings'), {
           uid: user.uid,
           householdId: user.householdId,
           originalDescription: pt.originalDescription,
-          mappedDescription: pt.description,
-          category: pt.category,
-          subCategory: pt.subCategory || '',
-          subSubCategory: pt.subSubCategory || '',
-          isFixed: pt.isFixed,
-          merchantName: pt.merchantName || '',
-          merchantKey: pt.merchantKey || '',
+          ...mappingPatch,
         });
       }
 
@@ -1152,9 +1216,18 @@ export default function FinanceTracker({ user }: { user: any }) {
                 onClick={() => setPendingTransactions([])}
                 className="text-amber-500 hover:text-amber-700 font-bold text-sm"
               >
-                Clear All
+                Limpiar
               </button>
             </div>
+
+            {pendingTransactions.some(pt => pt.duplicateReason) && (
+              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                <p className="text-sm font-black text-red-900">Hay posibles duplicados.</p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-red-700">
+                  VEO los deja en revision para que confirmes si corresponde. Si subiste el mismo resumen dos veces, conviene descartarlos.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-4">
               {(pendingTransactions || []).map((pt) => (
@@ -1252,6 +1325,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </div>
                     </div>
                   </div>
+                  {pt.duplicateReason && (
+                    <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold leading-5 text-red-800">
+                      Posible duplicado: {pt.duplicateReason}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-[10px] text-amber-600 font-bold">
                     <FileText size={12} />
                     Desde: {pt.fileName} - Original: "{pt.originalDescription}"
@@ -2232,6 +2310,12 @@ function FinanceReviewCenter({
               {finance.estimatedReason && (
                 <p className="mt-3 rounded-2xl bg-white/70 p-3 text-xs font-semibold leading-5 text-amber-800">
                   {finance.estimatedReason}
+                </p>
+              )}
+
+              {finance.duplicateReason && (
+                <p className="mt-3 rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-semibold leading-5 text-red-800">
+                  Posible duplicado: {finance.duplicateReason}
                 </p>
               )}
 
