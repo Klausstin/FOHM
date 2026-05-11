@@ -123,6 +123,7 @@ const PAYMENT_STATUSES = ['Contabilizado', 'Pendiente', 'Anulado'];
 interface PendingTransaction {
   id: string;
   amount: number;
+  currency?: string;
   description: string;
   category: string;
   subCategory?: string;
@@ -470,7 +471,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         uid: user.uid,
         householdId: user.householdId,
         amount: pt.amount,
-        currency,
+        currency: pt.currency || currency,
         description: pt.description,
         note: '',
         category: pt.category,

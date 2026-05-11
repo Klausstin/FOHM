@@ -2,6 +2,7 @@ import { suggestMerchant } from './finance.merchants.ts';
 
 export interface ImportedFinanceTransaction {
   amount: number;
+  currency?: 'ARS' | 'USD' | string;
   description: string;
   category: string;
   subCategory?: string;
@@ -33,6 +34,7 @@ export interface ImportedFinanceStatement {
   previousBalance?: number;
   closingBalance?: number;
   totalDebits?: number;
+  totalDebitsUsd?: number;
   totalCredits?: number;
   transactionCount: number;
   balanceCheck?: {
@@ -86,9 +88,13 @@ function parseBbvaVisa(text: string, fileName: string): Omit<FinanceImportResult
   const warnings: string[] = [];
   const transactions = parseBbvaVisaTransactions(text, year);
 
-  const totalExpenses = roundMoney(transactions.filter(transaction => transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0));
+  const totalExpenses = roundMoney(transactions.filter(transaction => transaction.type === 'expense' && (transaction.currency || 'ARS') === 'ARS').reduce((sum, transaction) => sum + transaction.amount, 0));
+  const totalUsdExpenses = roundMoney(transactions.filter(transaction => transaction.type === 'expense' && transaction.currency === 'USD').reduce((sum, transaction) => sum + transaction.amount, 0));
   if (typeof statement.totalDebits === 'number' && Math.abs(roundMoney(totalExpenses - statement.totalDebits)) >= 0.02) {
-    warnings.push(`Los consumos detectados suman ${totalExpenses.toFixed(2)} y el resumen informa ${statement.totalDebits.toFixed(2)}.`);
+    warnings.push(`Los consumos ARS detectados suman ${totalExpenses.toFixed(2)} y el resumen informa ${statement.totalDebits.toFixed(2)}.`);
+  }
+  if (typeof statement.totalDebitsUsd === 'number' && Math.abs(roundMoney(totalUsdExpenses - statement.totalDebitsUsd)) >= 0.02) {
+    warnings.push(`Los consumos USD detectados suman ${totalUsdExpenses.toFixed(2)} y el resumen informa ${statement.totalDebitsUsd.toFixed(2)}.`);
   }
 
   const statementFingerprint = buildStatementFingerprint('bbva_visa', statement);
@@ -129,17 +135,17 @@ function parseBbvaVisaTransactions(text: string, fallbackYear: number): Imported
     const description = cleanVisaDescription(rawDescription);
     if (!description || isVisaNonMovementDescription(description)) continue;
 
-    const pesos = parseArgentineMoney(rawPesos);
-    const dollars = rawDollars ? parseArgentineMoney(rawDollars) : 0;
-    const amount = Math.abs(pesos || dollars);
+    const amountInfo = parseVisaAmount(description, rawPesos, rawDollars);
+    const amount = Math.abs(amountInfo.amount);
     if (!amount) continue;
 
-    const type = pesos < 0 || dollars < 0 ? 'income' as const : 'expense' as const;
+    const type = amountInfo.amount < 0 ? 'income' as const : 'expense' as const;
     const merchant = suggestMerchant(description);
     const categorySuggestion = suggestVisaCategory(description, merchant);
 
     transactions.push({
       amount,
+      currency: amountInfo.currency,
       description,
       category: categorySuggestion.category,
       subCategory: categorySuggestion.subCategory,
@@ -168,7 +174,9 @@ function parseBbvaVisaStatementHeader(text: string, year: number): ImportedFinan
   const currentBalanceLineIndex = lines.findIndex(line => normalizeLooseText(line) === 'saldo actual $');
   const currentBalance = compactHeaderValues?.currentBalancePesos ?? (currentBalanceLineIndex >= 0 ? parseLastMoney(lines[currentBalanceLineIndex + 1] || '') : undefined);
   const totalConsumptionLine = lines.find(line => /^TOTAL CONSUMOS DE/i.test(line));
-  const totalDebits = totalConsumptionLine ? parseTotalsMoney(totalConsumptionLine)[0] : undefined;
+  const totalConsumptionAmounts = totalConsumptionLine ? parseTotalsMoney(totalConsumptionLine) : [];
+  const totalDebits = totalConsumptionAmounts[0];
+  const totalDebitsUsd = totalConsumptionAmounts[1];
   const previousBalanceLine = lines.find(line => /^SALDO ANTERIOR/i.test(line));
 
   return {
@@ -178,8 +186,25 @@ function parseBbvaVisaStatementHeader(text: string, year: number): ImportedFinan
     previousBalance: previousBalanceLine ? parseTotalsMoney(previousBalanceLine)[0] : undefined,
     closingBalance: currentBalance,
     totalDebits,
+    totalDebitsUsd,
     transactionCount: 0,
   };
+}
+
+function parseVisaAmount(description: string, rawPesos: string, rawDollars?: string) {
+  const hasForeignCurrencyMarker = /\b(USD|BRL|EUR|CLP|UYU|GBP)\b/i.test(description);
+  const pesos = parseArgentineMoney(rawPesos);
+  const dollars = rawDollars ? parseArgentineMoney(rawDollars) : 0;
+
+  if (rawDollars) {
+    return { amount: dollars, currency: 'USD' };
+  }
+
+  if (hasForeignCurrencyMarker) {
+    return { amount: pesos, currency: 'USD' };
+  }
+
+  return { amount: pesos, currency: 'ARS' };
 }
 
 function suggestVisaCategory(description: string, merchant: ReturnType<typeof suggestMerchant>) {
@@ -200,6 +225,9 @@ function suggestVisaCategory(description: string, merchant: ReturnType<typeof su
   }
   if (/hoyts|cinema|cine|teatro|ticket/i.test(normalized)) {
     return { category: 'Ocio', subCategory: 'Entretenimiento', isLikelyRecurring: false, confidence: 0.82 };
+  }
+  if (/\bbrl\b|trancoso|guarulhos|porto seguro|lanchonete/i.test(normalized)) {
+    return { category: 'Aventura', subCategory: 'Viajes', isLikelyRecurring: false, confidence: 0.76 };
   }
   if (/kfc|restaurant|resto|bar|cafe|express|panader|super|market|carrefour|coto|dia/i.test(normalized)) {
     return { category: 'Comida', subCategory: 'Comidas y compras', isLikelyRecurring: false, confidence: 0.75 };
@@ -468,7 +496,7 @@ function buildStatementMetadata(
   };
 }
 
-export function buildTransactionFingerprint(transaction: Pick<ImportedFinanceTransaction, 'date' | 'description' | 'amount' | 'type' | 'balanceDelta'>) {
+export function buildTransactionFingerprint(transaction: Pick<ImportedFinanceTransaction, 'date' | 'description' | 'amount' | 'currency' | 'type' | 'balanceDelta'>) {
   const date = new Date(transaction.date);
   const dayKey = Number.isNaN(date.getTime()) ? String(transaction.date).slice(0, 10) : date.toISOString().slice(0, 10);
   const amountKey = Math.round(Number(transaction.amount || 0) * 100);
@@ -477,12 +505,13 @@ export function buildTransactionFingerprint(transaction: Pick<ImportedFinanceTra
     dayKey,
     normalizeFingerprintText(transaction.description || ''),
     transaction.type || '',
+    transaction.currency || '',
     amountKey,
     deltaKey,
   ].join('|');
 }
 
-export function buildStatementFingerprint(source: string, statement: Pick<ImportedFinanceStatement, 'accountLabel' | 'periodEnd' | 'previousBalance' | 'closingBalance' | 'totalDebits' | 'totalCredits' | 'transactionCount'>) {
+export function buildStatementFingerprint(source: string, statement: Pick<ImportedFinanceStatement, 'accountLabel' | 'periodEnd' | 'previousBalance' | 'closingBalance' | 'totalDebits' | 'totalDebitsUsd' | 'totalCredits' | 'transactionCount'>) {
   return [
     source,
     normalizeFingerprintText(statement.accountLabel || ''),
@@ -490,6 +519,7 @@ export function buildStatementFingerprint(source: string, statement: Pick<Import
     Math.round(Number(statement.previousBalance || 0) * 100),
     Math.round(Number(statement.closingBalance || 0) * 100),
     Math.round(Number(statement.totalDebits || 0) * 100),
+    Math.round(Number(statement.totalDebitsUsd || 0) * 100),
     Math.round(Number(statement.totalCredits || 0) * 100),
     statement.transactionCount || 0,
   ].join('|');
