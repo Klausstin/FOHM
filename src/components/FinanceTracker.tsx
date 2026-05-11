@@ -39,20 +39,25 @@ import type { CreateFinancialTransactionInput } from '../features/finance/financ
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 function buildPdfPageText(items: any[]) {
-  const rows = new Map<number, { x: number; text: string }[]>();
+  const rows: { y: number; items: { x: number; text: string }[] }[] = [];
 
   for (const item of items) {
     const text = String(item.str || '').trim();
     if (!text) continue;
     const y = Math.round(item.transform?.[5] || 0);
     const x = Number(item.transform?.[4] || 0);
-    rows.set(y, [...(rows.get(y) || []), { x, text }]);
+    const row = rows.find(candidate => Math.abs(candidate.y - y) <= 2);
+    if (row) {
+      row.items.push({ x, text });
+    } else {
+      rows.push({ y, items: [{ x, text }] });
+    }
   }
 
-  return Array.from(rows.entries())
-    .sort(([a], [b]) => b - a)
-    .map(([, rowItems]) =>
-      rowItems
+  return rows
+    .sort((a, b) => b.y - a.y)
+    .map(row =>
+      row.items
         .sort((a, b) => a.x - b.x)
         .map(item => item.text)
         .join(' ')
