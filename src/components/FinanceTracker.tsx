@@ -152,6 +152,15 @@ function findCajaAhorroAccount(accounts: any[]) {
   }) || accounts.find(account => account.currency === 'ARS' && account.type === 'bank');
 }
 
+function pendingTransactionNeedsAccount(pt: Partial<PendingTransaction>) {
+  if (pt.type === 'transfer') return !pt.accountId || !pt.toAccountId;
+  return !pt.accountId;
+}
+
+function canConfirmPendingTransaction(pt: PendingTransaction) {
+  return !pt.duplicateReason && !pendingTransactionNeedsAccount(pt);
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -248,6 +257,31 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
+
+  const pendingImportSummary = useMemo(() => {
+    const byFile = pendingTransactions.reduce<Record<string, number>>((acc, transaction) => {
+      const fileName = transaction.fileName || 'PDF';
+      acc[fileName] = (acc[fileName] || 0) + 1;
+      return acc;
+    }, {});
+
+    const readyCount = pendingTransactions.filter(canConfirmPendingTransaction).length;
+    const duplicateCount = pendingTransactions.filter(transaction => transaction.duplicateReason).length;
+    const missingAccountCount = pendingTransactions.filter(pendingTransactionNeedsAccount).length;
+    const cardPaymentCount = pendingTransactions.filter(transaction => transaction.type === 'transfer' && transaction.subCategory === 'Pago de tarjeta').length;
+    const usdCount = pendingTransactions.filter(transaction => transaction.currency === 'USD').length;
+    const fixedCount = pendingTransactions.filter(transaction => transaction.isFixed).length;
+
+    return {
+      byFile,
+      readyCount,
+      duplicateCount,
+      missingAccountCount,
+      cardPaymentCount,
+      usdCount,
+      fixedCount,
+    };
+  }, [pendingTransactions]);
 
   useEffect(() => {
     const cachedInflation = getCachedArgentinaInflationSnapshot();
@@ -588,6 +622,13 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const updatePending = (id: string, updates: Partial<PendingTransaction>) => {
     setPendingTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+
+  const confirmReadyPendingTransactions = async () => {
+    const readyTransactions = pendingTransactions.filter(canConfirmPendingTransaction);
+    for (const transaction of readyTransactions) {
+      await confirmTransaction(transaction);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -1296,28 +1337,53 @@ export default function FinanceTracker({ user }: { user: any }) {
                   <AlertCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-amber-900">Revisar registros</h3>
+                  <h3 className="text-lg font-bold text-amber-900">Resumen de importacion</h3>
                   <p className="text-sm text-amber-700 font-medium">
-                    {pendingTransactions.length} registros extraidos de PDFs necesitan confirmacion.
+                    {pendingTransactions.length} movimientos extraidos. Guardamos solo lo que confirmes.
                   </p>
                 </div>
               </div>
-              <button 
-                onClick={() => setPendingTransactions([])}
-                className="text-amber-500 hover:text-amber-700 font-bold text-sm"
-              >
-                Limpiar
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={confirmReadyPendingTransactions}
+                  disabled={pendingImportSummary.readyCount === 0}
+                  className="rounded-2xl bg-neutral-950 px-4 py-2 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                >
+                  Guardar listos ({pendingImportSummary.readyCount})
+                </button>
+                <button 
+                  onClick={() => setPendingTransactions([])}
+                  className="rounded-2xl bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-700 transition hover:bg-amber-100"
+                >
+                  Limpiar
+                </button>
+              </div>
             </div>
 
-            {pendingTransactions.some(pt => pt.duplicateReason) && (
-              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
-                <p className="text-sm font-black text-red-900">Hay posibles duplicados.</p>
-                <p className="mt-1 text-xs font-semibold leading-5 text-red-700">
-                  VEO los deja en revision para que confirmes si corresponde. Si subiste el mismo resumen dos veces, conviene descartarlos.
-                </p>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <ImportReviewStat label="Listos" value={pendingImportSummary.readyCount} tone="neutral" />
+              <ImportReviewStat label="Duplicados" value={pendingImportSummary.duplicateCount} tone={pendingImportSummary.duplicateCount ? 'danger' : 'neutral'} />
+              <ImportReviewStat label="Sin cuenta" value={pendingImportSummary.missingAccountCount} tone={pendingImportSummary.missingAccountCount ? 'warn' : 'neutral'} />
+              <ImportReviewStat label="Pagos tarjeta" value={pendingImportSummary.cardPaymentCount} tone="info" />
+              <ImportReviewStat label="USD" value={pendingImportSummary.usdCount} tone="info" />
+              <ImportReviewStat label="Fijos" value={pendingImportSummary.fixedCount} tone="neutral" />
+            </div>
+
+            <div className="rounded-2xl border border-amber-100 bg-white/70 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">Archivos leidos</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.entries(pendingImportSummary.byFile).map(([fileName, count]) => (
+                  <span key={fileName} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-neutral-600 shadow-sm">
+                    {fileName}: {count}
+                  </span>
+                ))}
               </div>
-            )}
+              {(pendingImportSummary.duplicateCount > 0 || pendingImportSummary.missingAccountCount > 0) && (
+                <p className="mt-3 text-xs font-semibold leading-5 text-amber-800">
+                  Los duplicados y movimientos sin cuenta quedan frenados para revision. Si un pago de tarjeta fue detectado, se guarda como transferencia entre cuentas.
+                </p>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 gap-4">
               {(pendingTransactions || []).map((pt) => (
@@ -1333,7 +1399,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       />
                     </div>
                     <div className="w-32 space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Amount</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Importe</label>
                       <input 
                         type="number"
                         value={pt.amount}
@@ -1348,7 +1414,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         onChange={(e) => updatePending(pt.id, { category: e.target.value, subCategory: '' })}
                         className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
                       >
-                        <option value="">Select Categoria</option>
+                        <option value="">Elegir categoria</option>
                         {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
@@ -1359,7 +1425,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         onChange={(e) => updatePending(pt.id, { subCategory: e.target.value, subSubCategory: '' })}
                         className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
                       >
-                        <option value="">None</option>
+                        <option value="">Sin subcategoria</option>
                         {(userCategories.find(c => c.name === pt.category)?.subCategories || []).map((s: any) => {
                           const name = typeof s === 'string' ? s : s.name;
                           return <option key={name} value={name}>{name}</option>;
@@ -1400,13 +1466,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                       if (sub && typeof sub !== 'string' && sub.subCategories?.length > 0) {
                         return (
                           <div className="w-48 space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sub-sub-category</label>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Detalle</label>
                             <select
                               value={pt.subSubCategory}
                               onChange={(e) => updatePending(pt.id, { subSubCategory: e.target.value })}
                               className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
                             >
-                              <option value="">None</option>
+                              <option value="">Sin detalle</option>
                               {(sub.subCategories || []).map((ss: any) => {
                                 const name = typeof ss === 'string' ? ss : ss.name;
                                 return <option key={name} value={name}>{name}</option>;
@@ -2505,6 +2571,22 @@ function ReviewMiniStat({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl bg-neutral-50 px-4 py-3">
       <p className="text-xl font-black text-neutral-950">{value}</p>
       <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+    </div>
+  );
+}
+
+function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'warn' | 'danger' | 'info' }) {
+  const toneClass = {
+    neutral: 'border-white bg-white text-neutral-950',
+    warn: 'border-amber-200 bg-amber-100 text-amber-900',
+    danger: 'border-red-200 bg-red-50 text-red-800',
+    info: 'border-blue-100 bg-blue-50 text-blue-800',
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
+      <p className="text-2xl font-black">{value}</p>
+      <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
     </div>
   );
 }
