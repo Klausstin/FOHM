@@ -32,6 +32,7 @@ import {
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
+import { formatAccountBalance } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
@@ -347,8 +348,11 @@ export default function FinanceTracker({ user }: { user: any }) {
         paymentStatus
       };
 
-      await createFinancialTransaction(transactionInput);
+      const transactionRef = await createFinancialTransaction(transactionInput);
       await applyTransactionToAccountBalances(transactionInput);
+      if (transactionRef?.id) {
+        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: true } as any);
+      }
       setAmount('');
       setDescription('');
       setNote('');
@@ -499,6 +503,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         transactionFingerprint: pt.transactionFingerprint || '',
         statementFingerprint: pt.statementFingerprint || '',
         duplicateReason: pt.duplicateReason || '',
+        accountBalanceApplied: false,
       });
 
       // Save mapping for learning
@@ -744,12 +749,27 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const handleConfirmReviewedFinance = async (finance: any) => {
     try {
+      if (finance.accountId && !finance.accountBalanceApplied) {
+        await applyTransactionToAccountBalances({
+          uid: finance.uid || user.uid,
+          householdId: finance.householdId || user.householdId,
+          amount: Number(finance.amount || 0),
+          currency: finance.currency || 'ARS',
+          description: finance.description || '',
+          category: finance.category || 'Sin categoria',
+          type: finance.type || 'expense',
+          accountId: finance.accountId || '',
+          toAccountId: finance.toAccountId || '',
+          date: typeof finance.date?.toDate === 'function' ? finance.date.toDate() : new Date(finance.date),
+        } as any);
+      }
       await updateFinancialTransaction(finance.id, {
         status: 'posted',
         confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
         needsReview: false,
         isConfirmed: true,
         paymentStatus: 'Contabilizado',
+        accountBalanceApplied: finance.accountId ? true : Boolean(finance.accountBalanceApplied),
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
@@ -758,13 +778,29 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const handleResolveReviewedFinance = async (finance: any, accountId?: string) => {
     try {
+      const resolvedAccountId = accountId ?? finance.accountId ?? '';
+      if (resolvedAccountId && !finance.accountBalanceApplied) {
+        await applyTransactionToAccountBalances({
+          uid: finance.uid || user.uid,
+          householdId: finance.householdId || user.householdId,
+          amount: Number(finance.amount || 0),
+          currency: finance.currency || 'ARS',
+          description: finance.description || '',
+          category: finance.category || 'Sin categoria',
+          type: finance.type || 'expense',
+          accountId: resolvedAccountId,
+          toAccountId: finance.toAccountId || '',
+          date: typeof finance.date?.toDate === 'function' ? finance.date.toDate() : new Date(finance.date),
+        } as any);
+      }
       await updateFinancialTransaction(finance.id, {
-        accountId: accountId ?? finance.accountId ?? '',
+        accountId: resolvedAccountId,
         status: 'posted',
         confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
         needsReview: false,
         isConfirmed: true,
         paymentStatus: 'Contabilizado',
+        accountBalanceApplied: resolvedAccountId ? true : Boolean(finance.accountBalanceApplied),
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
@@ -1053,7 +1089,7 @@ export default function FinanceTracker({ user }: { user: any }) {
               <h4 className="font-bold text-neutral-800 mb-1">{acc.name}</h4>
               <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">{acc.type}</p>
               <p className="text-2xl font-black text-neutral-900">
-                {acc.balance?.toLocaleString()} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
+                {formatAccountBalance(Number(acc.balance || 0), acc.type)} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
               </p>
             </div>
           </motion.div>

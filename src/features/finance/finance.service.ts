@@ -6,6 +6,7 @@ import type {
   FinancialAccountRecord,
   FinancialTransactionRecord,
 } from './finance.types';
+import { getAccountBalanceDelta } from './finance.accounts.ts';
 
 export function subscribeToHouseholdFinancialTransactions(
   householdId: string,
@@ -54,7 +55,7 @@ export async function deleteFinancialAccount(accountId: string) {
 }
 
 export async function createFinancialTransaction(input: CreateFinancialTransactionInput) {
-  await addDoc(collection(db, 'finances'), {
+  return addDoc(collection(db, 'finances'), {
     uid: input.uid,
     householdId: input.householdId,
     amount: input.amount,
@@ -89,6 +90,7 @@ export async function createFinancialTransaction(input: CreateFinancialTransacti
     statementFingerprint: input.statementFingerprint || '',
     duplicateOfId: input.duplicateOfId || '',
     duplicateReason: input.duplicateReason || '',
+    accountBalanceApplied: Boolean(input.accountBalanceApplied),
     createdAt: new Date(),
   });
 }
@@ -110,9 +112,12 @@ export async function applyTransactionToAccountBalances(input: CreateFinancialTr
     const accountSnap = await getDoc(accountRef);
     if (accountSnap.exists()) {
       const currentBalance = accountSnap.data().balance || 0;
-      let newBalance = currentBalance;
-      if (input.type === 'income') newBalance += input.amount;
-      else if (input.type === 'expense' || input.type === 'transfer') newBalance -= input.amount;
+      const newBalance = currentBalance + getAccountBalanceDelta({
+        accountType: accountSnap.data().type,
+        transactionType: input.type,
+        amount: input.amount,
+        direction: 'source',
+      });
       await updateDoc(accountRef, { balance: newBalance });
     }
   }
@@ -122,7 +127,13 @@ export async function applyTransactionToAccountBalances(input: CreateFinancialTr
     const toAccountSnap = await getDoc(toAccountRef);
     if (toAccountSnap.exists()) {
       const currentBalance = toAccountSnap.data().balance || 0;
-      await updateDoc(toAccountRef, { balance: currentBalance + input.amount });
+      const newBalance = currentBalance + getAccountBalanceDelta({
+        accountType: toAccountSnap.data().type,
+        transactionType: input.type,
+        amount: input.amount,
+        direction: 'destination',
+      });
+      await updateDoc(toAccountRef, { balance: newBalance });
     }
   }
 }

@@ -63,6 +63,7 @@ export interface FinancialTransactionRecord {
   statementFingerprint?: string;
   duplicateOfId?: string;
   duplicateReason?: string;
+  accountBalanceApplied?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -112,6 +113,7 @@ export interface CreateFinancialTransactionInput {
   statementFingerprint?: string;
   duplicateOfId?: string;
   duplicateReason?: string;
+  accountBalanceApplied?: boolean;
 }
 
 export interface CatchupDraftInput {
