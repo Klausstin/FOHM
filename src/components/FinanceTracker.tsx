@@ -111,6 +111,47 @@ function normalizeDuplicateText(value: string) {
     .trim();
 }
 
+function enrichImportedTransactionWithAccounts(transaction: any, accounts: any[]) {
+  const accountId = transaction.accountId || findSuggestedSourceAccount(transaction, accounts);
+  const toAccountId = transaction.toAccountId || findSuggestedDestinationAccount(transaction, accounts);
+  const needsAccountReview = transaction.type === 'transfer' ? !accountId || !toAccountId : !accountId;
+
+  return {
+    ...transaction,
+    accountId,
+    toAccountId,
+    needsReview: Boolean(transaction.needsReview || needsAccountReview),
+  };
+}
+
+function findSuggestedSourceAccount(transaction: any, accounts: any[]) {
+  if (transaction.importSource === 'bbva_visa') return findVisaCreditCardAccount(accounts)?.id || '';
+  if (transaction.importSource === 'bbva_caja_ahorro_ars') return findCajaAhorroAccount(accounts)?.id || '';
+  return '';
+}
+
+function findSuggestedDestinationAccount(transaction: any, accounts: any[]) {
+  const text = normalizeDuplicateText(`${transaction.description || ''} ${transaction.subCategory || ''}`);
+  if (transaction.type === 'transfer' && text.includes('visa')) {
+    return findVisaCreditCardAccount(accounts)?.id || '';
+  }
+  return '';
+}
+
+function findVisaCreditCardAccount(accounts: any[]) {
+  return accounts.find(account => {
+    const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''}`);
+    return account.type === 'credit_card' && text.includes('visa');
+  }) || accounts.find(account => account.type === 'credit_card');
+}
+
+function findCajaAhorroAccount(accounts: any[]) {
+  return accounts.find(account => {
+    const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''} ${account.currency || ''}`);
+    return account.currency === 'ARS' && (text.includes('caja') || text.includes('ahorro') || text.includes('bbva'));
+  }) || accounts.find(account => account.currency === 'ARS' && account.type === 'bank');
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -130,6 +171,8 @@ interface PendingTransaction {
   subCategory?: string;
   subSubCategory?: string;
   type: string;
+  accountId?: string;
+  toAccountId?: string;
   date: string;
   isFixed: boolean;
   originalDescription: string;
@@ -400,16 +443,17 @@ export default function FinanceTracker({ user }: { user: any }) {
               ? finances.some(finance => finance.statementFingerprint === parsedStatement.statement?.statementFingerprint)
               : false;
             const mapped = parsedStatement.transactions.map((transaction: any) => {
+              const enrichedTransaction = enrichImportedTransactionWithAccounts(transaction, userAccounts);
               const duplicateReason = duplicateStatement
                 ? 'Este resumen parece ya importado.'
-                : findLikelyDuplicateReason(transaction, finances);
+                : findLikelyDuplicateReason(enrichedTransaction, finances);
               return {
-                ...transaction,
+                ...enrichedTransaction,
                 id: Math.random().toString(36).substr(2, 9),
-                originalDescription: transaction.description,
+                originalDescription: enrichedTransaction.description,
                 fileName: file.name,
                 duplicateReason,
-                needsReview: transaction.needsReview || duplicateStatement || Boolean(duplicateReason),
+                needsReview: enrichedTransaction.needsReview || duplicateStatement || Boolean(duplicateReason),
               };
             });
             resolve(mapped);
@@ -423,15 +467,16 @@ export default function FinanceTracker({ user }: { user: any }) {
           }
 
           const mapped = transactions.map((t: any) => {
-            const duplicateReason = findLikelyDuplicateReason(t, finances);
+            const enrichedTransaction = enrichImportedTransactionWithAccounts(t, userAccounts);
+            const duplicateReason = findLikelyDuplicateReason(enrichedTransaction, finances);
             return {
-              ...t,
+              ...enrichedTransaction,
               id: Math.random().toString(36).substr(2, 9),
-              originalDescription: t.description,
+              originalDescription: enrichedTransaction.description,
               fileName: file.name,
-              confidence: t.confidence || 0,
+              confidence: enrichedTransaction.confidence || 0,
               duplicateReason,
-              needsReview: t.needsReview || Boolean(duplicateReason),
+              needsReview: enrichedTransaction.needsReview || Boolean(duplicateReason),
             };
           });
           resolve(mapped);
@@ -461,7 +506,7 @@ export default function FinanceTracker({ user }: { user: any }) {
     } finally {
       setIsProcessingPdf(false);
     }
-  }, [user.uid, userMappings]);
+  }, [user.uid, userMappings, userAccounts, finances]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop, 
@@ -471,7 +516,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const confirmTransaction = async (pt: PendingTransaction) => {
     try {
-      await createFinancialTransaction({
+      const transactionInput: CreateFinancialTransactionInput = {
         uid: user.uid,
         householdId: user.householdId,
         amount: pt.amount,
@@ -482,9 +527,9 @@ export default function FinanceTracker({ user }: { user: any }) {
         subCategory: pt.subCategory || '',
         subSubCategory: pt.subSubCategory || '',
         type: pt.type,
-        accountId: '',
-        toAccountId: '',
-        tags: ['pdf'],
+        accountId: pt.accountId || '',
+        toAccountId: pt.toAccountId || '',
+        tags: ['pdf', ...(pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' ? ['pago-tarjeta'] : [])],
         isFixed: pt.isFixed,
         date: new Date(pt.date),
         source: 'pdf',
@@ -504,7 +549,13 @@ export default function FinanceTracker({ user }: { user: any }) {
         statementFingerprint: pt.statementFingerprint || '',
         duplicateReason: pt.duplicateReason || '',
         accountBalanceApplied: false,
-      });
+      };
+
+      const transactionRef = await createFinancialTransaction(transactionInput);
+      if (transactionInput.accountId) {
+        await applyTransactionToAccountBalances(transactionInput);
+        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: true } as any);
+      }
 
       // Save mapping for learning
       const existingMapping = userMappings.find(m => m.originalDescription.toLowerCase() === pt.originalDescription.toLowerCase());
@@ -776,9 +827,10 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
-  const handleResolveReviewedFinance = async (finance: any, accountId?: string) => {
+  const handleResolveReviewedFinance = async (finance: any, accountId?: string, toAccountId?: string) => {
     try {
       const resolvedAccountId = accountId ?? finance.accountId ?? '';
+      const resolvedToAccountId = toAccountId ?? finance.toAccountId ?? '';
       if (resolvedAccountId && !finance.accountBalanceApplied) {
         await applyTransactionToAccountBalances({
           uid: finance.uid || user.uid,
@@ -789,12 +841,13 @@ export default function FinanceTracker({ user }: { user: any }) {
           category: finance.category || 'Sin categoria',
           type: finance.type || 'expense',
           accountId: resolvedAccountId,
-          toAccountId: finance.toAccountId || '',
+          toAccountId: resolvedToAccountId,
           date: typeof finance.date?.toDate === 'function' ? finance.date.toDate() : new Date(finance.date),
         } as any);
       }
       await updateFinancialTransaction(finance.id, {
         accountId: resolvedAccountId,
+        toAccountId: resolvedToAccountId,
         status: 'posted',
         confidence: finance.confidence === 'inferred' ? 'estimated' : (finance.confidence || 'estimated'),
         needsReview: false,
@@ -1313,6 +1366,34 @@ export default function FinanceTracker({ user }: { user: any }) {
                         })}
                       </select>
                     </div>
+                    <div className="w-56 space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
+                      <select
+                        value={pt.accountId || ''}
+                        onChange={(e) => updatePending(pt.id, { accountId: e.target.value })}
+                        className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
+                      >
+                        <option value="">Elegir cuenta</option>
+                        {(userAccounts || []).map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                        ))}
+                      </select>
+                    </div>
+                    {pt.type === 'transfer' && (
+                      <div className="w-56 space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta destino</label>
+                        <select
+                          value={pt.toAccountId || ''}
+                          onChange={(e) => updatePending(pt.id, { toAccountId: e.target.value })}
+                          className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
+                        >
+                          <option value="">Elegir destino</option>
+                          {(userAccounts || []).map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {pt.subCategory && (() => {
                       const cat = userCategories.find(c => c.name === pt.category);
                       const sub = cat?.subCategories?.find((s: any) => (typeof s === 'string' ? s : s.name) === pt.subCategory);
@@ -1365,6 +1446,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                   {pt.duplicateReason && (
                     <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold leading-5 text-red-800">
                       Posible duplicado: {pt.duplicateReason}
+                    </div>
+                  )}
+                  {pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' && (
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold leading-5 text-blue-800">
+                      Pago de tarjeta: VEO lo registra como transferencia entre cuentas, no como gasto nuevo.
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-[10px] text-amber-600 font-bold">
@@ -2266,12 +2352,13 @@ function FinanceReviewCenter({
 }: {
   reviewFinances: any[];
   accounts: any[];
-  onConfirm: (finance: any, accountId?: string) => void;
+  onConfirm: (finance: any, accountId?: string, toAccountId?: string) => void;
   onEdit: (finance: any) => void;
   onIgnore: (finance: any) => void;
   onViewAll: () => void;
 }) {
   const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
+  const [selectedDestinationAccounts, setSelectedDestinationAccounts] = useState<Record<string, string>>({});
   const visibleReviews = reviewFinances.slice(0, 3);
   const luzReviews = reviewFinances.filter(finance => finance.source === 'manual' && finance.needsReview);
   const estimatedReviews = reviewFinances.filter(finance => finance.source === 'catchup_estimate' || finance.confidence === 'estimated' || finance.confidence === 'inferred');
@@ -2309,6 +2396,7 @@ function FinanceReviewCenter({
       <div className="grid gap-3 xl:grid-cols-3">
         {visibleReviews.map(finance => {
           const selectedAccount = selectedAccounts[finance.id] ?? finance.accountId ?? '';
+          const selectedDestinationAccount = selectedDestinationAccounts[finance.id] ?? finance.toAccountId ?? '';
           const account = accounts.find(item => item.id === selectedAccount);
 
           return (
@@ -2337,6 +2425,21 @@ function FinanceReviewCenter({
                     <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
                   ))}
                 </select>
+                {finance.type === 'transfer' && (
+                  <>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-amber-700">Destino</label>
+                    <select
+                      value={selectedDestinationAccount}
+                      onChange={(event) => setSelectedDestinationAccounts(prev => ({ ...prev, [finance.id]: event.target.value }))}
+                      className="w-full rounded-2xl border border-amber-100 bg-white px-3 py-3 text-sm font-bold text-neutral-900 outline-none"
+                    >
+                      <option value="">Sin destino</option>
+                      {accounts.map(account => (
+                        <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
                   <span>{finance.category || 'Sin categoria'}</span>
                   {finance.paymentType && <span>{finance.paymentType}</span>}
@@ -2359,7 +2462,7 @@ function FinanceReviewCenter({
               <div className="mt-4 grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => onConfirm(finance, selectedAccount)}
+                  onClick={() => onConfirm(finance, selectedAccount, selectedDestinationAccount)}
                   className="rounded-2xl bg-neutral-950 px-3 py-2 text-xs font-black text-white transition hover:bg-neutral-800"
                 >
                   OK
