@@ -360,7 +360,7 @@ function suggestMovementClassification(description: string, signedAmount: number
 
   if (normalized.includes('cuenta visa') || normalized.includes('pago de servicios tarjeta')) {
     return {
-      type: 'expense' as const,
+      type: 'transfer' as const,
       category: 'Finanzas',
       subCategory: 'Pago de tarjeta',
       isFixed: false,
