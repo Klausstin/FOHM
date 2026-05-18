@@ -34,12 +34,23 @@ export interface FinancialProjection {
   inflationAdjustedExpense12Months?: number;
 }
 
+export interface MonthlyExpenseProfile {
+  fixedDeclared: number;
+  recurringDetected: number;
+  variable: number;
+  unusual: number;
+  totalExpenses: number;
+  month?: string;
+}
+
 export interface FinancialInsights {
   fixedDeclared: RecurringExpenseInsight[];
   recurringDetected: RecurringExpenseInsight[];
   unusualExpenses: UnusualExpenseInsight[];
+  monthlyProfile: MonthlyExpenseProfile;
   projection: FinancialProjection;
   summaryBullets: string[];
+  luzRead: string;
 }
 
 export function buildFinancialInsights(transactions: FinancialTransactionRecord[], inflationMonthlyRate?: number | null): FinancialInsights {
@@ -51,7 +62,9 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
   const fixedDeclared = recurring.filter(item => item.declaredFixed);
   const recurringDetected = recurring.filter(item => !item.declaredFixed);
   const unusualExpenses = detectUnusualExpenses(expenses, recurring);
+  const monthlyProfile = buildMonthlyExpenseProfile(expenses, recurring, unusualExpenses);
   const projection = buildProjection(monthly, inflationMonthlyRate);
+  const luzRead = buildLuzFinancialRead(monthlyProfile, recurringDetected, unusualExpenses, projection);
 
   const summaryBullets = [
     fixedDeclared.length > 0
@@ -72,9 +85,102 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
     fixedDeclared,
     recurringDetected,
     unusualExpenses,
+    monthlyProfile,
     projection,
     summaryBullets,
+    luzRead,
   };
+}
+
+function buildMonthlyExpenseProfile(
+  expenses: FinancialTransactionRecord[],
+  recurring: RecurringExpenseInsight[],
+  unusualExpenses: UnusualExpenseInsight[],
+): MonthlyExpenseProfile {
+  const usableExpenses = expenses
+    .map(expense => ({ expense, date: toDate(expense.date) }))
+    .filter(item => item.date);
+  const latestMonth = usableExpenses
+    .map(item => monthKey(item.date))
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  if (!latestMonth) {
+    return { fixedDeclared: 0, recurringDetected: 0, variable: 0, unusual: 0, totalExpenses: 0 };
+  }
+
+  const recurringByKey = new Map(recurring.map(item => [item.key, item]));
+  const unusualIds = new Set(unusualExpenses.map(item => item.id));
+  const monthExpenses = usableExpenses
+    .filter(item => monthKey(item.date) === latestMonth)
+    .map(item => item.expense);
+
+  let fixedDeclared = 0;
+  let recurringDetected = 0;
+  let variable = 0;
+  let unusual = 0;
+
+  for (const expense of monthExpenses) {
+    const amount = Number(expense.amount || 0);
+    const key = buildRecurringKey(expense);
+    const recurringItem = key ? recurringByKey.get(key) : undefined;
+
+    if (unusualIds.has(expense.id)) {
+      unusual += amount;
+    } else if (expense.isFixed || recurringItem?.declaredFixed) {
+      fixedDeclared += amount;
+    } else if (recurringItem) {
+      recurringDetected += amount;
+    } else {
+      variable += amount;
+    }
+  }
+
+  return {
+    fixedDeclared,
+    recurringDetected,
+    variable,
+    unusual,
+    totalExpenses: fixedDeclared + recurringDetected + variable + unusual,
+    month: latestMonth,
+  };
+}
+
+function buildLuzFinancialRead(
+  monthlyProfile: MonthlyExpenseProfile,
+  recurringDetected: RecurringExpenseInsight[],
+  unusualExpenses: UnusualExpenseInsight[],
+  projection: FinancialProjection,
+) {
+  if (monthlyProfile.totalExpenses === 0) {
+    return 'Todavia falta data para leer tu patron financiero. Subi resumenes o registra movimientos para que VEO empiece a aprender.';
+  }
+
+  const fixedLike = monthlyProfile.fixedDeclared + monthlyProfile.recurringDetected;
+  const fixedShare = fixedLike / monthlyProfile.totalExpenses;
+  const signals: string[] = [];
+
+  if (recurringDetected.length > 0) {
+    signals.push(`${recurringDetected.length} gasto(s) parecen habituales aunque todavia no los marcaste como fijos`);
+  }
+  if (unusualExpenses.length > 0) {
+    signals.push(`${unusualExpenses.length} gasto(s) sobresalen del patron`);
+  }
+  if (fixedShare >= 0.65) {
+    signals.push('la parte rigida de tus gastos pesa fuerte este mes');
+  } else if (fixedShare <= 0.3) {
+    signals.push('todavia hay margen para entender mejor que gastos son realmente estructurales');
+  }
+  if (projection.monthlyNetAverage < 0) {
+    signals.push('el promedio reciente proyecta perdida si no cambia nada');
+  }
+
+  if (signals.length === 0) {
+    return 'Con la data actual, tus gastos no muestran tensiones fuertes. Conviene seguir cargando resumenes para confirmar si el patron se sostiene.';
+  }
+
+  return `Con la data actual, Luz ve que ${signals.join(', ')}.`;
 }
 
 function detectRecurringExpenses(expenses: FinancialTransactionRecord[]) {
