@@ -2702,6 +2702,7 @@ function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buil
   const topRecurring = insights.recurringDetected.slice(0, 4);
   const topFixed = insights.fixedDeclared.slice(0, 3);
   const topUnusual = insights.unusualExpenses.slice(0, 3);
+  const profile = insights.monthlyProfile;
 
   return (
     <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
@@ -2722,6 +2723,18 @@ function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buil
               <p className="text-sm font-bold leading-6 text-neutral-700">{bullet}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-4 rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Lectura corta</p>
+          <p className="mt-2 text-sm font-bold leading-6 text-neutral-800">{insights.luzRead}</p>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <ExpenseProfileStat label="Fijo declarado" value={profile.fixedDeclared} />
+          <ExpenseProfileStat label="Recurrente detectado" value={profile.recurringDetected} />
+          <ExpenseProfileStat label="Variable" value={profile.variable} />
+          <ExpenseProfileStat label="Extraordinario" value={profile.unusual} />
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
@@ -2785,6 +2798,15 @@ function InsightList({ title, empty, items }: { title: string; empty: string; it
           <p className="rounded-2xl bg-neutral-50 p-3 text-sm font-bold text-neutral-400">{empty}</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function ExpenseProfileStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[1.25rem] border border-neutral-100 bg-white p-4">
+      <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+      <p className="mt-2 text-xl font-black text-neutral-950">{value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
     </div>
   );
 }
