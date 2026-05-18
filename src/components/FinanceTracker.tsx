@@ -917,6 +917,23 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleMarkRecurringAsFixed = async (insight: any) => {
+    if (!insight?.transactionIds?.length) return;
+
+    try {
+      await Promise.all(
+        insight.transactionIds.map((transactionId: string) =>
+          updateFinancialTransaction(transactionId, {
+            isFixed: true,
+            needsReview: false,
+          } as any),
+        ),
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'finances');
+    }
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -991,7 +1008,10 @@ export default function FinanceTracker({ user }: { user: any }) {
         onOpenCatchupWizard={openCatchupWizard}
       />
 
-      <FinancialInsightsPanel insights={financialInsights} />
+      <FinancialInsightsPanel
+        insights={financialInsights}
+        onMarkRecurringAsFixed={handleMarkRecurringAsFixed}
+      />
 
       <AnimatePresence>
         {showCatchupWizard && (
@@ -2698,7 +2718,13 @@ function FinanceCatchupSessionPanel({
   );
 }
 
-function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buildFinancialInsights> }) {
+function FinancialInsightsPanel({
+  insights,
+  onMarkRecurringAsFixed,
+}: {
+  insights: ReturnType<typeof buildFinancialInsights>;
+  onMarkRecurringAsFixed: (insight: ReturnType<typeof buildFinancialInsights>['recurringDetected'][number]) => void;
+}) {
   const topRecurring = insights.recurringDetected.slice(0, 4);
   const topFixed = insights.fixedDeclared.slice(0, 3);
   const topUnusual = insights.unusualExpenses.slice(0, 3);
@@ -2752,6 +2778,8 @@ function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buil
             items={topRecurring.map(item => ({
               title: item.label,
               detail: `${item.monthsSeen} mes(es) - ${item.averageAmount.toLocaleString()} ${item.currency}`,
+              actionLabel: 'Marcar fijo',
+              onAction: () => onMarkRecurringAsFixed(item),
             }))}
           />
           <InsightList
@@ -2784,7 +2812,15 @@ function FinancialInsightsPanel({ insights }: { insights: ReturnType<typeof buil
   );
 }
 
-function InsightList({ title, empty, items }: { title: string; empty: string; items: { title: string; detail: string }[] }) {
+function InsightList({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: { title: string; detail: string; actionLabel?: string; onAction?: () => void }[];
+}) {
   return (
     <div className="rounded-[1.5rem] border border-neutral-100 p-4">
       <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{title}</p>
@@ -2793,6 +2829,15 @@ function InsightList({ title, empty, items }: { title: string; empty: string; it
           <div key={`${item.title}-${item.detail}`} className="rounded-2xl bg-neutral-50 p-3">
             <p className="truncate text-sm font-black text-neutral-900">{item.title}</p>
             <p className="mt-1 text-xs font-semibold text-neutral-500">{item.detail}</p>
+            {item.actionLabel && item.onAction && (
+              <button
+                type="button"
+                onClick={item.onAction}
+                className="mt-3 rounded-full bg-neutral-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+              >
+                {item.actionLabel}
+              </button>
+            )}
           </div>
         )) : (
           <p className="rounded-2xl bg-neutral-50 p-3 text-sm font-bold text-neutral-400">{empty}</p>

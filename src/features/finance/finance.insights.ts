@@ -7,6 +7,7 @@ export interface RecurringExpenseInsight {
   category: string;
   averageAmount: number;
   currency: string;
+  transactionIds: string[];
   monthsSeen: number;
   lastSeen?: Date | null;
   confidence: 'medium' | 'high';
@@ -210,6 +211,7 @@ function detectRecurringExpenses(expenses: FinancialTransactionRecord[]) {
         category: first.category || 'Sin categoria',
         averageAmount,
         currency: first.currency || 'ARS',
+        transactionIds: items.map(item => item.id).filter(Boolean),
         monthsSeen: months.size,
         lastSeen,
         confidence: months.size >= 4 ? 'high' as const : 'medium' as const,
