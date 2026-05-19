@@ -132,24 +132,38 @@ function findSuggestedSourceAccount(transaction: any, accounts: any[]) {
 
 function findSuggestedDestinationAccount(transaction: any, accounts: any[]) {
   const text = normalizeDuplicateText(`${transaction.description || ''} ${transaction.subCategory || ''}`);
-  if (transaction.type === 'transfer' && text.includes('visa')) {
-    return findVisaCreditCardAccount(accounts)?.id || '';
+  if (transaction.type === 'transfer' && (text.includes('visa') || text.includes('master') || text.includes('mastercard') || text.includes('mc'))) {
+    return findCreditCardAccountByText(accounts, text)?.id || '';
   }
   return '';
 }
 
 function findVisaCreditCardAccount(accounts: any[]) {
-  return accounts.find(account => {
+  return findCreditCardAccountByText(accounts, 'visa');
+}
+
+function findCreditCardAccountByText(accounts: any[], sourceText: string) {
+  const wantsVisa = sourceText.includes('visa');
+  const wantsMastercard = sourceText.includes('mastercard') || sourceText.includes('master') || sourceText.includes('mc');
+
+  const exactMatch = accounts.find(account => {
     const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''}`);
-    return account.type === 'credit_card' && text.includes('visa');
-  }) || accounts.find(account => account.type === 'credit_card');
+    if (account.type !== 'credit_card') return false;
+    if (wantsVisa) return text.includes('visa');
+    if (wantsMastercard) return text.includes('mastercard') || text.includes('master') || text.includes('mc');
+    return false;
+  });
+
+  if (exactMatch) return exactMatch;
+  return wantsVisa || wantsMastercard ? undefined : accounts.find(account => account.type === 'credit_card');
 }
 
 function findCajaAhorroAccount(accounts: any[]) {
-  return accounts.find(account => {
+  const assetAccounts = accounts.filter(account => account.type !== 'credit_card');
+  return assetAccounts.find(account => {
     const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''} ${account.currency || ''}`);
-    return account.currency === 'ARS' && (text.includes('caja') || text.includes('ahorro') || text.includes('bbva'));
-  }) || accounts.find(account => account.currency === 'ARS' && account.type === 'bank');
+    return account.currency === 'ARS' && (text.includes('caja') || text.includes('ahorro') || text.includes('cuenta sueldo') || text.includes('bbva'));
+  }) || assetAccounts.find(account => account.currency === 'ARS' && account.type === 'bank');
 }
 
 function pendingTransactionNeedsAccount(pt: Partial<PendingTransaction>) {
