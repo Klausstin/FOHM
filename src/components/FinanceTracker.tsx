@@ -175,6 +175,23 @@ function canConfirmPendingTransaction(pt: PendingTransaction) {
   return !pt.duplicateReason && !pendingTransactionNeedsAccount(pt);
 }
 
+function getPendingCategoryType(category: string) {
+  const normalizedCategory = normalizeDuplicateText(category || '');
+  if (normalizedCategory.includes('ingreso')) return 'income';
+  if (normalizedCategory.includes('transferencia') || normalizedCategory.includes('finanza')) return 'transfer';
+  return 'expense';
+}
+
+function formatPendingDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-AR');
+}
+
+function shortFingerprint(value?: string) {
+  if (!value) return '';
+  return value.length > 18 ? `${value.slice(0, 18)}...` : value;
+}
+
 function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   const originalText = normalizeDuplicateText(transaction.originalDescription || transaction.description || '');
   const merchantKey = transaction.merchantKey || '';
@@ -1614,6 +1631,26 @@ export default function FinanceTracker({ user }: { user: any }) {
             <div className="grid grid-cols-1 gap-4">
               {(pendingTransactions || []).map((pt) => (
                 <div key={pt.id} className="bg-white p-6 rounded-2xl border border-amber-100 shadow-sm space-y-4">
+                  <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <PendingMeta label="Fecha" value={formatPendingDate(pt.date)} />
+                      <PendingMeta label="Moneda" value={pt.currency || 'ARS'} />
+                      <PendingMeta label="Detectado como" value={FINANCE_TYPES.find(item => item.id === pt.type)?.label || pt.type} />
+                      <PendingMeta label="Confianza" value={`${Math.round(Number(pt.confidence || 0) * 100)}%`} />
+                      <PendingMeta label="Comercio" value={pt.merchantName || 'No identificado'} />
+                      <PendingMeta label="Fuente" value={pt.importSource || 'PDF'} />
+                      <PendingMeta label="Archivo" value={pt.fileName} />
+                      <PendingMeta label="Huella" value={shortFingerprint(pt.transactionFingerprint)} />
+                    </div>
+                    {typeof (pt as any).balanceDelta === 'number' && (
+                      <p className="mt-3 text-xs font-bold text-neutral-500">
+                        Impacto en saldo del resumen: {(pt as any).balanceDelta.toLocaleString()} {pt.currency || 'ARS'}
+                      </p>
+                    )}
+                    <p className="mt-3 text-xs font-bold text-neutral-500">
+                      Concepto original del PDF: <span className="text-neutral-900">{pt.originalDescription || pt.description}</span>
+                    </p>
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex-1 min-w-[200px] space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Descripcion</label>
@@ -1637,11 +1674,34 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
                       <select 
                         value={pt.category}
-                        onChange={(e) => updatePending(pt.id, { category: e.target.value, subCategory: '' })}
+                        onChange={(e) => {
+                          const nextType = getPendingCategoryType(e.target.value);
+                          updatePending(pt.id, {
+                            category: e.target.value,
+                            subCategory: '',
+                            type: nextType,
+                            toAccountId: nextType === 'transfer' ? pt.toAccountId : '',
+                          });
+                        }}
                         className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
                       >
                         <option value="">Elegir categoria</option>
                         {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="w-44 space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo</label>
+                      <select
+                        value={pt.type}
+                        onChange={(e) => updatePending(pt.id, {
+                          type: e.target.value,
+                          toAccountId: e.target.value === 'transfer' ? pt.toAccountId : '',
+                        })}
+                        className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
+                      >
+                        {(FINANCE_TYPES || []).map(t => (
+                          <option key={t.id} value={t.id}>{t.label}</option>
+                        ))}
                       </select>
                     </div>
                     <div className="w-48 space-y-1">
@@ -1728,7 +1788,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </button>
                         <button 
                           onClick={() => confirmTransaction(pt)}
-                          className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-700 transition-all shadow-md flex items-center gap-2"
+                          disabled={!canConfirmPendingTransaction(pt)}
+                          title={!canConfirmPendingTransaction(pt) ? 'Falta cuenta origen/destino o hay posible duplicado.' : 'Confirmar movimiento'}
+                          className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-700 transition-all shadow-md flex items-center gap-2 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:shadow-none"
                         >
                           <Check size={16} /> Confirmar
                         </button>
@@ -1743,6 +1805,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                   {pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' && (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold leading-5 text-blue-800">
                       Pago de tarjeta: VEO lo registra como transferencia entre cuentas, no como gasto nuevo.
+                    </div>
+                  )}
+                  {pendingTransactionNeedsAccount(pt) && (
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
+                      {pt.type === 'transfer'
+                        ? 'Para confirmar una transferencia falta elegir cuenta origen y destino. Si en realidad fue un gasto, cambia el tipo a Gasto.'
+                        : 'Para confirmar este movimiento falta elegir la cuenta origen.'}
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-[10px] text-amber-600 font-bold">
@@ -2813,6 +2882,15 @@ function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; v
     <div className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
       <p className="text-2xl font-black">{value}</p>
       <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
+    </div>
+  );
+}
+
+function PendingMeta({ label, value }: { label: string; value?: string | number }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+      <p className="mt-1 truncate text-xs font-black text-neutral-800">{value || '-'}</p>
     </div>
   );
 }
