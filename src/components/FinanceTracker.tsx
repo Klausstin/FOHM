@@ -161,6 +161,28 @@ function canConfirmPendingTransaction(pt: PendingTransaction) {
   return !pt.duplicateReason && !pendingTransactionNeedsAccount(pt);
 }
 
+function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
+  const originalText = normalizeDuplicateText(transaction.originalDescription || transaction.description || '');
+  const merchantKey = transaction.merchantKey || '';
+  const learnedMapping = mappings.find(mapping => {
+    const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
+    return (merchantKey && mapping.merchantKey === merchantKey) || (mappingText && mappingText === originalText);
+  });
+
+  if (!learnedMapping) return transaction;
+
+  return {
+    ...transaction,
+    description: learnedMapping.mappedDescription || transaction.description,
+    category: learnedMapping.category || transaction.category,
+    subCategory: learnedMapping.subCategory || transaction.subCategory || '',
+    subSubCategory: learnedMapping.subSubCategory || transaction.subSubCategory || '',
+    isFixed: learnedMapping.isFixed ?? transaction.isFixed,
+    merchantName: learnedMapping.merchantName || transaction.merchantName,
+    merchantKey: learnedMapping.merchantKey || transaction.merchantKey,
+  };
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -484,7 +506,8 @@ export default function FinanceTracker({ user }: { user: any }) {
               ? finances.some(finance => finance.statementFingerprint === parsedStatement.statement?.statementFingerprint)
               : false;
             const mapped = parsedStatement.transactions.map((transaction: any) => {
-              const enrichedTransaction = enrichImportedTransactionWithAccounts(transaction, userAccounts);
+              const learnedTransaction = applyLearnedFinanceMapping(transaction, userMappings);
+              const enrichedTransaction = enrichImportedTransactionWithAccounts(learnedTransaction, userAccounts);
               const duplicateReason = duplicateStatement
                 ? 'Este resumen parece ya importado.'
                 : findLikelyDuplicateReason(enrichedTransaction, finances);
@@ -508,7 +531,8 @@ export default function FinanceTracker({ user }: { user: any }) {
           }
 
           const mapped = transactions.map((t: any) => {
-            const enrichedTransaction = enrichImportedTransactionWithAccounts(t, userAccounts);
+            const learnedTransaction = applyLearnedFinanceMapping(t, userMappings);
+            const enrichedTransaction = enrichImportedTransactionWithAccounts(learnedTransaction, userAccounts);
             const duplicateReason = findLikelyDuplicateReason(enrichedTransaction, finances);
             return {
               ...enrichedTransaction,
@@ -679,7 +703,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const saveEdit = async () => {
     if (!editingId || !editForm) return;
     try {
-      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory } = editForm;
+      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, merchantName, merchantKey } = editForm;
       
       await updateDoc(doc(db, 'finances', editingId), {
         amount: parseFloat(amount),
@@ -706,26 +730,50 @@ export default function FinanceTracker({ user }: { user: any }) {
 
       // If it was an AI transaction and the user corrected it, update mappings
       const categoryChanged = category !== originalCategory || (subCategory || '') !== (originalSubCategory || '') || (subSubCategory || '') !== (originalSubSubCategory || '');
-      if (originalDescription && categoryChanged) {
-        const existingMapping = userMappings.find(m => m.originalDescription.toLowerCase() === originalDescription.toLowerCase());
+      if ((originalDescription || merchantKey) && categoryChanged) {
+        const normalizedOriginal = normalizeDuplicateText(originalDescription || description || '');
+        const existingMapping = userMappings.find(m => {
+          const mappingText = normalizeDuplicateText(m.originalDescription || '');
+          return (merchantKey && m.merchantKey === merchantKey) || (mappingText && mappingText === normalizedOriginal);
+        });
+        const learnedPatch = {
+          mappedDescription: description,
+          category,
+          subCategory: subCategory || '',
+          subSubCategory: subSubCategory || '',
+          isFixed,
+          merchantName: merchantName || '',
+          merchantKey: merchantKey || '',
+        };
         if (existingMapping) {
-          await updateDoc(doc(db, 'mappings', existingMapping.id), {
-            category,
-            subCategory: subCategory || '',
-            subSubCategory: subSubCategory || ''
-          });
+          await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
         } else {
           await addDoc(collection(db, 'mappings'), {
             uid: user.uid,
             householdId: user.householdId,
-            originalDescription,
-            mappedDescription: description,
-            category,
-            subCategory: subCategory || '',
-            subSubCategory: subSubCategory || '',
-            isFixed
+            originalDescription: originalDescription || description,
+            ...learnedPatch,
           });
         }
+
+        const similarFinances = finances.filter(finance => {
+          if (finance.id === editingId) return false;
+          const sameMerchant = merchantKey && finance.merchantKey === merchantKey;
+          const sameOriginal = normalizedOriginal && normalizeDuplicateText(finance.originalDescription || finance.description || '') === normalizedOriginal;
+          const stillUsingOldCategory = (finance.category || '') === (originalCategory || '') || finance.category === 'Sin categorizar';
+          return (sameMerchant || sameOriginal) && stillUsingOldCategory;
+        });
+
+        await Promise.all(
+          similarFinances.map(finance =>
+            updateFinancialTransaction(finance.id, {
+              category,
+              subCategory: subCategory || '',
+              subSubCategory: subSubCategory || '',
+              isFixed,
+            } as any),
+          ),
+        );
       }
 
       setEditingId(null);
