@@ -132,24 +132,38 @@ function findSuggestedSourceAccount(transaction: any, accounts: any[]) {
 
 function findSuggestedDestinationAccount(transaction: any, accounts: any[]) {
   const text = normalizeDuplicateText(`${transaction.description || ''} ${transaction.subCategory || ''}`);
-  if (transaction.type === 'transfer' && text.includes('visa')) {
-    return findVisaCreditCardAccount(accounts)?.id || '';
+  if (transaction.type === 'transfer' && (text.includes('visa') || text.includes('master') || text.includes('mastercard') || text.includes('mc'))) {
+    return findCreditCardAccountByText(accounts, text)?.id || '';
   }
   return '';
 }
 
 function findVisaCreditCardAccount(accounts: any[]) {
-  return accounts.find(account => {
+  return findCreditCardAccountByText(accounts, 'visa');
+}
+
+function findCreditCardAccountByText(accounts: any[], sourceText: string) {
+  const wantsVisa = sourceText.includes('visa');
+  const wantsMastercard = sourceText.includes('mastercard') || sourceText.includes('master') || sourceText.includes('mc');
+
+  const exactMatch = accounts.find(account => {
     const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''}`);
-    return account.type === 'credit_card' && text.includes('visa');
-  }) || accounts.find(account => account.type === 'credit_card');
+    if (account.type !== 'credit_card') return false;
+    if (wantsVisa) return text.includes('visa');
+    if (wantsMastercard) return text.includes('mastercard') || text.includes('master') || text.includes('mc');
+    return false;
+  });
+
+  if (exactMatch) return exactMatch;
+  return wantsVisa || wantsMastercard ? undefined : accounts.find(account => account.type === 'credit_card');
 }
 
 function findCajaAhorroAccount(accounts: any[]) {
-  return accounts.find(account => {
+  const assetAccounts = accounts.filter(account => account.type !== 'credit_card');
+  return assetAccounts.find(account => {
     const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''} ${account.currency || ''}`);
-    return account.currency === 'ARS' && (text.includes('caja') || text.includes('ahorro') || text.includes('bbva'));
-  }) || accounts.find(account => account.currency === 'ARS' && account.type === 'bank');
+    return account.currency === 'ARS' && (text.includes('caja') || text.includes('ahorro') || text.includes('cuenta sueldo') || text.includes('bbva'));
+  }) || assetAccounts.find(account => account.currency === 'ARS' && account.type === 'bank');
 }
 
 function pendingTransactionNeedsAccount(pt: Partial<PendingTransaction>) {
@@ -159,6 +173,23 @@ function pendingTransactionNeedsAccount(pt: Partial<PendingTransaction>) {
 
 function canConfirmPendingTransaction(pt: PendingTransaction) {
   return !pt.duplicateReason && !pendingTransactionNeedsAccount(pt);
+}
+
+function getPendingCategoryType(category: string) {
+  const normalizedCategory = normalizeDuplicateText(category || '');
+  if (normalizedCategory.includes('ingreso')) return 'income';
+  if (normalizedCategory.includes('transferencia') || normalizedCategory.includes('finanza')) return 'transfer';
+  return 'expense';
+}
+
+function formatPendingDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-AR');
+}
+
+function shortFingerprint(value?: string) {
+  if (!value) return '';
+  return value.length > 18 ? `${value.slice(0, 18)}...` : value;
 }
 
 function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
@@ -181,6 +212,41 @@ function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
     merchantName: learnedMapping.merchantName || transaction.merchantName,
     merchantKey: learnedMapping.merchantKey || transaction.merchantKey,
   };
+}
+
+function buildFinanceCategoryGroups(finances: any[]) {
+  const groups = new Map<string, any[]>();
+  const candidates = finances.filter(finance => {
+    if (finance.status === 'ignored' || finance.type !== 'expense') return false;
+    return !finance.category || finance.category === 'Sin categorizar' || finance.confidence === 'inferred';
+  });
+
+  for (const finance of candidates) {
+    const key = finance.merchantKey || normalizeDuplicateText(finance.originalDescription || finance.description || '');
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) || []), finance]);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, items]) => {
+      const amounts = items.map(item => Number(item.amount || 0)).filter(Number.isFinite);
+      const first = items[0];
+      return {
+        key,
+        label: first.merchantName || first.description || first.originalDescription || 'Movimiento similar',
+        count: items.length,
+        averageAmount: amounts.length ? amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length : 0,
+        currency: first.currency || 'ARS',
+        currentCategory: first.category || 'Sin categorizar',
+        originalDescription: first.originalDescription || first.description || '',
+        merchantName: first.merchantName || '',
+        merchantKey: first.merchantKey || '',
+        transactionIds: items.map(item => item.id).filter(Boolean),
+      };
+    })
+    .filter(group => group.count >= 2)
+    .sort((a, b) => b.count - a.count || b.averageAmount - a.averageAmount)
+    .slice(0, 6);
 }
 
 const FINANCE_TYPES = [
@@ -913,6 +979,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
   const financialInsights = useMemo(() => buildFinancialInsights(finances, inflationMonthlyRate), [finances, inflationMonthlyRate]);
+  const categoryLearningGroups = useMemo(() => buildFinanceCategoryGroups(finances), [finances]);
   const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
 
   const handleConfirmReviewedFinance = async (finance: any) => {
@@ -1010,6 +1077,53 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleApplyCategoryToGroup = async (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => {
+    if (!draft.category || !group.transactionIds?.length) return;
+
+    const learnedPatch = {
+      mappedDescription: group.label,
+      category: draft.category,
+      subCategory: draft.subCategory || '',
+      subSubCategory: draft.subSubCategory || '',
+      isFixed: draft.isFixed,
+      merchantName: group.merchantName || '',
+      merchantKey: group.merchantKey || '',
+    };
+
+    try {
+      const existingMapping = userMappings.find(mapping => {
+        const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
+        const groupText = normalizeDuplicateText(group.originalDescription || group.label || '');
+        return (group.merchantKey && mapping.merchantKey === group.merchantKey) || (mappingText && mappingText === groupText);
+      });
+
+      if (existingMapping) {
+        await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
+      } else {
+        await addDoc(collection(db, 'mappings'), {
+          uid: user.uid,
+          householdId: user.householdId,
+          originalDescription: group.originalDescription || group.label,
+          ...learnedPatch,
+        });
+      }
+
+      await Promise.all(
+        group.transactionIds.map((transactionId: string) =>
+          updateFinancialTransaction(transactionId, {
+            category: draft.category,
+            subCategory: draft.subCategory || '',
+            subSubCategory: draft.subSubCategory || '',
+            isFixed: draft.isFixed,
+            needsReview: false,
+          } as any),
+        ),
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'finances');
+    }
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1093,6 +1207,12 @@ export default function FinanceTracker({ user }: { user: any }) {
       <FinancialInsightsPanel
         insights={financialInsights}
         onMarkRecurringAsFixed={handleMarkRecurringAsFixed}
+      />
+
+      <CategoryLearningGroupsPanel
+        groups={categoryLearningGroups}
+        categories={userCategories}
+        onApply={handleApplyCategoryToGroup}
       />
 
       <AnimatePresence>
@@ -1511,6 +1631,26 @@ export default function FinanceTracker({ user }: { user: any }) {
             <div className="grid grid-cols-1 gap-4">
               {(pendingTransactions || []).map((pt) => (
                 <div key={pt.id} className="bg-white p-6 rounded-2xl border border-amber-100 shadow-sm space-y-4">
+                  <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <PendingMeta label="Fecha" value={formatPendingDate(pt.date)} />
+                      <PendingMeta label="Moneda" value={pt.currency || 'ARS'} />
+                      <PendingMeta label="Detectado como" value={FINANCE_TYPES.find(item => item.id === pt.type)?.label || pt.type} />
+                      <PendingMeta label="Confianza" value={`${Math.round(Number(pt.confidence || 0) * 100)}%`} />
+                      <PendingMeta label="Comercio" value={pt.merchantName || 'No identificado'} />
+                      <PendingMeta label="Fuente" value={pt.importSource || 'PDF'} />
+                      <PendingMeta label="Archivo" value={pt.fileName} />
+                      <PendingMeta label="Huella" value={shortFingerprint(pt.transactionFingerprint)} />
+                    </div>
+                    {typeof (pt as any).balanceDelta === 'number' && (
+                      <p className="mt-3 text-xs font-bold text-neutral-500">
+                        Impacto en saldo del resumen: {(pt as any).balanceDelta.toLocaleString()} {pt.currency || 'ARS'}
+                      </p>
+                    )}
+                    <p className="mt-3 text-xs font-bold text-neutral-500">
+                      Concepto original del PDF: <span className="text-neutral-900">{pt.originalDescription || pt.description}</span>
+                    </p>
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex-1 min-w-[200px] space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Descripcion</label>
@@ -1534,11 +1674,34 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
                       <select 
                         value={pt.category}
-                        onChange={(e) => updatePending(pt.id, { category: e.target.value, subCategory: '' })}
+                        onChange={(e) => {
+                          const nextType = getPendingCategoryType(e.target.value);
+                          updatePending(pt.id, {
+                            category: e.target.value,
+                            subCategory: '',
+                            type: nextType,
+                            toAccountId: nextType === 'transfer' ? pt.toAccountId : '',
+                          });
+                        }}
                         className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
                       >
                         <option value="">Elegir categoria</option>
                         {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="w-44 space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo</label>
+                      <select
+                        value={pt.type}
+                        onChange={(e) => updatePending(pt.id, {
+                          type: e.target.value,
+                          toAccountId: e.target.value === 'transfer' ? pt.toAccountId : '',
+                        })}
+                        className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
+                      >
+                        {(FINANCE_TYPES || []).map(t => (
+                          <option key={t.id} value={t.id}>{t.label}</option>
+                        ))}
                       </select>
                     </div>
                     <div className="w-48 space-y-1">
@@ -1625,7 +1788,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </button>
                         <button 
                           onClick={() => confirmTransaction(pt)}
-                          className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-700 transition-all shadow-md flex items-center gap-2"
+                          disabled={!canConfirmPendingTransaction(pt)}
+                          title={!canConfirmPendingTransaction(pt) ? 'Falta cuenta origen/destino o hay posible duplicado.' : 'Confirmar movimiento'}
+                          className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-700 transition-all shadow-md flex items-center gap-2 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:shadow-none"
                         >
                           <Check size={16} /> Confirmar
                         </button>
@@ -1640,6 +1805,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                   {pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' && (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs font-bold leading-5 text-blue-800">
                       Pago de tarjeta: VEO lo registra como transferencia entre cuentas, no como gasto nuevo.
+                    </div>
+                  )}
+                  {pendingTransactionNeedsAccount(pt) && (
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
+                      {pt.type === 'transfer'
+                        ? 'Para confirmar una transferencia falta elegir cuenta origen y destino. Si en realidad fue un gasto, cambia el tipo a Gasto.'
+                        : 'Para confirmar este movimiento falta elegir la cuenta origen.'}
                     </div>
                   )}
                   <div className="flex items-center gap-2 text-[10px] text-amber-600 font-bold">
@@ -2714,6 +2886,15 @@ function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; v
   );
 }
 
+function PendingMeta({ label, value }: { label: string; value?: string | number }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+      <p className="mt-1 truncate text-xs font-black text-neutral-800">{value || '-'}</p>
+    </div>
+  );
+}
+
 function FinanceCatchupSessionPanel({
   userId,
   pendingCount,
@@ -2967,6 +3148,144 @@ function ProjectionRow({ label, value }: { label: string; value: number }) {
         {value >= 0 ? '+' : ''}{value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </p>
     </div>
+  );
+}
+
+function CategoryLearningGroupsPanel({
+  groups,
+  categories,
+  onApply,
+}: {
+  groups: any[];
+  categories: any[];
+  onApply: (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => void;
+}) {
+  if (groups.length === 0) return null;
+
+  return (
+    <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Aprendizaje</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Corregir grupos similares</h3>
+          <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-neutral-500">
+            VEO encontro movimientos parecidos que puede aprender juntos. Corregis una vez y aplica la regla al grupo.
+          </p>
+        </div>
+        <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+          {groups.length} grupo(s)
+        </span>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        {groups.map(group => (
+          <CategoryLearningGroupCard
+            key={group.key}
+            group={group}
+            categories={categories}
+            onApply={onApply}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CategoryLearningGroupCard({
+  group,
+  categories,
+  onApply,
+}: {
+  group: any;
+  categories: any[];
+  onApply: (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => void;
+}) {
+  const [draft, setDraft] = useState({
+    category: '',
+    subCategory: '',
+    subSubCategory: '',
+    isFixed: false,
+  });
+  const selectedCategory = categories.find(category => category.name === draft.category);
+  const selectedSubCategory = selectedCategory?.subCategories?.find((sub: any) => (typeof sub === 'string' ? sub : sub.name) === draft.subCategory);
+  const subSubCategories = selectedSubCategory && typeof selectedSubCategory !== 'string' ? selectedSubCategory.subCategories || [] : [];
+
+  return (
+    <article className="rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-base font-black text-neutral-950">{group.label}</p>
+          <p className="mt-1 text-xs font-bold text-neutral-500">
+            {group.count} movimientos - promedio {group.averageAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {group.currency}
+          </p>
+          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+            Actual: {group.currentCategory || 'Sin categoria'}
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+          similares
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <select
+          value={draft.category}
+          onChange={(event) => setDraft({ category: event.target.value, subCategory: '', subSubCategory: '', isFixed: draft.isFixed })}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Categoria</option>
+          {categories.map(category => (
+            <option key={category.id} value={category.name}>{category.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={draft.subCategory}
+          onChange={(event) => setDraft({ ...draft, subCategory: event.target.value, subSubCategory: '' })}
+          disabled={!selectedCategory}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none disabled:text-neutral-300"
+        >
+          <option value="">Subcategoria</option>
+          {(selectedCategory?.subCategories || []).map((sub: any) => {
+            const name = typeof sub === 'string' ? sub : sub.name;
+            return <option key={name} value={name}>{name}</option>;
+          })}
+        </select>
+
+        <select
+          value={draft.subSubCategory}
+          onChange={(event) => setDraft({ ...draft, subSubCategory: event.target.value })}
+          disabled={subSubCategories.length === 0}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none disabled:text-neutral-300"
+        >
+          <option value="">Detalle</option>
+          {subSubCategories.map((sub: any) => {
+            const name = typeof sub === 'string' ? sub : sub.name;
+            return <option key={name} value={name}>{name}</option>;
+          })}
+        </select>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs font-black text-neutral-500">
+          <input
+            type="checkbox"
+            checked={draft.isFixed}
+            onChange={(event) => setDraft({ ...draft, isFixed: event.target.checked })}
+            className="h-4 w-4 rounded border-neutral-300 text-neutral-900"
+          />
+          Gasto fijo
+        </label>
+        <button
+          type="button"
+          disabled={!draft.category}
+          onClick={() => onApply(group, draft)}
+          className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+        >
+          Aplicar al grupo
+        </button>
+      </div>
+    </article>
   );
 }
 
