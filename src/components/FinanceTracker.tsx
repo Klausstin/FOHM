@@ -242,6 +242,13 @@ export default function FinanceTracker({ user }: { user: any }) {
   });
   const [isSavingCatchup, setIsSavingCatchup] = useState(false);
   const [inflationMonthlyRate, setInflationMonthlyRate] = useState<number | null>(null);
+  const [lastImportResult, setLastImportResult] = useState<{
+    saved: number;
+    review: number;
+    duplicates: number;
+    missingAccount: number;
+    files: number;
+  } | null>(null);
   
   // Filtering states
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, day, month, quarter, year, custom
@@ -533,10 +540,24 @@ export default function FinanceTracker({ user }: { user: any }) {
         const filePending = await processPdf(file);
         allPending.push(...filePending);
       }
-      setPendingTransactions(prev => [...prev, ...allPending]);
+      const reviewTransactions = allPending.filter(transaction => transaction.duplicateReason || pendingTransactionNeedsAccount(transaction));
+      const readyTransactions = allPending.filter(transaction => !transaction.duplicateReason && !pendingTransactionNeedsAccount(transaction));
+
+      for (const transaction of readyTransactions) {
+        await confirmTransaction(transaction);
+      }
+
+      setPendingTransactions(prev => [...prev, ...reviewTransactions]);
+      setLastImportResult({
+        saved: readyTransactions.length,
+        review: reviewTransactions.length,
+        duplicates: reviewTransactions.filter(transaction => transaction.duplicateReason).length,
+        missingAccount: reviewTransactions.filter(pendingTransactionNeedsAccount).length,
+        files: acceptedFiles.length,
+      });
     } catch (error) {
       console.error("Error processing PDFs:", error);
-      alert("Failed to process some PDFs. Please try again.");
+      alert("No pude procesar algunos PDFs. Probemos de nuevo o revisemos el formato.");
     } finally {
       setIsProcessingPdf(false);
     }
@@ -646,13 +667,19 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const startEditing = (f: any) => {
     setEditingId(f.id);
-    setEditForm({ ...f, date: format(f.date.toDate(), "yyyy-MM-dd'T'HH:mm") });
+    setEditForm({
+      ...f,
+      originalCategory: f.category,
+      originalSubCategory: f.subCategory || '',
+      originalSubSubCategory: f.subSubCategory || '',
+      date: format(f.date.toDate(), "yyyy-MM-dd'T'HH:mm"),
+    });
   };
 
   const saveEdit = async () => {
     if (!editingId || !editForm) return;
     try {
-      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, paymentType, paymentStatus, isConfirmed, originalDescription } = editForm;
+      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory } = editForm;
       
       await updateDoc(doc(db, 'finances', editingId), {
         amount: parseFloat(amount),
@@ -678,7 +705,8 @@ export default function FinanceTracker({ user }: { user: any }) {
       });
 
       // If it was an AI transaction and the user corrected it, update mappings
-      if (originalDescription && category !== editForm.category) {
+      const categoryChanged = category !== originalCategory || (subCategory || '') !== (originalSubCategory || '') || (subSubCategory || '') !== (originalSubSubCategory || '');
+      if (originalDescription && categoryChanged) {
         const existingMapping = userMappings.find(m => m.originalDescription.toLowerCase() === originalDescription.toLowerCase());
         if (existingMapping) {
           await updateDoc(doc(db, 'mappings', existingMapping.id), {
@@ -993,7 +1021,13 @@ export default function FinanceTracker({ user }: { user: any }) {
         onConfirm={handleResolveReviewedFinance}
         onEdit={(finance) => {
           setEditingId(finance.id);
-          setEditForm({ ...finance, date: format(finance.date.toDate(), "yyyy-MM-dd'T'HH:mm") });
+          setEditForm({
+            ...finance,
+            originalCategory: finance.category,
+            originalSubCategory: finance.subCategory || '',
+            originalSubSubCategory: finance.subSubCategory || '',
+            date: format(finance.date.toDate(), "yyyy-MM-dd'T'HH:mm"),
+          });
           setActiveListTab('reviews');
         }}
         onIgnore={handleIgnoreReviewedFinance}
@@ -1340,6 +1374,27 @@ export default function FinanceTracker({ user }: { user: any }) {
             </button>
           </div>
         </motion.div>
+      )}
+
+      {lastImportResult && (
+        <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">Importacion terminada</p>
+              <h3 className="mt-1 text-xl font-black text-neutral-950">
+                VEO guardo {lastImportResult.saved} movimiento(s) y dejo {lastImportResult.review} para revisar.
+              </h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-emerald-800">
+                Solo frenamos duplicados o movimientos sin cuenta clara. Las categorias se pueden corregir despues y VEO aprende de esas correcciones.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <ImportReviewStat label="PDFs" value={lastImportResult.files} tone="neutral" />
+              <ImportReviewStat label="Duplicados" value={lastImportResult.duplicates} tone={lastImportResult.duplicates ? 'danger' : 'neutral'} />
+              <ImportReviewStat label="Sin cuenta" value={lastImportResult.missingAccount} tone={lastImportResult.missingAccount ? 'warn' : 'neutral'} />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Pending Transactions Review Section */}
