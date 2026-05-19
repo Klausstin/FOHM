@@ -183,6 +183,41 @@ function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   };
 }
 
+function buildFinanceCategoryGroups(finances: any[]) {
+  const groups = new Map<string, any[]>();
+  const candidates = finances.filter(finance => {
+    if (finance.status === 'ignored' || finance.type !== 'expense') return false;
+    return !finance.category || finance.category === 'Sin categorizar' || finance.confidence === 'inferred';
+  });
+
+  for (const finance of candidates) {
+    const key = finance.merchantKey || normalizeDuplicateText(finance.originalDescription || finance.description || '');
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) || []), finance]);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, items]) => {
+      const amounts = items.map(item => Number(item.amount || 0)).filter(Number.isFinite);
+      const first = items[0];
+      return {
+        key,
+        label: first.merchantName || first.description || first.originalDescription || 'Movimiento similar',
+        count: items.length,
+        averageAmount: amounts.length ? amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length : 0,
+        currency: first.currency || 'ARS',
+        currentCategory: first.category || 'Sin categorizar',
+        originalDescription: first.originalDescription || first.description || '',
+        merchantName: first.merchantName || '',
+        merchantKey: first.merchantKey || '',
+        transactionIds: items.map(item => item.id).filter(Boolean),
+      };
+    })
+    .filter(group => group.count >= 2)
+    .sort((a, b) => b.count - a.count || b.averageAmount - a.averageAmount)
+    .slice(0, 6);
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -913,6 +948,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
   const financialInsights = useMemo(() => buildFinancialInsights(finances, inflationMonthlyRate), [finances, inflationMonthlyRate]);
+  const categoryLearningGroups = useMemo(() => buildFinanceCategoryGroups(finances), [finances]);
   const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
 
   const handleConfirmReviewedFinance = async (finance: any) => {
@@ -1010,6 +1046,53 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleApplyCategoryToGroup = async (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => {
+    if (!draft.category || !group.transactionIds?.length) return;
+
+    const learnedPatch = {
+      mappedDescription: group.label,
+      category: draft.category,
+      subCategory: draft.subCategory || '',
+      subSubCategory: draft.subSubCategory || '',
+      isFixed: draft.isFixed,
+      merchantName: group.merchantName || '',
+      merchantKey: group.merchantKey || '',
+    };
+
+    try {
+      const existingMapping = userMappings.find(mapping => {
+        const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
+        const groupText = normalizeDuplicateText(group.originalDescription || group.label || '');
+        return (group.merchantKey && mapping.merchantKey === group.merchantKey) || (mappingText && mappingText === groupText);
+      });
+
+      if (existingMapping) {
+        await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
+      } else {
+        await addDoc(collection(db, 'mappings'), {
+          uid: user.uid,
+          householdId: user.householdId,
+          originalDescription: group.originalDescription || group.label,
+          ...learnedPatch,
+        });
+      }
+
+      await Promise.all(
+        group.transactionIds.map((transactionId: string) =>
+          updateFinancialTransaction(transactionId, {
+            category: draft.category,
+            subCategory: draft.subCategory || '',
+            subSubCategory: draft.subSubCategory || '',
+            isFixed: draft.isFixed,
+            needsReview: false,
+          } as any),
+        ),
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'finances');
+    }
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1093,6 +1176,12 @@ export default function FinanceTracker({ user }: { user: any }) {
       <FinancialInsightsPanel
         insights={financialInsights}
         onMarkRecurringAsFixed={handleMarkRecurringAsFixed}
+      />
+
+      <CategoryLearningGroupsPanel
+        groups={categoryLearningGroups}
+        categories={userCategories}
+        onApply={handleApplyCategoryToGroup}
       />
 
       <AnimatePresence>
@@ -2967,6 +3056,144 @@ function ProjectionRow({ label, value }: { label: string; value: number }) {
         {value >= 0 ? '+' : ''}{value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </p>
     </div>
+  );
+}
+
+function CategoryLearningGroupsPanel({
+  groups,
+  categories,
+  onApply,
+}: {
+  groups: any[];
+  categories: any[];
+  onApply: (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => void;
+}) {
+  if (groups.length === 0) return null;
+
+  return (
+    <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Aprendizaje</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Corregir grupos similares</h3>
+          <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-neutral-500">
+            VEO encontro movimientos parecidos que puede aprender juntos. Corregis una vez y aplica la regla al grupo.
+          </p>
+        </div>
+        <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+          {groups.length} grupo(s)
+        </span>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        {groups.map(group => (
+          <CategoryLearningGroupCard
+            key={group.key}
+            group={group}
+            categories={categories}
+            onApply={onApply}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CategoryLearningGroupCard({
+  group,
+  categories,
+  onApply,
+}: {
+  group: any;
+  categories: any[];
+  onApply: (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => void;
+}) {
+  const [draft, setDraft] = useState({
+    category: '',
+    subCategory: '',
+    subSubCategory: '',
+    isFixed: false,
+  });
+  const selectedCategory = categories.find(category => category.name === draft.category);
+  const selectedSubCategory = selectedCategory?.subCategories?.find((sub: any) => (typeof sub === 'string' ? sub : sub.name) === draft.subCategory);
+  const subSubCategories = selectedSubCategory && typeof selectedSubCategory !== 'string' ? selectedSubCategory.subCategories || [] : [];
+
+  return (
+    <article className="rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-base font-black text-neutral-950">{group.label}</p>
+          <p className="mt-1 text-xs font-bold text-neutral-500">
+            {group.count} movimientos - promedio {group.averageAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {group.currency}
+          </p>
+          <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+            Actual: {group.currentCategory || 'Sin categoria'}
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+          similares
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <select
+          value={draft.category}
+          onChange={(event) => setDraft({ category: event.target.value, subCategory: '', subSubCategory: '', isFixed: draft.isFixed })}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Categoria</option>
+          {categories.map(category => (
+            <option key={category.id} value={category.name}>{category.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={draft.subCategory}
+          onChange={(event) => setDraft({ ...draft, subCategory: event.target.value, subSubCategory: '' })}
+          disabled={!selectedCategory}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none disabled:text-neutral-300"
+        >
+          <option value="">Subcategoria</option>
+          {(selectedCategory?.subCategories || []).map((sub: any) => {
+            const name = typeof sub === 'string' ? sub : sub.name;
+            return <option key={name} value={name}>{name}</option>;
+          })}
+        </select>
+
+        <select
+          value={draft.subSubCategory}
+          onChange={(event) => setDraft({ ...draft, subSubCategory: event.target.value })}
+          disabled={subSubCategories.length === 0}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none disabled:text-neutral-300"
+        >
+          <option value="">Detalle</option>
+          {subSubCategories.map((sub: any) => {
+            const name = typeof sub === 'string' ? sub : sub.name;
+            return <option key={name} value={name}>{name}</option>;
+          })}
+        </select>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs font-black text-neutral-500">
+          <input
+            type="checkbox"
+            checked={draft.isFixed}
+            onChange={(event) => setDraft({ ...draft, isFixed: event.target.checked })}
+            className="h-4 w-4 rounded border-neutral-300 text-neutral-900"
+          />
+          Gasto fijo
+        </label>
+        <button
+          type="button"
+          disabled={!draft.category}
+          onClick={() => onApply(group, draft)}
+          className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+        >
+          Aplicar al grupo
+        </button>
+      </div>
+    </article>
   );
 }
 
