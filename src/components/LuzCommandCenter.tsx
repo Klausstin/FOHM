@@ -21,6 +21,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
   const [status, setStatus] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [rejectedActionIds, setRejectedActionIds] = useState<string[]>([]);
 
   const preview = useMemo(() => {
     if (!message.trim()) return null;
@@ -33,13 +34,14 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
 
     const nextDraft = routeLuzMessage(message, habits, accounts);
     setDraft(nextDraft);
+    setRejectedActionIds([]);
     setStatus(nextDraft.summary);
   };
 
   const confirmDraft = async () => {
     if (!draft || isSaving) return;
 
-    const executableActions = draft.actions.filter(action => action.type !== 'ask_follow_up');
+    const executableActions = draft.actions.filter(action => action.type !== 'ask_follow_up' && !rejectedActionIds.includes(action.id));
     if (executableActions.length === 0) {
       setStatus('No hay acciones listas para guardar. Respondeme una de las preguntas o cargalo manualmente.');
       return;
@@ -52,6 +54,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
       }
       setStatus(`Guardado: ${executableActions.length} accion(es). Lo incompleto queda para revisar.`);
       setDraft(null);
+      setRejectedActionIds([]);
       setMessage('');
     } catch (error) {
       console.error('Luz no pudo guardar la entrada:', error);
@@ -124,6 +127,9 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
   };
 
   const currentActions = draft?.actions || preview?.actions || [];
+  const selectedExecutableCount = draft
+    ? draft.actions.filter(action => action.type !== 'ask_follow_up' && !rejectedActionIds.includes(action.id)).length
+    : 0;
   const previewType = currentActions.some(action => action.type === 'create_finance_transaction')
     ? 'Finanzas'
     : currentActions.some(action => action.type === 'create_habit_checkin')
@@ -153,6 +159,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
           onChange={(event) => {
             setMessage(event.target.value);
             setDraft(null);
+            setRejectedActionIds([]);
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -197,7 +204,10 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
             </div>
             <button
               type="button"
-              onClick={() => setDraft(null)}
+              onClick={() => {
+                setDraft(null);
+                setRejectedActionIds([]);
+              }}
               className="rounded-full p-1 text-white/40 transition hover:bg-white/10 hover:text-white"
             >
               <X size={16} />
@@ -206,14 +216,28 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
 
           <div className="grid gap-2 md:grid-cols-2">
             {draft.actions.map(action => (
-              <LuzActionCard key={action.id} action={action} />
+              <LuzActionCard
+                key={action.id}
+                action={action}
+                isRejected={rejectedActionIds.includes(action.id)}
+                onToggleRejected={() => {
+                  setRejectedActionIds(prev =>
+                    prev.includes(action.id)
+                      ? prev.filter(id => id !== action.id)
+                      : [...prev, action.id],
+                  );
+                }}
+              />
             ))}
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
-              onClick={() => setDraft(null)}
+              onClick={() => {
+                setDraft(null);
+                setRejectedActionIds([]);
+              }}
               className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-white/50 transition hover:bg-white/10 hover:text-white"
             >
               Editar y reinterpretar
@@ -221,11 +245,11 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
             <button
               type="button"
               onClick={confirmDraft}
-              disabled={isSaving}
+              disabled={isSaving || selectedExecutableCount === 0}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100 disabled:opacity-45"
             >
               {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
-              Confirmar acciones
+              Confirmar acciones{selectedExecutableCount > 0 ? ` (${selectedExecutableCount})` : ''}
             </button>
           </div>
         </div>
@@ -234,7 +258,15 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
   );
 }
 
-function LuzActionCard({ action }: { action: LuzAction }) {
+function LuzActionCard({
+  action,
+  isRejected,
+  onToggleRejected,
+}: {
+  action: LuzAction;
+  isRejected: boolean;
+  onToggleRejected: () => void;
+}) {
   const Icon = action.type === 'create_finance_transaction'
     ? Wallet
     : action.type === 'create_habit_checkin'
@@ -244,17 +276,27 @@ function LuzActionCard({ action }: { action: LuzAction }) {
         : Brain;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-neutral-950">
-          <Icon size={16} />
+    <div className={`rounded-2xl border p-4 transition ${isRejected ? 'border-white/5 bg-white/[0.04] opacity-45' : 'border-white/10 bg-white/10'}`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-neutral-950">
+            <Icon size={16} />
+          </div>
+          <div>
+            <p className="text-sm font-black text-white">{action.title}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-white/35">{action.confidence}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-black text-white">{action.title}</p>
-          <p className="text-[10px] font-black uppercase tracking-widest text-white/35">{action.confidence}</p>
-        </div>
+        <button
+          type="button"
+          onClick={onToggleRejected}
+          className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition ${isRejected ? 'bg-white text-neutral-950' : 'bg-white/10 text-white/55 hover:bg-white/15 hover:text-white'}`}
+          title={isRejected ? 'Volver a incluir accion' : 'No guardar esta accion'}
+        >
+          {isRejected ? 'Incluir' : 'Quitar'}
+        </button>
       </div>
-      <p className="text-xs font-medium leading-5 text-white/68">{action.detail}</p>
+      <p className={`text-xs font-medium leading-5 ${isRejected ? 'text-white/35 line-through' : 'text-white/68'}`}>{action.detail}</p>
     </div>
   );
 }

@@ -57,8 +57,31 @@ export interface LuzFinancialAccountOption {
 const MONEY_WORDS = ['gaste', 'gasto', 'pague', 'compre', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron'];
 const INCOME_WORDS = ['cobre', 'ingreso', 'me pagaron', 'me depositaron', 'sueldo', 'honorarios'];
 const NEGATIVE_HABIT_WORDS = ['no cumpli', 'falle', 'me comi las unas', 'me mordi las unas'];
-const POSITIVE_HABIT_WORDS = ['cumpli', 'hice', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
+const POSITIVE_HABIT_WORDS = ['cumpli', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
 const PAYMENT_HINTS = ['con ', 'tarjeta', 'visa', 'master', 'mastercard', 'amex', 'mercado pago', 'mp', 'uala', 'brubank', 'galicia', 'santander', 'bbva', 'naranja', 'efectivo', 'debito', 'credito'];
+const REFLECTIVE_JOURNAL_WORDS = [
+  'me senti',
+  'me siento',
+  'me pasa',
+  'me paso',
+  'me tiene',
+  'estoy',
+  'conflict',
+  'angust',
+  'culpa',
+  'duda',
+  'pense',
+  'pensando',
+  'creo',
+  'quiero',
+  'necesito',
+  'deberia',
+  'me pase',
+  'me arrepenti',
+  'me gusto',
+  'me encanto',
+  'aprendi',
+];
 
 export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], accounts: LuzFinancialAccountOption[] = []): LuzRouteResult {
   const message = rawMessage.trim();
@@ -117,7 +140,7 @@ function parseFinanceAction(message: string, normalized: string, accounts: LuzFi
 
   const type = INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense';
   const category = inferFinanceCategory(normalized);
-  const currency = normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares') ? 'USD' : 'ARS';
+  const currency = inferCurrency(normalized);
   const description = inferDescription(message, amount) || category;
   const payment = inferPayment(normalized, accounts);
   const needsReview = !payment.accountId;
@@ -215,14 +238,17 @@ function buildFollowUps(message: string, normalized: string, actions: LuzAction[
 
 function shouldCreateJournal(normalized: string, hasFinance: boolean, hasHabit: boolean) {
   if (!hasFinance && !hasHabit) return true;
-  return includesAny(normalized, ['me senti', 'me siento', 'pense', 'pensando', 'me gusto', 'me encanto', 'con ', 'pareja', 'trabajo', 'vicky', 'familia', 'cine', 'pelicula']);
+  const hasReflection = includesAny(normalized, REFLECTIVE_JOURNAL_WORDS);
+  const hasPersonalContext = includesAny(normalized, ['pareja', 'trabajo', 'vicky', 'familia', 'cine', 'pelicula', 'marca', 'experiencia', 'turista']);
+  const isLongNarrative = normalized.length >= 180;
+  return hasReflection || hasPersonalContext || isLongNarrative;
 }
 
 function inferJournalCategories(normalized: string) {
   const categories = new Set<string>(['yo']);
   if (includesAny(normalized, ['pareja', 'vicky', 'novia', 'novio'])) categories.add('pareja');
   if (includesAny(normalized, ['trabajo', 'laburo', 'jefe', 'cliente'])) categories.add('trabajo');
-  if (includesAny(normalized, ['gaste', 'pague', 'plata', 'finanzas', 'pesos', 'usd'])) categories.add('finanzas');
+  if (includesAny(normalized, ['gaste', 'gasto', 'pague', 'compre', 'plata', 'finanzas', 'pesos', 'usd', 'eur', 'euro'])) categories.add('finanzas');
   if (includesAny(normalized, ['salud', 'gym', 'entrene', 'dormir', 'energia', 'unas'])) categories.add('salud');
   if (includesAny(normalized, ['cine', 'pelicula', 'salida', 'juego'])) categories.add('ocio');
   return Array.from(categories);
@@ -291,10 +317,7 @@ function inferFinanceCategory(normalized: string) {
 }
 
 function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[]) {
-  const account = accounts.find(option => {
-    const accountName = normalize(option.name || '');
-    return accountName && (normalized.includes(accountName) || accountName.split(/\s+/).some(part => part.length > 3 && normalized.includes(part)));
-  });
+  const account = findBestPaymentAccount(normalized, accounts);
 
   if (account) {
     return {
@@ -306,6 +329,47 @@ function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[])
 
   const paymentMethod = inferPaymentMethodLabel(normalized);
   return { paymentMethod };
+}
+
+function inferCurrency(normalized: string) {
+  if (normalized.includes('eur') || normalized.includes('euro')) return 'EUR';
+  if (normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares')) return 'USD';
+  return 'ARS';
+}
+
+function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccountOption[]) {
+  const wantsVisa = normalized.includes('visa');
+  const wantsMastercard = normalized.includes('mastercard') || normalized.includes('master') || /\bmc\b/.test(normalized);
+  const wantsCreditCard = normalized.includes('tarjeta') || normalized.includes('credito') || wantsVisa || wantsMastercard;
+  const bankHints = ['bbva', 'galicia', 'santander', 'brubank', 'uala', 'naranja', 'mercado pago'];
+
+  const scored = accounts
+    .map(account => {
+      const accountName = normalize(account.name || '');
+      const accountType = normalize(account.type || '');
+      const accountText = `${accountName} ${accountType}`;
+      let score = 0;
+
+      if (wantsVisa && accountText.includes('visa')) score += 100;
+      if (wantsMastercard && (accountText.includes('mastercard') || accountText.includes('master') || /\bmc\b/.test(accountText))) score += 100;
+      if (wantsCreditCard && accountType.includes('credit_card')) score += 25;
+      if (wantsCreditCard && !accountType.includes('credit_card')) score -= 40;
+
+      for (const hint of bankHints) {
+        if (normalized.includes(hint) && accountText.includes(hint)) score += 15;
+      }
+
+      if (accountName && normalized.includes(accountName)) score += 40;
+      for (const part of accountName.split(/\s+/)) {
+        if (part.length > 3 && normalized.includes(part)) score += 5;
+      }
+
+      return { account, score };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.account;
 }
 
 function inferPaymentMethodLabel(normalized: string) {
