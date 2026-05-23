@@ -91,7 +91,95 @@ function findLikelyDuplicateReason(candidate: Partial<PendingTransaction>, exist
     return sameDay && sameAmount && sameText;
   });
 
-  return possibleDuplicate ? 'Coincide en fecha, importe y concepto con un movimiento existente.' : '';
+  if (possibleDuplicate) return 'Coincide en fecha, importe y concepto con un movimiento existente.';
+
+  return findSemanticDuplicateReason(candidate, existingTransactions);
+}
+
+function findSemanticDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
+  const candidateDate = getDateFromValue(candidate.date);
+  const candidateAmount = Number(candidate.amount || 0);
+  const candidateText = normalizeDuplicateText([
+    candidate.description,
+    candidate.originalDescription,
+    candidate.merchantName,
+    candidate.category,
+    candidate.subCategory,
+  ].filter(Boolean).join(' '));
+
+  if (!candidateDate || !candidateAmount || !candidateText) return '';
+
+  const semanticDuplicate = existingTransactions.find(transaction => {
+    if (transaction.status === 'ignored') return false;
+    if (transaction.statementFingerprint && transaction.statementFingerprint === candidate.statementFingerprint) return true;
+
+    const existingDate = getDateFromValue(transaction.date);
+    if (!existingDate) return false;
+
+    const daysApart = Math.abs((candidateDate.getTime() - existingDate.getTime()) / 86400000);
+    if (daysApart > 95) return false;
+
+    const sameAccount = candidate.accountId && transaction.accountId && candidate.accountId === transaction.accountId;
+    const textScore = getTextOverlapScore(
+      candidateText,
+      normalizeDuplicateText([
+        transaction.description,
+        transaction.note,
+        transaction.merchantName,
+        transaction.category,
+        transaction.subCategory,
+      ].filter(Boolean).join(' ')),
+    );
+    const amountMatch = areAmountsCompatibleAcrossCurrencies(candidate, transaction);
+    const manualCandidate = transaction.source === 'manual' || transaction.generatedBy;
+
+    return Boolean(manualCandidate && sameAccount && amountMatch && textScore >= 0.16);
+  });
+
+  if (!semanticDuplicate) return '';
+
+  return `Se parece a un gasto que ya cargaste con Luz: "${semanticDuplicate.description || semanticDuplicate.category || 'movimiento manual'}". Revisalo antes de duplicarlo.`;
+}
+
+function getDateFromValue(value: any) {
+  if (!value) return null;
+  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getTextOverlapScore(a: string, b: string) {
+  const ignored = new Set(['gasto', 'pago', 'compra', 'tarjeta', 'visa', 'bbva', 'usd', 'ars', 'eur', 'con', 'del', 'de', 'la', 'el', 'en', 'un', 'una']);
+  const aTokens = new Set(a.split(' ').filter(token => token.length > 2 && !ignored.has(token)));
+  const bTokens = new Set(b.split(' ').filter(token => token.length > 2 && !ignored.has(token)));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+
+  let shared = 0;
+  aTokens.forEach(token => {
+    if (bTokens.has(token)) shared += 1;
+  });
+
+  return shared / Math.min(aTokens.size, bTokens.size);
+}
+
+function areAmountsCompatibleAcrossCurrencies(candidate: Partial<PendingTransaction>, existing: any) {
+  const candidateAmount = Math.abs(Number(candidate.amount || 0));
+  const existingAmount = Math.abs(Number(existing.amount || 0));
+  if (!candidateAmount || !existingAmount) return false;
+
+  const candidateCurrency = String(candidate.currency || '').toUpperCase();
+  const existingCurrency = String(existing.currency || '').toUpperCase();
+
+  if (candidateCurrency && existingCurrency && candidateCurrency === existingCurrency) {
+    return Math.abs(candidateAmount - existingAmount) / Math.max(candidateAmount, existingAmount) <= 0.08;
+  }
+
+  const foreignCardPair = new Set([candidateCurrency, existingCurrency]);
+  if (foreignCardPair.has('EUR') && foreignCardPair.has('USD')) {
+    const ratio = candidateAmount / existingAmount;
+    return ratio >= 0.65 && ratio <= 1.45;
+  }
+
+  return false;
 }
 
 function toDayKey(value: any) {
@@ -1799,7 +1887,24 @@ export default function FinanceTracker({ user }: { user: any }) {
                   </div>
                   {pt.duplicateReason && (
                     <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold leading-5 text-red-800">
-                      Posible duplicado: {pt.duplicateReason}
+                      <p>Posible duplicado: {pt.duplicateReason}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPendingTransactions(prev => prev.filter(t => t.id !== pt.id))}
+                          className="rounded-xl bg-red-700 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-red-800"
+                        >
+                          Es el mismo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => confirmTransaction({ ...pt, duplicateReason: '' })}
+                          disabled={pendingTransactionNeedsAccount(pt)}
+                          className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:text-neutral-300"
+                        >
+                          Guardar igual
+                        </button>
+                      </div>
                     </div>
                   )}
                   {pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' && (
