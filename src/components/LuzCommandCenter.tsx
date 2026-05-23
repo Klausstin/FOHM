@@ -13,9 +13,10 @@ interface LuzCommandCenterProps {
   };
   habits?: HabitRecord[];
   accounts?: LuzFinancialAccountOption[];
+  categories?: any[];
 }
 
-export default function LuzCommandCenter({ user, habits = [], accounts = [] }: LuzCommandCenterProps) {
+export default function LuzCommandCenter({ user, habits = [], accounts = [], categories = [] }: LuzCommandCenterProps) {
   const [message, setMessage] = useState('');
   const [draft, setDraft] = useState<LuzRouteResult | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -36,6 +37,34 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
     setDraft(nextDraft);
     setRejectedActionIds([]);
     setStatus(nextDraft.summary);
+  };
+
+  const updateDraftAction = (actionId: string, updates: Partial<LuzAction>) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        actions: prev.actions.map(action => action.id === actionId ? { ...action, ...updates } : action),
+      };
+    });
+  };
+
+  const updateDraftFinance = (actionId: string, financeUpdates: Partial<NonNullable<LuzAction['finance']>>) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        actions: prev.actions.map(action => {
+          if (action.id !== actionId || !action.finance) return action;
+          const nextFinance = { ...action.finance, ...financeUpdates };
+          return {
+            ...action,
+            finance: nextFinance,
+            detail: `${Number(nextFinance.amount || 0).toLocaleString()} ${nextFinance.currency} - ${nextFinance.category}. ${nextFinance.accountName ? `Cuenta sugerida: ${nextFinance.accountName}.` : 'Falta confirmar cuenta o billetera.'}`,
+          };
+        }),
+      };
+    });
   };
 
   const confirmDraft = async () => {
@@ -74,6 +103,8 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
         description: action.finance.description,
         note: message.trim(),
         category: action.finance.category,
+        subCategory: action.finance.subCategory || '',
+        subSubCategory: action.finance.subSubCategory || '',
         type: action.finance.type,
         accountId: action.finance.accountId || '',
         date: new Date(),
@@ -227,6 +258,10 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [] }: L
                       : [...prev, action.id],
                   );
                 }}
+                onUpdateAction={updateDraftAction}
+                onUpdateFinance={updateDraftFinance}
+                accounts={accounts}
+                categories={categories}
               />
             ))}
           </div>
@@ -262,10 +297,18 @@ function LuzActionCard({
   action,
   isRejected,
   onToggleRejected,
+  onUpdateAction,
+  onUpdateFinance,
+  accounts,
+  categories,
 }: {
   action: LuzAction;
   isRejected: boolean;
   onToggleRejected: () => void;
+  onUpdateAction: (actionId: string, updates: Partial<LuzAction>) => void;
+  onUpdateFinance: (actionId: string, financeUpdates: Partial<NonNullable<LuzAction['finance']>>) => void;
+  accounts: LuzFinancialAccountOption[];
+  categories: any[];
 }) {
   const Icon = action.type === 'create_finance_transaction'
     ? Wallet
@@ -297,6 +340,132 @@ function LuzActionCard({
         </button>
       </div>
       <p className={`text-xs font-medium leading-5 ${isRejected ? 'text-white/35 line-through' : 'text-white/68'}`}>{action.detail}</p>
+      {!isRejected && action.type === 'create_finance_transaction' && action.finance && (
+        <LuzFinanceEditor
+          action={action}
+          accounts={accounts}
+          categories={categories}
+          onUpdateFinance={onUpdateFinance}
+        />
+      )}
+    </div>
+  );
+}
+
+function LuzFinanceEditor({
+  action,
+  accounts,
+  categories,
+  onUpdateFinance,
+}: {
+  action: LuzAction;
+  accounts: LuzFinancialAccountOption[];
+  categories: any[];
+  onUpdateFinance: (actionId: string, financeUpdates: Partial<NonNullable<LuzAction['finance']>>) => void;
+}) {
+  const finance = action.finance;
+  if (!finance) return null;
+
+  const selectedCategory = categories.find(category => category.name === finance.category);
+  const selectedSubCategory = selectedCategory?.subCategories?.find((sub: any) => (typeof sub === 'string' ? sub : sub.name) === finance.subCategory);
+  const subSubCategories = selectedSubCategory && typeof selectedSubCategory !== 'string' ? selectedSubCategory.subCategories || [] : [];
+
+  return (
+    <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Monto</span>
+        <input
+          type="number"
+          value={finance.amount}
+          onChange={(event) => onUpdateFinance(action.id, { amount: Number(event.target.value || 0) })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Moneda</span>
+        <select
+          value={finance.currency}
+          onChange={(event) => onUpdateFinance(action.id, { currency: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          {['ARS', 'USD', 'EUR'].map(currency => <option key={currency} value={currency}>{currency}</option>)}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Categoria</span>
+        <select
+          value={finance.category}
+          onChange={(event) => onUpdateFinance(action.id, { category: event.target.value, subCategory: '', subSubCategory: '' })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          <option value="">Elegir</option>
+          {categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Subcategoria</span>
+        <select
+          value={finance.subCategory || ''}
+          onChange={(event) => onUpdateFinance(action.id, { subCategory: event.target.value, subSubCategory: '' })}
+          disabled={!selectedCategory}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none disabled:text-neutral-300"
+        >
+          <option value="">Sin subcategoria</option>
+          {(selectedCategory?.subCategories || []).map((sub: any) => {
+            const name = typeof sub === 'string' ? sub : sub.name;
+            return <option key={name} value={name}>{name}</option>;
+          })}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Detalle</span>
+        <select
+          value={finance.subSubCategory || ''}
+          onChange={(event) => onUpdateFinance(action.id, { subSubCategory: event.target.value })}
+          disabled={subSubCategories.length === 0}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none disabled:text-neutral-300"
+        >
+          <option value="">Sin detalle</option>
+          {subSubCategories.map((sub: any) => {
+            const name = typeof sub === 'string' ? sub : sub.name;
+            return <option key={name} value={name}>{name}</option>;
+          })}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Cuenta</span>
+        <select
+          value={finance.accountId || ''}
+          onChange={(event) => {
+            const account = accounts.find(item => item.id === event.target.value);
+            onUpdateFinance(action.id, {
+              accountId: account?.id || '',
+              accountName: account?.name || '',
+              needsReview: !account?.id,
+              paymentMethod: account?.name || finance.paymentMethod,
+            });
+          }}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          <option value="">Sin cuenta</option>
+          {accounts.map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency || 'ARS'})</option>)}
+        </select>
+      </label>
+
+      <label className="space-y-1 sm:col-span-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Descripcion</span>
+        <input
+          type="text"
+          value={finance.description}
+          onChange={(event) => onUpdateFinance(action.id, { description: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
     </div>
   );
 }
