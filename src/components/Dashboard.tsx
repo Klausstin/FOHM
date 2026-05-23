@@ -69,6 +69,7 @@ export default function Dashboard({ user }: { user: any }) {
   const [goals, setGoals] = useState<any[]>([]);
   const [habits, setHabits] = useState<any[]>([]);
   const [thoughts, setThoughts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
   const saveDashboardConfig = async (newConfig: any[]) => {
     try {
@@ -169,12 +170,23 @@ export default function Dashboard({ user }: { user: any }) {
       handleFirestoreError(error, OperationType.GET, 'thoughts');
     });
 
+    const qCategories = query(
+      collection(db, 'categories'),
+      where('householdId', '==', user.householdId)
+    );
+    const unsubCategories = onSnapshot(qCategories, (snap) => {
+      setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'categories');
+    });
+
     return () => {
       unsubAccounts();
       unsubFinances();
       unsubGoals();
       unsubHabits();
       unsubThoughts();
+      unsubCategories();
     };
   }, [user.uid, user.householdId]);
 
@@ -382,7 +394,7 @@ export default function Dashboard({ user }: { user: any }) {
         <div className="rounded-[2rem] bg-neutral-950 p-4 text-white shadow-sm md:p-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_340px]">
             <div className="flex flex-col gap-4">
-              <LuzCommandCenter user={user} habits={habits} accounts={accounts} />
+              <LuzCommandCenter user={user} habits={habits} accounts={accounts} categories={categories} />
             </div>
 
             <aside className="grid gap-4">

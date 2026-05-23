@@ -9,6 +9,8 @@ export interface LuzFinanceDraft {
   currency: string;
   type: 'expense' | 'income';
   category: string;
+  subCategory?: string;
+  subSubCategory?: string;
   description: string;
   accountId?: string;
   accountName?: string;
@@ -161,6 +163,8 @@ function parseFinanceAction(message: string, normalized: string, accounts: LuzFi
       currency,
       type,
       category,
+      subCategory: '',
+      subSubCategory: '',
       description,
       accountId: payment.accountId,
       accountName: payment.accountName,
@@ -305,6 +309,7 @@ function parseLocaleNumber(value: string) {
 }
 
 function inferFinanceCategory(normalized: string) {
+  if (includesAny(normalized, ['ropa', 'zapatilla', 'zapatillas', 'zapatos', 'campera', 'pantalon', 'remera'])) return 'Ropa';
   if (includesAny(normalized, ['cine', 'netflix', 'spotify', 'teatro', 'salida'])) return 'Ocio';
   if (includesAny(normalized, ['pasaje', 'pasajes', 'vuelo', 'hotel', 'viaje'])) return 'Viajes';
   if (includesAny(normalized, ['super', 'mercado', 'comida', 'almuerzo', 'cena', 'delivery', 'restaurant'])) return 'Comida';
