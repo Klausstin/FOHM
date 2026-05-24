@@ -1,5 +1,7 @@
 import { format } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
+import { classifyFinanceText } from '../finance/finance.taxonomy';
+import type { NeutralType, TransactionKind } from '../finance/finance.types';
 
 export type LuzActionType = 'create_finance_transaction' | 'create_journal_entry' | 'create_habit_checkin' | 'ask_follow_up';
 export type LuzConfidence = 'high' | 'medium' | 'low';
@@ -7,7 +9,8 @@ export type LuzConfidence = 'high' | 'medium' | 'low';
 export interface LuzFinanceDraft {
   amount: number;
   currency: string;
-  type: 'expense' | 'income';
+  type: TransactionKind;
+  neutralType?: NeutralType;
   category: string;
   subCategory?: string;
   subSubCategory?: string;
@@ -142,7 +145,6 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
 
   if (!looksLikeMoney) return [];
 
-  const type = INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense';
   const payment = inferPayment(normalized, accounts);
   const needsReview = !payment.accountId;
   const paymentDetail = payment.accountName
@@ -154,21 +156,24 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
   return moneyMentions.map((mention, index) => {
     const context = getMoneyMentionContext(message, mention.index);
     const normalizedContext = normalize(context);
-    const category = inferFinanceCategory(normalizedContext || normalized);
+    const classification = classifyFinanceText(context || message);
+    const type = classification.suggestion.kind || (INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense');
+    const category = classification.suggestion.category;
     const description = inferDescription(context || message, mention.amount) || category;
 
     return {
       id: createActionId(`finance-${index}`),
       type: 'create_finance_transaction',
       title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
-      detail: `${mention.amount.toLocaleString()} ${mention.currency || inferCurrency(normalizedContext || normalized)} - ${category}. ${paymentDetail}`,
+      detail: `${mention.amount.toLocaleString()} ${mention.currency || inferCurrency(normalizedContext || normalized)} - ${category} / ${classification.suggestion.subcategory}. ${paymentDetail}`,
       confidence: payment.accountId ? 'high' : 'medium',
       finance: {
         amount: mention.amount,
         currency: mention.currency || inferCurrency(normalizedContext || normalized),
         type,
+        neutralType: classification.suggestion.neutralType,
         category,
-        subCategory: '',
+        subCategory: classification.suggestion.subcategory,
         subSubCategory: '',
         description,
         accountId: payment.accountId,
