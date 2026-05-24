@@ -1,6 +1,16 @@
 export type FinanceCurrency = 'ARS' | 'USD' | 'EUR' | 'BRL' | 'CLP' | 'UYU';
 
-export type FinanceTransactionType = 'expense' | 'income' | 'transfer';
+export type TransactionKind = 'expense' | 'income' | 'neutral';
+
+export type NeutralType =
+  | 'internal_transfer'
+  | 'credit_card_payment'
+  | 'currency_exchange'
+  | 'investment_movement'
+  | 'loan_movement'
+  | 'balance_adjustment';
+
+export type FinanceTransactionType = TransactionKind | 'transfer';
 
 export type FinanceSource =
   | 'manual'
@@ -38,8 +48,11 @@ export interface FinancialTransactionRecord {
   subCategory?: string;
   subSubCategory?: string;
   type: FinanceTransactionType;
+  kind?: TransactionKind;
+  neutralType?: NeutralType;
   accountId?: string;
   toAccountId?: string;
+  paymentMethodId?: string;
   tags?: string[];
   date: any;
   source: FinanceSource;
@@ -58,6 +71,11 @@ export interface FinancialTransactionRecord {
   paymentStatus?: string;
   merchantName?: string;
   merchantKey?: string;
+  merchant?: string;
+  owner?: 'agustin' | 'vicky' | 'shared' | 'other' | string;
+  projectId?: string;
+  isReimbursable?: boolean;
+  reimbursementStatus?: 'pending' | 'reimbursed' | 'not_applicable' | string;
   importSource?: string;
   transactionFingerprint?: string;
   statementFingerprint?: string;
@@ -89,8 +107,11 @@ export interface CreateFinancialTransactionInput {
   subCategory?: string;
   subSubCategory?: string;
   type: FinanceTransactionType | string;
+  kind?: TransactionKind;
+  neutralType?: NeutralType;
   accountId?: string;
   toAccountId?: string;
+  paymentMethodId?: string;
   tags?: string[];
   date: Date;
   source?: FinanceSource;
@@ -108,6 +129,11 @@ export interface CreateFinancialTransactionInput {
   paymentStatus?: string;
   merchantName?: string;
   merchantKey?: string;
+  merchant?: string;
+  owner?: 'agustin' | 'vicky' | 'shared' | 'other' | string;
+  projectId?: string;
+  isReimbursable?: boolean;
+  reimbursementStatus?: 'pending' | 'reimbursed' | 'not_applicable' | string;
   importSource?: string;
   transactionFingerprint?: string;
   statementFingerprint?: string;

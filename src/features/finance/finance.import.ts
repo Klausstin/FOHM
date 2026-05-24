@@ -1,4 +1,5 @@
 import { suggestMerchant } from './finance.merchants.ts';
+import { classifyFinanceText } from './finance.taxonomy.ts';
 
 export interface ImportedFinanceTransaction {
   amount: number;
@@ -217,28 +218,13 @@ function suggestVisaCategory(description: string, merchant: ReturnType<typeof su
       confidence: merchant.confidence,
     };
   }
-  if (/osde|medic|farmacia|hospital|clinica|salud/i.test(normalized)) {
-    return { category: 'Salud', subCategory: 'Medicina', isLikelyRecurring: normalized.includes('osde'), confidence: 0.82 };
-  }
-  if (/personal|flow|edenor|metrogas|aysa|internet|telefono|celular/i.test(normalized)) {
-    return { category: 'Servicios', subCategory: 'Hogar', isLikelyRecurring: true, confidence: 0.82 };
-  }
-  if (/hoyts|cinema|cine|teatro|ticket/i.test(normalized)) {
-    return { category: 'Ocio', subCategory: 'Entretenimiento', isLikelyRecurring: false, confidence: 0.82 };
-  }
-  if (/\bbrl\b|trancoso|guarulhos|porto seguro|lanchonete/i.test(normalized)) {
-    return { category: 'Aventura', subCategory: 'Viajes', isLikelyRecurring: false, confidence: 0.76 };
-  }
-  if (/kfc|restaurant|resto|bar|cafe|express|panader|super|market|carrefour|coto|dia/i.test(normalized)) {
-    return { category: 'Comida', subCategory: 'Comidas y compras', isLikelyRecurring: false, confidence: 0.75 };
-  }
-  if (/autopista|peaje|ypf|shell|axion|estacionamiento/i.test(normalized)) {
-    return { category: 'Transporte', subCategory: 'Auto', isLikelyRecurring: false, confidence: 0.75 };
-  }
-  if (/seguro|cia seg/i.test(normalized)) {
-    return { category: 'Finanzas', subCategory: 'Seguros', isLikelyRecurring: true, confidence: 0.75 };
-  }
-  return { category: 'Sin categorizar', subCategory: '', isLikelyRecurring: false, confidence: 0.45 };
+  const classification = classifyFinanceText(description);
+  return {
+    category: classification.suggestion.category,
+    subCategory: classification.suggestion.subcategory,
+    isLikelyRecurring: /osde|personal|flow|edenor|metrogas|aysa|seguro|spotify|netflix/i.test(normalized),
+    confidence: classification.suggestion.confidence,
+  };
 }
 
 function isVisaNonMovementLine(line: string) {
@@ -361,8 +347,8 @@ function suggestMovementClassification(description: string, signedAmount: number
   if (normalized.includes('cuenta visa') || normalized.includes('pago de servicios tarjeta')) {
     return {
       type: 'transfer' as const,
-      category: 'Finanzas',
-      subCategory: 'Pago de tarjeta',
+      category: 'Movimientos neutros',
+      subCategory: 'Pago tarjeta credito',
       isFixed: false,
       confidence: 0.75,
       needsReview: true,
@@ -373,8 +359,8 @@ function suggestMovementClassification(description: string, signedAmount: number
   if (normalized.includes('transferencia') || normalized.includes('compensacion de fondos')) {
     return {
       type: 'transfer' as const,
-      category: signedAmount < 0 ? 'Transferencias enviadas' : 'Transferencias recibidas',
-      subCategory: 'Transferencia bancaria',
+      category: 'Movimientos neutros',
+      subCategory: 'Transferencia interna',
       isFixed: false,
       confidence: 0.65,
       needsReview: true,
@@ -384,8 +370,8 @@ function suggestMovementClassification(description: string, signedAmount: number
 
   return {
     type: signedAmount < 0 ? 'expense' as const : 'income' as const,
-    category: signedAmount < 0 ? 'Sin categorizar' : 'Ingresos',
-    subCategory: '',
+    category: signedAmount < 0 ? classifyFinanceText(description).suggestion.category : 'Ingresos',
+    subCategory: signedAmount < 0 ? classifyFinanceText(description).suggestion.subcategory : '',
     isFixed: false,
     confidence: 0.45,
     needsReview: true,

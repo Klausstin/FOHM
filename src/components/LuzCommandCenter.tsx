@@ -106,6 +106,8 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         subCategory: action.finance.subCategory || '',
         subSubCategory: action.finance.subSubCategory || '',
         type: action.finance.type,
+        kind: action.finance.type,
+        neutralType: action.finance.neutralType,
         accountId: action.finance.accountId || '',
         date: new Date(),
         source: 'manual',
