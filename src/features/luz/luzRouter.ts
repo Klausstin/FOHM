@@ -56,7 +56,7 @@ export interface LuzFinancialAccountOption {
   type?: string;
 }
 
-const MONEY_WORDS = ['gaste', 'gasto', 'pague', 'compre', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron'];
+const MONEY_WORDS = ['gaste', 'gasto', 'pague', 'compre', 'costo', 'salio', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron'];
 const INCOME_WORDS = ['cobre', 'ingreso', 'me pagaron', 'me depositaron', 'sueldo', 'honorarios'];
 const NEGATIVE_HABIT_WORDS = ['no cumpli', 'falle', 'me comi las unas', 'me mordi las unas'];
 const POSITIVE_HABIT_WORDS = ['cumpli', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
@@ -90,19 +90,19 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], 
   const normalized = normalize(message);
   const actions: LuzAction[] = [];
 
-  const finance = parseFinanceAction(message, normalized, accounts);
-  if (finance) actions.push(finance);
+  const financeActions = parseFinanceActions(message, normalized, accounts);
+  actions.push(...financeActions);
 
   const habit = parseHabitAction(message, normalized, habits);
   if (habit) actions.push(habit);
 
-  if (shouldCreateJournal(normalized, Boolean(finance), Boolean(habit))) {
+  if (shouldCreateJournal(normalized, financeActions.length > 0, Boolean(habit))) {
     actions.push({
       id: createActionId('journal'),
       type: 'create_journal_entry',
       title: 'Guardar en Diario Mental',
       detail: 'Registrar el contexto completo para que Luz pueda detectar patrones mas adelante.',
-      confidence: finance || habit ? 'medium' : 'high',
+      confidence: financeActions.length > 0 || habit ? 'medium' : 'high',
       journal: {
         content: message,
         categories: inferJournalCategories(normalized),
@@ -129,21 +129,20 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], 
   };
 }
 
-function parseFinanceAction(message: string, normalized: string, accounts: LuzFinancialAccountOption[]): LuzAction | null {
-  const amount = parseAmount(normalized);
-  const looksLikeMoney = amount > 0 && (
+function parseFinanceActions(message: string, normalized: string, accounts: LuzFinancialAccountOption[]): LuzAction[] {
+  const moneyMentions = parseMoneyMentions(message);
+  const looksLikeMoney = moneyMentions.length > 0 && (
     MONEY_WORDS.some(word => normalized.includes(normalize(word))) ||
     normalized.includes('pesos') ||
     normalized.includes('$') ||
-    normalized.includes('usd')
+    normalized.includes('usd') ||
+    normalized.includes('eur') ||
+    normalized.includes('euro')
   );
 
-  if (!looksLikeMoney) return null;
+  if (!looksLikeMoney) return [];
 
   const type = INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense';
-  const category = inferFinanceCategory(normalized);
-  const currency = inferCurrency(normalized);
-  const description = inferDescription(message, amount) || category;
   const payment = inferPayment(normalized, accounts);
   const needsReview = !payment.accountId;
   const paymentDetail = payment.accountName
@@ -152,26 +151,33 @@ function parseFinanceAction(message: string, normalized: string, accounts: LuzFi
       ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
       : 'Falta confirmar cuenta o billetera.';
 
-  return {
-    id: createActionId('finance'),
-    type: 'create_finance_transaction',
-    title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
-    detail: `${amount.toLocaleString()} ${currency} - ${category}. ${paymentDetail}`,
-    confidence: payment.accountId ? 'high' : 'medium',
-    finance: {
-      amount,
-      currency,
-      type,
-      category,
-      subCategory: '',
-      subSubCategory: '',
-      description,
-      accountId: payment.accountId,
-      accountName: payment.accountName,
-      paymentMethod: payment.paymentMethod,
-      needsReview,
-    },
-  };
+  return moneyMentions.map((mention, index) => {
+    const context = getMoneyMentionContext(message, mention.index);
+    const normalizedContext = normalize(context);
+    const category = inferFinanceCategory(normalizedContext || normalized);
+    const description = inferDescription(context || message, mention.amount) || category;
+
+    return {
+      id: createActionId(`finance-${index}`),
+      type: 'create_finance_transaction',
+      title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
+      detail: `${mention.amount.toLocaleString()} ${mention.currency || inferCurrency(normalizedContext || normalized)} - ${category}. ${paymentDetail}`,
+      confidence: payment.accountId ? 'high' : 'medium',
+      finance: {
+        amount: mention.amount,
+        currency: mention.currency || inferCurrency(normalizedContext || normalized),
+        type,
+        category,
+        subCategory: '',
+        subSubCategory: '',
+        description,
+        accountId: payment.accountId,
+        accountName: payment.accountName,
+        paymentMethod: payment.paymentMethod,
+        needsReview,
+      },
+    };
+  });
 }
 
 function parseHabitAction(message: string, normalized: string, habits: HabitRecord[]): LuzAction | null {
@@ -299,6 +305,43 @@ function parseAmount(normalized: string) {
   const moneyMatch = normalized.match(/(?:\$|ars|usd|pesos?|dolares?)?\s*(\d[\d.,]*)/);
   if (!moneyMatch) return 0;
   return parseLocaleNumber(moneyMatch[1]);
+}
+
+function parseMoneyMentions(message: string) {
+  const mentions: Array<{ amount: number; currency?: string; index: number }> = [];
+  const patterns = [
+    /(?:\$|ars|usd|eur|€)\s*(\d+(?:[.,]\d+)?)\s*(k|mil)?/gi,
+    /(\d+(?:[.,]\d+)?)\s*(k|mil)?\s*(pesos?|ars|usd|dolares?|eur|euros?|€)\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of message.matchAll(pattern)) {
+      const rawAmount = match[1];
+      const multiplier = match[2] || '';
+      const currencyText = match[3] || match[0] || '';
+      const amount = parseLocaleNumber(rawAmount) * (normalize(multiplier).includes('mil') || normalize(multiplier) === 'k' ? 1000 : 1);
+      if (!amount) continue;
+      mentions.push({
+        amount,
+        currency: inferCurrency(normalize(currencyText)),
+        index: match.index || 0,
+      });
+    }
+  }
+
+  const unique = new Map<string, { amount: number; currency?: string; index: number }>();
+  mentions.forEach(mention => unique.set(`${mention.index}-${mention.amount}-${mention.currency || ''}`, mention));
+  return Array.from(unique.values()).sort((a, b) => a.index - b.index).slice(0, 6);
+}
+
+function getMoneyMentionContext(message: string, index: number) {
+  const start = Math.max(0, message.lastIndexOf(',', index - 1), message.lastIndexOf('.', index - 1), message.lastIndexOf(';', index - 1));
+  const nextComma = message.indexOf(',', index + 1);
+  const nextPeriod = message.indexOf('.', index + 1);
+  const nextSemicolon = message.indexOf(';', index + 1);
+  const nextCandidates = [nextComma, nextPeriod, nextSemicolon].filter(position => position >= 0);
+  const end = nextCandidates.length ? Math.min(...nextCandidates) : message.length;
+  return message.slice(start > 0 ? start + 1 : 0, end).trim();
 }
 
 function parseLocaleNumber(value: string) {
