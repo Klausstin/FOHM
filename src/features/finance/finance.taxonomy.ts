@@ -141,8 +141,11 @@ export const DEFAULT_FINANCE_CATEGORIES: FinanceCategoryDefinition[] = [
   ]),
 ];
 
-export function classifyFinanceText(input: string): FinanceClassificationResult {
+export function classifyFinanceText(input: string, learnedMappings: any[] = []): FinanceClassificationResult {
   const normalized = normalizeFinanceText(input);
+  const learned = findLearnedClassification(normalized, learnedMappings);
+  if (learned) return learned;
+
   const neutral = classifyNeutral(normalized);
   if (neutral) return buildResult(input, neutral, [], getSuggestedTags(normalized));
 
@@ -191,6 +194,14 @@ export function classifyFinanceText(input: string): FinanceClassificationResult 
     }));
 
   return buildResult(input, suggestion, alternatives, getSuggestedTags(normalized));
+}
+
+export function buildFinanceLearningKey(input: string) {
+  return normalizeFinanceText(input)
+    .split(' ')
+    .filter(part => part.length > 2 && !FINANCE_STOP_WORDS.has(part) && !/^\d+$/.test(part))
+    .slice(0, 6)
+    .join(' ');
 }
 
 export function toLegacyPredefinedCategories() {
@@ -305,6 +316,45 @@ function scoreTerms(value: string, terms: string[]) {
   return terms.reduce((score, term) => value.includes(normalizeFinanceText(term)) ? score + 0.18 : score, 0);
 }
 
+function findLearnedClassification(normalized: string, learnedMappings: any[]): FinanceClassificationResult | null {
+  const inputKey = buildFinanceLearningKey(normalized);
+  if (!inputKey) return null;
+
+  const learned = learnedMappings
+    .map(mapping => {
+      const mappingKey = mapping.learningKey || buildFinanceLearningKey(mapping.originalDescription || mapping.mappedDescription || '');
+      const merchantHit = mapping.merchantKey && normalized.includes(normalizeFinanceText(mapping.merchantKey));
+      const keyHit = mappingKey && (inputKey.includes(mappingKey) || mappingKey.includes(inputKey));
+      const textScore = getTokenOverlapScore(inputKey, mappingKey);
+      return { mapping, score: merchantHit ? 1 : keyHit ? 0.92 : textScore };
+    })
+    .filter(item => item.score >= 0.55 && item.mapping.category)
+    .sort((a, b) => b.score - a.score)[0];
+
+  if (!learned) return null;
+
+  return buildResult(normalized, {
+    kind: learned.mapping.kind || learned.mapping.type || 'expense',
+    neutralType: learned.mapping.neutralType,
+    category: learned.mapping.category,
+    subcategory: learned.mapping.subCategory || learned.mapping.subcategory || 'Otros',
+    confidence: Math.min(0.98, 0.82 + (Number(learned.mapping.useCount || 0) * 0.02)),
+    reason: 'Aprendido de una correccion anterior.',
+  }, [], getSuggestedTags(normalized));
+}
+
+function getTokenOverlapScore(a: string, b: string) {
+  if (!a || !b) return 0;
+  const aTokens = new Set(a.split(' ').filter(Boolean));
+  const bTokens = new Set(b.split(' ').filter(Boolean));
+  if (!aTokens.size || !bTokens.size) return 0;
+  let shared = 0;
+  aTokens.forEach(token => {
+    if (bTokens.has(token)) shared += 1;
+  });
+  return shared / Math.min(aTokens.size, bTokens.size);
+}
+
 function getSuggestedTags(normalized: string) {
   const tags = ['gato', 'perro', 'visa', 'mastercard', 'bbva', 'galicia', 'spotify', 'netflix', 'openai', 'roma', 'viaje']
     .filter(tag => normalized.includes(tag));
@@ -324,3 +374,23 @@ function normalizeFinanceText(value: string) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+const FINANCE_STOP_WORDS = new Set([
+  'compra',
+  'consumo',
+  'pago',
+  'gasto',
+  'tarjeta',
+  'visa',
+  'mastercard',
+  'credito',
+  'debito',
+  'con',
+  'para',
+  'del',
+  'por',
+  'los',
+  'las',
+  'una',
+  'uno',
+]);

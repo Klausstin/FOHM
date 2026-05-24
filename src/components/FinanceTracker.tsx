@@ -34,6 +34,7 @@ import { buildFinancialInsights } from '../features/finance/finance.insights.ts'
 import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
 import { formatAccountBalance } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
+import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -282,11 +283,22 @@ function shortFingerprint(value?: string) {
 
 function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   const originalText = normalizeDuplicateText(transaction.originalDescription || transaction.description || '');
+  const learningKey = buildFinanceLearningKey(transaction.originalDescription || transaction.description || '');
   const merchantKey = transaction.merchantKey || '';
-  const learnedMapping = mappings.find(mapping => {
+  const learnedMapping = mappings
+    .map(mapping => {
     const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
-    return (merchantKey && mapping.merchantKey === merchantKey) || (mappingText && mappingText === originalText);
-  });
+      const mappingLearningKey = mapping.learningKey || buildFinanceLearningKey(mapping.originalDescription || mapping.mappedDescription || '');
+      const merchantMatch = merchantKey && mapping.merchantKey === merchantKey;
+      const exactTextMatch = mappingText && mappingText === originalText;
+      const learningMatch = learningKey && mappingLearningKey && (learningKey.includes(mappingLearningKey) || mappingLearningKey.includes(learningKey));
+      return {
+        mapping,
+        score: merchantMatch ? 3 : exactTextMatch ? 2 : learningMatch ? 1 : 0,
+      };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.mapping;
 
   if (!learnedMapping) return transaction;
 
@@ -801,6 +813,9 @@ export default function FinanceTracker({ user }: { user: any }) {
         merchantName: pt.merchantName || '',
         merchantKey: pt.merchantKey || '',
         transactionFingerprint: pt.transactionFingerprint || '',
+        learningKey: buildFinanceLearningKey(pt.originalDescription || pt.description),
+        useCount: (existingMapping?.useCount || 0) + 1,
+        lastUsedAt: new Date(),
       };
       if (existingMapping) {
         await updateDoc(doc(db, 'mappings', existingMapping.id), mappingPatch);
@@ -898,6 +913,9 @@ export default function FinanceTracker({ user }: { user: any }) {
           isFixed,
           merchantName: merchantName || '',
           merchantKey: merchantKey || '',
+          learningKey: buildFinanceLearningKey(originalDescription || description),
+          useCount: (existingMapping?.useCount || 0) + 1,
+          lastUsedAt: new Date(),
         };
         if (existingMapping) {
           await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
@@ -1168,22 +1186,24 @@ export default function FinanceTracker({ user }: { user: any }) {
   const handleApplyCategoryToGroup = async (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => {
     if (!draft.category || !group.transactionIds?.length) return;
 
-    const learnedPatch = {
-      mappedDescription: group.label,
-      category: draft.category,
-      subCategory: draft.subCategory || '',
-      subSubCategory: draft.subSubCategory || '',
-      isFixed: draft.isFixed,
-      merchantName: group.merchantName || '',
-      merchantKey: group.merchantKey || '',
-    };
-
     try {
       const existingMapping = userMappings.find(mapping => {
         const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
         const groupText = normalizeDuplicateText(group.originalDescription || group.label || '');
         return (group.merchantKey && mapping.merchantKey === group.merchantKey) || (mappingText && mappingText === groupText);
       });
+      const learnedPatch = {
+        mappedDescription: group.label,
+        category: draft.category,
+        subCategory: draft.subCategory || '',
+        subSubCategory: draft.subSubCategory || '',
+        isFixed: draft.isFixed,
+        merchantName: group.merchantName || '',
+        merchantKey: group.merchantKey || '',
+        learningKey: buildFinanceLearningKey(group.originalDescription || group.label),
+        useCount: (existingMapping?.useCount || 0) + group.transactionIds.length,
+        lastUsedAt: new Date(),
+      };
 
       if (existingMapping) {
         await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
