@@ -4,7 +4,16 @@ import { classifyFinanceText } from '../finance/finance.taxonomy';
 import type { NeutralType, TransactionKind } from '../finance/finance.types';
 import type { WishlistHorizon, WishlistItemType } from '../wishlist/wishlist.types';
 
-export type LuzActionType = 'create_finance_transaction' | 'create_journal_entry' | 'create_habit_checkin' | 'create_wishlist_item' | 'ask_follow_up';
+export type UniversalCaptureIntent = 'journal_entry' | 'financial_transaction' | 'wishlist_item' | 'goal' | 'habit' | 'calendar_event' | 'unknown';
+export type LuzActionType =
+  | 'create_finance_transaction'
+  | 'create_journal_entry'
+  | 'create_habit_checkin'
+  | 'create_wishlist_item'
+  | 'create_goal'
+  | 'create_habit'
+  | 'create_calendar_event'
+  | 'ask_follow_up';
 export type LuzConfidence = 'high' | 'medium' | 'low';
 
 export interface LuzFinanceDraft {
@@ -36,6 +45,30 @@ export interface LuzHabitCheckinDraft {
   needsReview: boolean;
 }
 
+export interface LuzHabitDraft {
+  title: string;
+  description: string;
+  startDate: string;
+  linkedGoalIds: string[];
+  needsReview: boolean;
+}
+
+export interface LuzGoalDraft {
+  title: string;
+  description: string;
+  year: number;
+  categories: string[];
+  needsReview: boolean;
+}
+
+export interface LuzCalendarDraft {
+  title: string;
+  date?: string;
+  durationMinutes?: number;
+  category: string;
+  needsReview: boolean;
+}
+
 export interface LuzWishlistDraft {
   title: string;
   estimatedPrice: number;
@@ -52,12 +85,16 @@ export interface LuzWishlistDraft {
 export interface LuzAction {
   id: string;
   type: LuzActionType;
+  intent: UniversalCaptureIntent;
   title: string;
   detail: string;
   confidence: LuzConfidence;
   finance?: LuzFinanceDraft;
   journal?: LuzJournalDraft;
   habitCheckin?: LuzHabitCheckinDraft;
+  habit?: LuzHabitDraft;
+  goal?: LuzGoalDraft;
+  calendar?: LuzCalendarDraft;
   wishlist?: LuzWishlistDraft;
   question?: string;
 }
@@ -81,6 +118,9 @@ const POSITIVE_HABIT_WORDS = ['cumpli', 'entrene', 'medite', 'lei', 'sali a corr
 const PAYMENT_HINTS = ['con ', 'tarjeta', 'visa', 'master', 'mastercard', 'amex', 'mercado pago', 'mp', 'uala', 'brubank', 'galicia', 'santander', 'bbva', 'naranja', 'efectivo', 'debito', 'credito'];
 const WISHLIST_INTENT_WORDS = ['quiero comprar', 'me gustaria comprar', 'estoy pensando en comprar', 'tengo ganas de comprar', 'me quiero comprar', 'wishlist', 'lista de deseos'];
 const BIG_WISHLIST_WORDS = ['casa', 'departamento', 'depto', 'terreno', 'auto', 'camioneta', 'mudanza', 'negocio', 'local', 'inversion', 'invertir'];
+const GOAL_INTENT_WORDS = ['este ano quiero', 'mi objetivo', 'mi meta', 'quiero lograr', 'quiero estar', 'para este ano', 'objetivo anual'];
+const HABIT_CREATION_WORDS = ['quiero empezar a', 'quiero arrancar', 'me gustaria empezar', 'necesito empezar', 'habito de', 'crear habito'];
+const CALENDAR_INTENT_WORDS = ['agendame', 'agenda', 'calendario', 'bloqueame', 'reservame', 'recordame'];
 const REFLECTIVE_JOURNAL_WORDS = [
   'me senti',
   'me siento',
@@ -116,13 +156,24 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], 
   const wishlist = parseWishlistAction(message, normalized);
   if (wishlist) actions.push(wishlist);
 
+  const goal = parseGoalAction(message, normalized);
+  if (goal) actions.push(goal);
+
+  const habitCreation = parseHabitCreationAction(message, normalized);
+  if (habitCreation) actions.push(habitCreation);
+
+  const calendar = parseCalendarAction(message, normalized);
+  if (calendar) actions.push(calendar);
+
   const habit = parseHabitAction(message, normalized, habits);
   if (habit) actions.push(habit);
 
-  if (shouldCreateJournal(normalized, financeActions.length > 0 || Boolean(wishlist), Boolean(habit))) {
+  const hasStructuredAction = financeActions.length > 0 || Boolean(wishlist) || Boolean(goal) || Boolean(habitCreation) || Boolean(calendar);
+  if (shouldCreateJournal(normalized, hasStructuredAction, Boolean(habit))) {
     actions.push({
       id: createActionId('journal'),
       type: 'create_journal_entry',
+      intent: 'journal_entry',
       title: 'Guardar en Diario Mental',
       detail: 'Registrar el contexto completo para que Luz pueda detectar patrones mas adelante.',
       confidence: financeActions.length > 0 || habit ? 'medium' : 'high',
@@ -139,6 +190,7 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], 
     actions.push({
       id: createActionId('journal'),
       type: 'create_journal_entry',
+      intent: 'journal_entry',
       title: 'Guardar en Diario Mental',
       detail: 'No detecte una accion concreta, pero puedo guardar esto como entrada privada.',
       confidence: 'medium',
@@ -168,6 +220,7 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
   return {
     id: createActionId('wishlist'),
     type: 'create_wishlist_item',
+    intent: 'wishlist_item',
     title: 'Agregar a Wishlist',
     detail: `${title}${firstMoney ? ` - ${firstMoney.amount.toLocaleString()} ${firstMoney.currency || inferCurrency(normalized)}` : ''}. ${itemType === 'big_goal' || itemType === 'asset' ? 'Lo marco como objetivo grande para mirarlo contra ingresos, gastos y plan.' : 'Queda al final del ranking para priorizar despues.'}`,
     confidence: title === 'Item para evaluar' ? 'low' : 'medium',
@@ -218,6 +271,7 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
     return {
       id: createActionId(`finance-${index}`),
       type: 'create_finance_transaction',
+      intent: 'financial_transaction',
       title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
       detail: `${mention.amount.toLocaleString()} ${mention.currency || inferCurrency(normalizedContext || normalized)} - ${category} / ${classification.suggestion.subcategory}. ${paymentDetail}`,
       confidence: payment.accountId ? 'high' : 'medium',
@@ -239,6 +293,68 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
   });
 }
 
+function parseGoalAction(message: string, normalized: string): LuzAction | null {
+  const hasGoalIntent = includesAny(normalized, GOAL_INTENT_WORDS);
+  if (!hasGoalIntent || includesAny(normalized, WISHLIST_INTENT_WORDS)) return null;
+
+  const title = inferGoalTitle(message, normalized);
+  const categories = inferGoalCategories(normalized);
+  return {
+    id: createActionId('goal'),
+    type: 'create_goal',
+    intent: 'goal',
+    title: 'Crear objetivo',
+    detail: `${title}. Queda como objetivo anual para conectar despues con habitos, calendario, finanzas y Wishlist.`,
+    confidence: title ? 'medium' : 'low',
+    goal: {
+      title: title || 'Objetivo para definir',
+      description: message,
+      year: new Date().getFullYear(),
+      categories,
+      needsReview: !title,
+    },
+  };
+}
+
+function parseHabitCreationAction(message: string, normalized: string): LuzAction | null {
+  const hasHabitIntent = includesAny(normalized, HABIT_CREATION_WORDS);
+  if (!hasHabitIntent) return null;
+
+  const title = inferNewHabitTitle(message, normalized);
+  return {
+    id: createActionId('habit-new'),
+    type: 'create_habit',
+    intent: 'habit',
+    title: 'Crear habito',
+    detail: `${title}. Lo dejo como habito activo para empezar a medirlo.`,
+    confidence: title ? 'medium' : 'low',
+    habit: {
+      title: title || 'Habito para definir',
+      description: message,
+      startDate: format(new Date(), 'yyyy-MM-dd'),
+      linkedGoalIds: [],
+      needsReview: !title,
+    },
+  };
+}
+
+function parseCalendarAction(message: string, normalized: string): LuzAction | null {
+  if (!includesAny(normalized, CALENDAR_INTENT_WORDS)) return null;
+  return {
+    id: createActionId('calendar'),
+    type: 'create_calendar_event',
+    intent: 'calendar_event',
+    title: 'Preparar evento',
+    detail: 'Detecte algo para calendario. Por ahora queda como borrador hasta integrar Google Calendar con permisos reales.',
+    confidence: 'low',
+    calendar: {
+      title: inferCalendarTitle(message),
+      category: inferCalendarCategory(normalized),
+      needsReview: true,
+    },
+  };
+}
+
 function parseHabitAction(message: string, normalized: string, habits: HabitRecord[]): LuzAction | null {
   const isNegative = NEGATIVE_HABIT_WORDS.some(word => normalized.includes(normalize(word)));
   const isPositive = POSITIVE_HABIT_WORDS.some(word => normalized.includes(normalize(word)));
@@ -251,6 +367,7 @@ function parseHabitAction(message: string, normalized: string, habits: HabitReco
   return {
     id: createActionId('habit'),
     type: matchingHabit ? 'create_habit_checkin' : 'ask_follow_up',
+    intent: 'habit',
     title: matchingHabit ? 'Marcar habito' : 'Completar habito detectado',
     detail: matchingHabit
       ? `${habitTitle}: ${status === 'red' ? 'no cumplido' : 'cumplido'} hoy.`
@@ -279,6 +396,7 @@ function buildFollowUps(message: string, normalized: string, actions: LuzAction[
       followUps.push({
         id: createActionId('question'),
         type: 'ask_follow_up',
+        intent: 'unknown',
         title: 'Dato pendiente',
         detail: financeAction.finance.paymentMethod
           ? `Detecte ${financeAction.finance.paymentMethod}, pero necesito saber a que cuenta corresponde.`
@@ -295,6 +413,7 @@ function buildFollowUps(message: string, normalized: string, actions: LuzAction[
     followUps.push({
       id: createActionId('question'),
       type: 'ask_follow_up',
+      intent: 'journal_entry',
       title: 'Reflexion opcional',
       detail: 'Te gusto la pelicula? Que puntaje le pondrias y que te quedo dando vueltas?',
       confidence: 'medium',
@@ -340,6 +459,65 @@ function inferHabitTitle(normalized: string, status: 'green' | 'yellow' | 'red')
   if (includesAny(normalized, ['entrene', 'gym', 'correr'])) return 'Entrenamiento';
   if (normalized.includes('medite')) return 'Meditacion';
   return status === 'red' ? 'Habito no cumplido' : 'Habito cumplido';
+}
+
+function inferNewHabitTitle(message: string, normalized: string) {
+  if (includesAny(normalized, ['entrenar', 'gym', 'correr'])) return 'Entrenar';
+  if (includesAny(normalized, ['meditar', 'meditacion'])) return 'Meditar';
+  if (includesAny(normalized, ['leer', 'lectura'])) return 'Leer';
+  if (includesAny(normalized, ['dormir', 'descansar'])) return 'Dormir mejor';
+  const intent = HABIT_CREATION_WORDS.find(word => normalized.includes(normalize(word)));
+  if (!intent) return '';
+  const normalizedIndex = normalized.indexOf(normalize(intent));
+  return message
+    .slice(normalizedIndex + intent.length)
+    .replace(/\b(que|un|una|el|la|los|las|de|para|por|con|me|a)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[,.]$/g, '')
+    .slice(0, 80);
+}
+
+function inferGoalTitle(message: string, normalized: string) {
+  if (includesAny(normalized, ['mejor estado fisico', 'estar en forma', 'salud'])) return 'Estar en mi mejor estado fisico';
+  if (includesAny(normalized, ['orden financiero', 'finanzas', 'ahorrar'])) return 'Ordenar mis finanzas';
+  const intent = GOAL_INTENT_WORDS.find(word => normalized.includes(word));
+  if (!intent) return message.replace(/[,.]$/g, '').slice(0, 100);
+  const normalizedIndex = normalized.indexOf(intent);
+  return message
+    .slice(normalizedIndex)
+    .replace(/\b(este año quiero|este ano quiero|mi objetivo es|mi meta es|quiero lograr|quiero estar|para este año|para este ano|objetivo anual)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[,.]$/g, '')
+    .slice(0, 100);
+}
+
+function inferGoalCategories(normalized: string) {
+  const categories = new Set<string>();
+  if (includesAny(normalized, ['salud', 'fisico', 'entrenar', 'gym', 'dormir'])) categories.add('Salud');
+  if (includesAny(normalized, ['finanzas', 'plata', 'ahorrar', 'inversion', 'casa'])) categories.add('Finanzas');
+  if (includesAny(normalized, ['trabajo', 'empresa', 'equipo', 'comercial'])) categories.add('Trabajo');
+  if (includesAny(normalized, ['pareja', 'vicky', 'familia'])) categories.add('Vinculos');
+  if (includesAny(normalized, ['viaje', 'aventura'])) categories.add('Aventura');
+  return categories.size ? Array.from(categories) : ['Personal'];
+}
+
+function inferCalendarTitle(message: string) {
+  return message
+    .replace(/\b(agendame|agenda|calendario|bloqueame|reservame|recordame)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[,.]$/g, '')
+    .slice(0, 100) || 'Evento para definir';
+}
+
+function inferCalendarCategory(normalized: string) {
+  if (includesAny(normalized, ['entrenar', 'gym', 'medico', 'salud'])) return 'Salud';
+  if (includesAny(normalized, ['finanzas', 'banco', 'resumen', 'plata'])) return 'Finanzas';
+  if (includesAny(normalized, ['trabajo', 'reunion', 'cliente'])) return 'Trabajo';
+  if (includesAny(normalized, ['vicky', 'pareja', 'familia'])) return 'Vinculos';
+  return 'Personal';
 }
 
 function summarizeActions(actions: LuzAction[]) {

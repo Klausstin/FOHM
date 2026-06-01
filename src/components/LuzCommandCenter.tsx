@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Brain, CheckCircle2, Gift, HelpCircle, Loader2, Mic, Send, Sparkles, Wallet, X } from 'lucide-react';
 import { createFinancialTransaction } from '../features/finance/finance.service';
-import { createHabitLog } from '../features/habits/habit.service';
+import { createGoal } from '../features/goals/goal.service';
+import { createHabit, createHabitLog } from '../features/habits/habit.service';
 import type { HabitRecord } from '../features/habits/habit.types';
 import { createJournalEntry } from '../features/journal/journal.service';
 import { routeLuzMessage, type LuzAction, type LuzFinancialAccountOption, type LuzRouteResult } from '../features/luz/luzRouter';
@@ -86,10 +87,50 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
     });
   };
 
+  const updateDraftGoal = (actionId: string, goalUpdates: Partial<NonNullable<LuzAction['goal']>>) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        actions: prev.actions.map(action => {
+          if (action.id !== actionId || !action.goal) return action;
+          const nextGoal = { ...action.goal, ...goalUpdates };
+          return {
+            ...action,
+            goal: nextGoal,
+            detail: `${nextGoal.title}. Queda como objetivo anual para conectar despues con habitos, calendario, finanzas y Wishlist.`,
+          };
+        }),
+      };
+    });
+  };
+
+  const updateDraftHabit = (actionId: string, habitUpdates: Partial<NonNullable<LuzAction['habit']>>) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        actions: prev.actions.map(action => {
+          if (action.id !== actionId || !action.habit) return action;
+          const nextHabit = { ...action.habit, ...habitUpdates };
+          return {
+            ...action,
+            habit: nextHabit,
+            detail: `${nextHabit.title}. Lo dejo como habito activo para empezar a medirlo.`,
+          };
+        }),
+      };
+    });
+  };
+
   const confirmDraft = async () => {
     if (!draft || isSaving) return;
 
-    const executableActions = draft.actions.filter(action => action.type !== 'ask_follow_up' && !rejectedActionIds.includes(action.id));
+    const executableActions = draft.actions.filter(action =>
+      action.type !== 'ask_follow_up' &&
+      action.type !== 'create_calendar_event' &&
+      !rejectedActionIds.includes(action.id)
+    );
     if (executableActions.length === 0) {
       setStatus('No hay acciones listas para guardar. Respondeme una de las preguntas o cargalo manualmente.');
       return;
@@ -154,6 +195,28 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       await createHabitLog(action.habitCheckin.habitId, user.uid, action.habitCheckin.date, action.habitCheckin.status);
     }
 
+    if (action.type === 'create_habit' && action.habit) {
+      await createHabit({
+        uid: user.uid,
+        householdId: user.householdId || null,
+        title: action.habit.title,
+        description: action.habit.description,
+        startDate: action.habit.startDate,
+        linkedGoalIds: action.habit.linkedGoalIds,
+      });
+    }
+
+    if (action.type === 'create_goal' && action.goal) {
+      await createGoal({
+        uid: user.uid,
+        householdId: user.householdId || null,
+        year: action.goal.year,
+        title: action.goal.title,
+        description: action.goal.description,
+        categories: action.goal.categories,
+      });
+    }
+
     if (action.type === 'create_wishlist_item' && action.wishlist) {
       await createWishlistItem({
         uid: user.uid,
@@ -199,13 +262,15 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
 
   const currentActions = draft?.actions || preview?.actions || [];
   const selectedExecutableCount = draft
-    ? draft.actions.filter(action => action.type !== 'ask_follow_up' && !rejectedActionIds.includes(action.id)).length
+    ? draft.actions.filter(action => action.type !== 'ask_follow_up' && action.type !== 'create_calendar_event' && !rejectedActionIds.includes(action.id)).length
     : 0;
   const previewType = currentActions.some(action => action.type === 'create_finance_transaction')
     ? 'Finanzas'
     : currentActions.some(action => action.type === 'create_wishlist_item')
       ? 'Wishlist'
-    : currentActions.some(action => action.type === 'create_habit_checkin')
+    : currentActions.some(action => action.type === 'create_goal')
+      ? 'Objetivos'
+    : currentActions.some(action => action.type === 'create_habit_checkin' || action.type === 'create_habit')
       ? 'Habitos'
       : 'Diario';
 
@@ -303,6 +368,8 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
                 onUpdateAction={updateDraftAction}
                 onUpdateFinance={updateDraftFinance}
                 onUpdateWishlist={updateDraftWishlist}
+                onUpdateGoal={updateDraftGoal}
+                onUpdateHabit={updateDraftHabit}
                 accounts={accounts}
                 categories={categories}
               />
@@ -343,6 +410,8 @@ function LuzActionCard({
   onUpdateAction,
   onUpdateFinance,
   onUpdateWishlist,
+  onUpdateGoal,
+  onUpdateHabit,
   accounts,
   categories,
 }: {
@@ -352,6 +421,8 @@ function LuzActionCard({
   onUpdateAction: (actionId: string, updates: Partial<LuzAction>) => void;
   onUpdateFinance: (actionId: string, financeUpdates: Partial<NonNullable<LuzAction['finance']>>) => void;
   onUpdateWishlist: (actionId: string, wishlistUpdates: Partial<NonNullable<LuzAction['wishlist']>>) => void;
+  onUpdateGoal: (actionId: string, goalUpdates: Partial<NonNullable<LuzAction['goal']>>) => void;
+  onUpdateHabit: (actionId: string, habitUpdates: Partial<NonNullable<LuzAction['habit']>>) => void;
   accounts: LuzFinancialAccountOption[];
   categories: any[];
 }) {
@@ -359,11 +430,13 @@ function LuzActionCard({
     ? Wallet
     : action.type === 'create_wishlist_item'
       ? Gift
-    : action.type === 'create_habit_checkin'
+    : action.type === 'create_habit_checkin' || action.type === 'create_habit'
       ? CheckCircle2
-      : action.type === 'ask_follow_up'
-        ? HelpCircle
-        : Brain;
+      : action.type === 'create_goal'
+        ? Brain
+    : action.type === 'ask_follow_up'
+      ? HelpCircle
+      : Brain;
 
   return (
     <div className={`rounded-2xl border p-4 transition ${isRejected ? 'border-white/5 bg-white/[0.04] opacity-45' : 'border-white/10 bg-white/10'}`}>
@@ -397,6 +470,12 @@ function LuzActionCard({
       )}
       {!isRejected && action.type === 'create_wishlist_item' && action.wishlist && (
         <LuzWishlistEditor action={action} onUpdateWishlist={onUpdateWishlist} />
+      )}
+      {!isRejected && action.type === 'create_goal' && action.goal && (
+        <LuzGoalEditor action={action} onUpdateGoal={onUpdateGoal} />
+      )}
+      {!isRejected && action.type === 'create_habit' && action.habit && (
+        <LuzHabitEditor action={action} onUpdateHabit={onUpdateHabit} />
       )}
     </div>
   );
@@ -621,6 +700,106 @@ function LuzWishlistEditor({
           type="text"
           value={wishlist.reason}
           onChange={(event) => onUpdateWishlist(action.id, { reason: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+    </div>
+  );
+}
+
+function LuzGoalEditor({
+  action,
+  onUpdateGoal,
+}: {
+  action: LuzAction;
+  onUpdateGoal: (actionId: string, goalUpdates: Partial<NonNullable<LuzAction['goal']>>) => void;
+}) {
+  const goal = action.goal;
+  if (!goal) return null;
+
+  return (
+    <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
+      <label className="space-y-1 sm:col-span-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Objetivo</span>
+        <input
+          type="text"
+          value={goal.title}
+          onChange={(event) => onUpdateGoal(action.id, { title: event.target.value, needsReview: !event.target.value.trim() })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Año</span>
+        <input
+          type="number"
+          value={goal.year}
+          onChange={(event) => onUpdateGoal(action.id, { year: Number(event.target.value || new Date().getFullYear()) })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Categorias</span>
+        <input
+          type="text"
+          value={goal.categories.join(', ')}
+          onChange={(event) => onUpdateGoal(action.id, { categories: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1 sm:col-span-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Descripcion</span>
+        <input
+          type="text"
+          value={goal.description}
+          onChange={(event) => onUpdateGoal(action.id, { description: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+    </div>
+  );
+}
+
+function LuzHabitEditor({
+  action,
+  onUpdateHabit,
+}: {
+  action: LuzAction;
+  onUpdateHabit: (actionId: string, habitUpdates: Partial<NonNullable<LuzAction['habit']>>) => void;
+}) {
+  const habit = action.habit;
+  if (!habit) return null;
+
+  return (
+    <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Habito</span>
+        <input
+          type="text"
+          value={habit.title}
+          onChange={(event) => onUpdateHabit(action.id, { title: event.target.value, needsReview: !event.target.value.trim() })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Inicio</span>
+        <input
+          type="date"
+          value={habit.startDate}
+          onChange={(event) => onUpdateHabit(action.id, { startDate: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1 sm:col-span-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Descripcion</span>
+        <input
+          type="text"
+          value={habit.description}
+          onChange={(event) => onUpdateHabit(action.id, { description: event.target.value })}
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
         />
       </label>
