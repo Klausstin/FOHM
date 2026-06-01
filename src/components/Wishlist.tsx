@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, CheckCircle2, ExternalLink, Gift, Plus, Trash2 } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../firebase';
 import { createWishlistItem, deleteWishlistItem, subscribeToHouseholdWishlist, updateWishlistItem } from '../features/wishlist/wishlist.service';
-import type { WishlistItemRecord, WishlistOwner, WishlistStatus, WishlistVisibility } from '../features/wishlist/wishlist.types';
+import type { WishlistHorizon, WishlistItemRecord, WishlistItemType, WishlistOwner, WishlistStatus, WishlistVisibility } from '../features/wishlist/wishlist.types';
 
 const CURRENCIES = ['ARS', 'USD', 'EUR'];
-const CATEGORIES = ['Ropa', 'Tecnologia', 'Casa', 'Viajes', 'Deporte', 'Hobby', 'Experiencias', 'Otros'];
+const CATEGORIES = ['Ropa', 'Tecnologia', 'Casa', 'Viajes', 'Deporte', 'Hobby', 'Experiencias', 'Patrimonio', 'Otros'];
 const INPUT_CLASS = 'w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-bold text-neutral-950 outline-none transition focus:border-neutral-400 focus:bg-white';
 const STATUSES: Array<{ id: WishlistStatus; label: string }> = [
   { id: 'wanted', label: 'Deseado' },
@@ -13,6 +13,18 @@ const STATUSES: Array<{ id: WishlistStatus; label: string }> = [
   { id: 'approved', label: 'Aprobado' },
   { id: 'purchased', label: 'Comprado' },
   { id: 'dismissed', label: 'Descartado' },
+];
+const ITEM_TYPES: Array<{ id: WishlistItemType; label: string }> = [
+  { id: 'purchase', label: 'Compra' },
+  { id: 'big_goal', label: 'Objetivo grande' },
+  { id: 'experience', label: 'Experiencia' },
+  { id: 'asset', label: 'Patrimonial' },
+];
+const HORIZONS: Array<{ id: WishlistHorizon; label: string }> = [
+  { id: 'short', label: 'Corto plazo' },
+  { id: 'medium', label: 'Mediano plazo' },
+  { id: 'long', label: 'Largo plazo' },
+  { id: 'open', label: 'Sin fecha' },
 ];
 
 export default function Wishlist({ user }: { user: any }) {
@@ -25,6 +37,9 @@ export default function Wishlist({ user }: { user: any }) {
     currency: user.primaryCurrency || 'ARS',
     reason: '',
     category: 'Otros',
+    itemType: 'purchase' as WishlistItemType,
+    horizon: 'open' as WishlistHorizon,
+    targetDate: '',
     visibility: 'private' as WishlistVisibility,
     owner: 'agustin' as WishlistOwner,
     link: '',
@@ -50,6 +65,7 @@ export default function Wishlist({ user }: { user: any }) {
 
   const activeItems = visibleItems.filter(item => item.status !== 'purchased' && item.status !== 'dismissed');
   const approvedItems = visibleItems.filter(item => item.status === 'approved');
+  const bigGoalItems = activeItems.filter(item => item.itemType === 'big_goal' || item.itemType === 'asset');
   const totalByCurrency = activeItems.reduce<Record<string, number>>((acc, item) => {
     acc[item.currency] = (acc[item.currency] || 0) + Number(item.estimatedPrice || 0);
     return acc;
@@ -68,13 +84,16 @@ export default function Wishlist({ user }: { user: any }) {
         priority: getNextPriority(items, draft.visibility, draft.owner),
         reason: draft.reason,
         category: draft.category,
+        itemType: draft.itemType,
+        horizon: draft.horizon,
+        targetDate: draft.targetDate,
         visibility: draft.visibility,
         owner: draft.owner,
         link: draft.link,
         notes: draft.notes,
         tags: [],
       });
-      setDraft(prev => ({ ...prev, title: '', estimatedPrice: '', reason: '', link: '', notes: '' }));
+      setDraft(prev => ({ ...prev, title: '', estimatedPrice: '', reason: '', link: '', notes: '', targetDate: '' }));
       setIsAdding(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'wishlistItems');
@@ -90,7 +109,7 @@ export default function Wishlist({ user }: { user: any }) {
             <div>
               <h2 className="text-4xl font-black tracking-tight md:text-6xl">Wishlist</h2>
               <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/60 md:text-base">
-                Un lugar para ordenar deseos materiales antes de convertirlos en compras. La prioridad se decide viendo la lista, no al cargar.
+                Un lugar para ordenar compras, experiencias y objetivos grandes antes de convertirlos en decisiones reales.
               </p>
             </div>
             <button
@@ -107,7 +126,7 @@ export default function Wishlist({ user }: { user: any }) {
         <aside className="grid grid-cols-3 gap-3 rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
           <MiniStat label="Activos" value={activeItems.length} />
           <MiniStat label="Aprobados" value={approvedItems.length} />
-          <MiniStat label="Top 3" value={activeItems.filter(item => Number(item.priority) <= 3).length} />
+          <MiniStat label="Grandes" value={bigGoalItems.length} />
           <div className="col-span-3 rounded-2xl bg-neutral-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Valor activo</p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -132,8 +151,8 @@ export default function Wishlist({ user }: { user: any }) {
       {isAdding && (
         <form onSubmit={saveItem} className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm md:p-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_160px_120px]">
-            <Field label="Que queres comprar">
-              <input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className={INPUT_CLASS} placeholder="Ej: zapatillas, camara, escritorio" />
+            <Field label="Que queres ordenar">
+              <input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className={INPUT_CLASS} placeholder="Ej: zapatillas, casa, viaje, escritorio" />
             </Field>
             <Field label="Valor">
               <input type="number" value={draft.estimatedPrice} onChange={e => setDraft({ ...draft, estimatedPrice: e.target.value })} className={INPUT_CLASS} placeholder="0" />
@@ -145,7 +164,17 @@ export default function Wishlist({ user }: { user: any }) {
             </Field>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-4">
+          <div className="mt-4 grid gap-4 lg:grid-cols-6">
+            <Field label="Tipo">
+              <select value={draft.itemType} onChange={e => setDraft({ ...draft, itemType: e.target.value as WishlistItemType })} className={INPUT_CLASS}>
+                {ITEM_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Horizonte">
+              <select value={draft.horizon} onChange={e => setDraft({ ...draft, horizon: e.target.value as WishlistHorizon })} className={INPUT_CLASS}>
+                {HORIZONS.map(horizon => <option key={horizon.id} value={horizon.id}>{horizon.label}</option>)}
+              </select>
+            </Field>
             <Field label="Motivo">
               <input value={draft.reason} onChange={e => setDraft({ ...draft, reason: e.target.value })} className={INPUT_CLASS} placeholder="Por que importa?" />
             </Field>
@@ -170,12 +199,15 @@ export default function Wishlist({ user }: { user: any }) {
             </Field>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_180px]">
             <Field label="Link">
               <input value={draft.link} onChange={e => setDraft({ ...draft, link: e.target.value })} className={INPUT_CLASS} placeholder="Opcional" />
             </Field>
             <Field label="Notas">
               <input value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} className={INPUT_CLASS} placeholder="Opcional" />
+            </Field>
+            <Field label="Fecha objetivo">
+              <input type="date" value={draft.targetDate} onChange={e => setDraft({ ...draft, targetDate: e.target.value })} className={INPUT_CLASS} />
             </Field>
           </div>
 
@@ -200,7 +232,7 @@ export default function Wishlist({ user }: { user: any }) {
           <div className="rounded-[2rem] border border-dashed border-neutral-300 bg-white p-8 text-center">
             <Gift className="mx-auto text-neutral-300" size={42} />
             <h3 className="mt-4 text-xl font-black text-neutral-900">Sin deseos cargados</h3>
-            <p className="mt-2 text-sm font-semibold text-neutral-500">Agrega compras que quieras pensar antes de hacerlas.</p>
+            <p className="mt-2 text-sm font-semibold text-neutral-500">Agrega compras, experiencias u objetivos grandes que quieras ordenar.</p>
           </div>
         )}
       </section>
@@ -239,14 +271,18 @@ function WishlistCard({
   onMove: (direction: 'up' | 'down') => void;
 }) {
   const status = STATUSES.find(status => status.id === item.status);
+  const itemType = getItemTypeLabel(item.itemType);
+  const horizon = getHorizonLabel(item.horizon);
+  const isBigGoal = item.itemType === 'big_goal' || item.itemType === 'asset';
 
   return (
-    <article className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+    <article className={`rounded-[2rem] border bg-white p-5 shadow-sm ${isBigGoal ? 'border-neutral-950/20' : 'border-neutral-200'}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap gap-2">
             <span className="rounded-full bg-neutral-950 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">#{item.priority}</span>
             <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{status?.label || item.status}</span>
+            <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{itemType}</span>
             <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{item.owner === 'shared' ? 'Ambos' : item.owner}</span>
           </div>
           <h3 className="truncate text-2xl font-black tracking-tight text-neutral-950">{item.title}</h3>
@@ -259,7 +295,15 @@ function WishlistCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-4">
-        <span className="text-xs font-black uppercase tracking-widest text-neutral-400">{item.category}</span>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-black uppercase tracking-widest text-neutral-400">{item.category}</span>
+          {(isBigGoal || item.horizon) && (
+            <span className="text-xs font-bold text-neutral-500">
+              {isBigGoal ? 'Impacta plan financiero' : 'Deseo'} · {horizon}
+              {item.targetDate ? ` · ${item.targetDate}` : ''}
+            </span>
+          )}
+        </div>
         <div className="flex gap-1">
           <button type="button" onClick={() => onMove('up')} disabled={!canMoveUp} className="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-25" title="Subir prioridad">
             <ArrowUp size={17} />
@@ -284,6 +328,20 @@ function WishlistCard({
       </div>
     </article>
   );
+}
+
+function getItemTypeLabel(itemType?: WishlistItemType) {
+  if (itemType === 'big_goal') return 'Objetivo grande';
+  if (itemType === 'experience') return 'Experiencia';
+  if (itemType === 'asset') return 'Patrimonial';
+  return 'Compra';
+}
+
+function getHorizonLabel(horizon?: WishlistHorizon) {
+  if (horizon === 'short') return 'Corto plazo';
+  if (horizon === 'medium') return 'Mediano plazo';
+  if (horizon === 'long') return 'Largo plazo';
+  return 'Sin fecha';
 }
 
 function MiniStat({ label, value }: { label: string; value: number }) {

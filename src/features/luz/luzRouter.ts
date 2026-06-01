@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
 import type { NeutralType, TransactionKind } from '../finance/finance.types';
+import type { WishlistHorizon, WishlistItemType } from '../wishlist/wishlist.types';
 
 export type LuzActionType = 'create_finance_transaction' | 'create_journal_entry' | 'create_habit_checkin' | 'create_wishlist_item' | 'ask_follow_up';
 export type LuzConfidence = 'high' | 'medium' | 'low';
@@ -41,6 +42,8 @@ export interface LuzWishlistDraft {
   currency: string;
   reason: string;
   category: string;
+  itemType: WishlistItemType;
+  horizon: WishlistHorizon;
   visibility: 'private' | 'shared_with_partner' | 'household_shared';
   owner: string;
   needsReview: boolean;
@@ -77,6 +80,7 @@ const NEGATIVE_HABIT_WORDS = ['no cumpli', 'falle', 'me comi las unas', 'me mord
 const POSITIVE_HABIT_WORDS = ['cumpli', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
 const PAYMENT_HINTS = ['con ', 'tarjeta', 'visa', 'master', 'mastercard', 'amex', 'mercado pago', 'mp', 'uala', 'brubank', 'galicia', 'santander', 'bbva', 'naranja', 'efectivo', 'debito', 'credito'];
 const WISHLIST_INTENT_WORDS = ['quiero comprar', 'me gustaria comprar', 'estoy pensando en comprar', 'tengo ganas de comprar', 'me quiero comprar', 'wishlist', 'lista de deseos'];
+const BIG_WISHLIST_WORDS = ['casa', 'departamento', 'depto', 'terreno', 'auto', 'camioneta', 'mudanza', 'negocio', 'local', 'inversion', 'invertir'];
 const REFLECTIVE_JOURNAL_WORDS = [
   'me senti',
   'me siento',
@@ -156,6 +160,8 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
   const firstMoney = moneyMentions[0];
   const title = inferWishlistTitle(message, normalized, firstMoney?.index) || 'Item para evaluar';
   const category = inferWishlistCategory(normalized);
+  const itemType = inferWishlistItemType(normalized, firstMoney?.amount || 0);
+  const horizon = itemType === 'big_goal' || itemType === 'asset' ? 'long' : 'open';
   const visibility = includesAny(normalized, ['vicky', 'ambos', 'casa', 'pareja']) ? 'shared_with_partner' : 'private';
   const owner = visibility === 'private' ? 'agustin' : 'shared';
 
@@ -163,7 +169,7 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
     id: createActionId('wishlist'),
     type: 'create_wishlist_item',
     title: 'Agregar a Wishlist',
-    detail: `${title}${firstMoney ? ` - ${firstMoney.amount.toLocaleString()} ${firstMoney.currency || inferCurrency(normalized)}` : ''}. Queda al final del ranking para priorizar despues.`,
+    detail: `${title}${firstMoney ? ` - ${firstMoney.amount.toLocaleString()} ${firstMoney.currency || inferCurrency(normalized)}` : ''}. ${itemType === 'big_goal' || itemType === 'asset' ? 'Lo marco como objetivo grande para mirarlo contra ingresos, gastos y plan.' : 'Queda al final del ranking para priorizar despues.'}`,
     confidence: title === 'Item para evaluar' ? 'low' : 'medium',
     wishlist: {
       title,
@@ -171,6 +177,8 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
       currency: firstMoney?.currency || inferCurrency(normalized),
       reason: message,
       category,
+      itemType,
+      horizon,
       visibility,
       owner,
       needsReview: !firstMoney,
@@ -437,10 +445,18 @@ function inferWishlistTitle(message: string, normalized: string, moneyIndex?: nu
 function inferWishlistCategory(normalized: string) {
   if (includesAny(normalized, ['zapatilla', 'zapatillas', 'ropa', 'campera', 'zapato'])) return 'Ropa';
   if (includesAny(normalized, ['notebook', 'celular', 'camara', 'iphone', 'monitor', 'teclado'])) return 'Tecnologia';
-  if (includesAny(normalized, ['sillon', 'mesa', 'silla', 'escritorio', 'casa'])) return 'Casa';
+  if (includesAny(normalized, ['casa', 'departamento', 'depto', 'terreno', 'auto', 'camioneta', 'inversion', 'invertir'])) return 'Patrimonio';
+  if (includesAny(normalized, ['sillon', 'mesa', 'silla', 'escritorio'])) return 'Casa';
   if (includesAny(normalized, ['viaje', 'hotel', 'pasaje', 'vuelo'])) return 'Viajes';
   if (includesAny(normalized, ['golf', 'padel', 'futbol', 'deporte', 'bicicleta'])) return 'Deporte';
   return 'Otros';
+}
+
+function inferWishlistItemType(normalized: string, amount: number): WishlistItemType {
+  if (includesAny(normalized, ['inversion', 'invertir', 'terreno'])) return 'asset';
+  if (includesAny(normalized, BIG_WISHLIST_WORDS) || amount >= 100000) return 'big_goal';
+  if (includesAny(normalized, ['viaje', 'hotel', 'pasaje', 'vuelo', 'experiencia', 'concierto', 'recital'])) return 'experience';
+  return 'purchase';
 }
 
 function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[]) {

@@ -79,7 +79,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
           return {
             ...action,
             wishlist: nextWishlist,
-            detail: `${nextWishlist.title}${nextWishlist.estimatedPrice ? ` - ${Number(nextWishlist.estimatedPrice).toLocaleString()} ${nextWishlist.currency}` : ''}. Queda al final del ranking para priorizar despues.`,
+            detail: `${nextWishlist.title}${nextWishlist.estimatedPrice ? ` - ${Number(nextWishlist.estimatedPrice).toLocaleString()} ${nextWishlist.currency}` : ''}. ${nextWishlist.itemType === 'big_goal' || nextWishlist.itemType === 'asset' ? 'Objetivo grande para mirar contra el plan financiero.' : 'Queda al final del ranking para priorizar despues.'}`,
           };
         }),
       };
@@ -164,6 +164,8 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         priority: 0,
         reason: action.wishlist.reason,
         category: action.wishlist.category,
+        itemType: action.wishlist.itemType,
+        horizon: action.wishlist.horizon,
         visibility: action.wishlist.visibility,
         owner: action.wishlist.owner,
         notes: message.trim(),
@@ -568,7 +570,35 @@ function LuzWishlistEditor({
           onChange={(event) => onUpdateWishlist(action.id, { category: event.target.value })}
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
         >
-          {['Ropa', 'Tecnologia', 'Casa', 'Viajes', 'Deporte', 'Hobby', 'Experiencias', 'Otros'].map(category => <option key={category} value={category}>{category}</option>)}
+          {['Ropa', 'Tecnologia', 'Casa', 'Viajes', 'Deporte', 'Hobby', 'Experiencias', 'Patrimonio', 'Otros'].map(category => <option key={category} value={category}>{category}</option>)}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Tipo</span>
+        <select
+          value={wishlist.itemType}
+          onChange={(event) => onUpdateWishlist(action.id, { itemType: event.target.value as any, horizon: event.target.value === 'big_goal' || event.target.value === 'asset' ? 'long' : wishlist.horizon })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          <option value="purchase">Compra</option>
+          <option value="big_goal">Objetivo grande</option>
+          <option value="experience">Experiencia</option>
+          <option value="asset">Patrimonial</option>
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Horizonte</span>
+        <select
+          value={wishlist.horizon}
+          onChange={(event) => onUpdateWishlist(action.id, { horizon: event.target.value as any })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          <option value="short">Corto plazo</option>
+          <option value="medium">Mediano plazo</option>
+          <option value="long">Largo plazo</option>
+          <option value="open">Sin fecha</option>
         </select>
       </label>
 
