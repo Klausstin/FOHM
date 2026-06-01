@@ -209,10 +209,12 @@ service cloud.firestore {
 
     function isValidFinance(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'amount', 'type', 'date', 'category', 'source']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'accountId', 'toAccountId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'createdAt', 'updatedAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.amount is number &&
-             data.type in ["expense", "income", "transfer"] &&
+             data.type in ["expense", "income", "neutral", "transfer"] &&
+             (!('kind' in data) || data.kind in ["expense", "income", "neutral"]) &&
+             (!('neutralType' in data) || data.neutralType == null || data.neutralType in ["internal_transfer", "credit_card_payment", "currency_exchange", "investment_movement", "loan_movement", "balance_adjustment"]) &&
              data.source in ["manual", "pdf", "csv", "catchup_estimate", "catchup_inferred"] &&
              (!('confidence' in data) || data.confidence in ["exact", "estimated", "inferred"]) &&
              (!('status' in data) || data.status in ["pending", "posted", "ignored", "needs_review"]) &&
@@ -226,6 +228,13 @@ service cloud.firestore {
              (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
              (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
              (!('currency' in data) || (data.currency is string && data.currency.size() < 10)) &&
+             (!('merchantName' in data) || (data.merchantName is string && data.merchantName.size() < 200)) &&
+             (!('merchantKey' in data) || (data.merchantKey is string && data.merchantKey.size() < 200)) &&
+             (!('merchant' in data) || (data.merchant is string && data.merchant.size() < 200)) &&
+             (!('owner' in data) || (data.owner is string && data.owner.size() < 100)) &&
+             (!('projectId' in data) || (data.projectId is string && data.projectId.size() < 100)) &&
+             (!('isReimbursable' in data) || data.isReimbursable is bool) &&
+             (!('reimbursementStatus' in data) || data.reimbursementStatus in ["pending", "reimbursed", "not_applicable"]) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
@@ -244,13 +253,20 @@ service cloud.firestore {
 
     function isValidMapping(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'originalDescription', 'mappedDescription']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'originalDescription', 'mappedDescription', 'category', 'subCategory', 'subSubCategory', 'isFixed', 'createdAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'originalDescription', 'mappedDescription', 'category', 'subCategory', 'subSubCategory', 'kind', 'neutralType', 'isFixed', 'merchantName', 'merchantKey', 'transactionFingerprint', 'learningKey', 'useCount', 'lastUsedAt', 'createdAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.originalDescription is string && data.originalDescription.size() > 0 && data.originalDescription.size() < 500 &&
              data.mappedDescription is string && data.mappedDescription.size() > 0 && data.mappedDescription.size() < 500 &&
              (!('category' in data) || (data.category is string && data.category.size() < 100)) &&
              (!('subCategory' in data) || (data.subCategory is string && data.subCategory.size() < 100)) &&
              (!('subSubCategory' in data) || (data.subSubCategory is string && data.subSubCategory.size() < 100)) &&
+             (!('kind' in data) || data.kind in ["expense", "income", "neutral"]) &&
+             (!('neutralType' in data) || data.neutralType == null || data.neutralType in ["internal_transfer", "credit_card_payment", "currency_exchange", "investment_movement", "loan_movement", "balance_adjustment"]) &&
+             (!('merchantName' in data) || (data.merchantName is string && data.merchantName.size() < 200)) &&
+             (!('merchantKey' in data) || (data.merchantKey is string && data.merchantKey.size() < 200)) &&
+             (!('learningKey' in data) || (data.learningKey is string && data.learningKey.size() < 500)) &&
+             (!('useCount' in data) || data.useCount is number) &&
+             (!('lastUsedAt' in data) || data.lastUsedAt is timestamp) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
@@ -274,6 +290,26 @@ service cloud.firestore {
              data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
              data.status in ['green', 'yellow', 'red'] &&
              data.timestamp is timestamp;
+    }
+
+    function isValidWishlistItem(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'title', 'estimatedPrice', 'currency', 'priority', 'reason', 'category', 'status', 'visibility', 'owner']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'estimatedPrice', 'currency', 'priority', 'reason', 'category', 'status', 'visibility', 'owner', 'link', 'notes', 'tags', 'createdAt', 'updatedAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.estimatedPrice is number &&
+             data.currency is string && data.currency.size() > 0 && data.currency.size() < 10 &&
+             data.priority is number && data.priority >= 1 && data.priority <= 5 &&
+             data.reason is string && data.reason.size() < 1000 &&
+             data.category is string && data.category.size() < 100 &&
+             data.status in ["wanted", "evaluating", "approved", "purchased", "dismissed"] &&
+             isValidVisibility(data.visibility) &&
+             data.owner is string && data.owner.size() < 100 &&
+             (!('link' in data) || (data.link is string && data.link.size() < 1000)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 2000)) &&
+             (!('tags' in data) || data.tags is list) &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     // ===============================================================
@@ -329,6 +365,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidAccount(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
       allow update: if isAuthenticated() && isValidAccount(request.resource.data, true) && (isHouseholdMember(resource.data.householdId) || isAdmin());
       allow delete: if isAuthenticated() && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+    }
+
+    match /wishlistItems/{itemId} {
+      allow read: if isAuthenticated() && canReadVisibleDoc(resource.data, 'finances');
+      allow create: if isAuthenticated() && isValidWishlistItem(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidWishlistItem(request.resource.data, true) && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
     }
 
     match /goals/{goalId} {
