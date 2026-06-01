@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, Gift, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckCircle2, ExternalLink, Gift, Plus, Trash2 } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../firebase';
 import { createWishlistItem, deleteWishlistItem, subscribeToHouseholdWishlist, updateWishlistItem } from '../features/wishlist/wishlist.service';
 import type { WishlistItemRecord, WishlistOwner, WishlistStatus, WishlistVisibility } from '../features/wishlist/wishlist.types';
@@ -23,7 +23,6 @@ export default function Wishlist({ user }: { user: any }) {
     title: '',
     estimatedPrice: '',
     currency: user.primaryCurrency || 'ARS',
-    priority: '3',
     reason: '',
     category: 'Otros',
     visibility: 'private' as WishlistVisibility,
@@ -66,7 +65,7 @@ export default function Wishlist({ user }: { user: any }) {
         title: draft.title,
         estimatedPrice: Number(draft.estimatedPrice || 0),
         currency: draft.currency,
-        priority: Number(draft.priority || 3),
+        priority: getNextPriority(items, draft.visibility, draft.owner),
         reason: draft.reason,
         category: draft.category,
         visibility: draft.visibility,
@@ -91,7 +90,7 @@ export default function Wishlist({ user }: { user: any }) {
             <div>
               <h2 className="text-4xl font-black tracking-tight md:text-6xl">Wishlist</h2>
               <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/60 md:text-base">
-                Un lugar para ordenar deseos materiales antes de convertirlos en compras. Prioridad, motivo y visibilidad clara.
+                Un lugar para ordenar deseos materiales antes de convertirlos en compras. La prioridad se decide viendo la lista, no al cargar.
               </p>
             </div>
             <button
@@ -108,7 +107,7 @@ export default function Wishlist({ user }: { user: any }) {
         <aside className="grid grid-cols-3 gap-3 rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
           <MiniStat label="Activos" value={activeItems.length} />
           <MiniStat label="Aprobados" value={approvedItems.length} />
-          <MiniStat label="Prioridad 1" value={activeItems.filter(item => Number(item.priority) === 1).length} />
+          <MiniStat label="Top 3" value={activeItems.filter(item => Number(item.priority) <= 3).length} />
           <div className="col-span-3 rounded-2xl bg-neutral-50 p-4">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Valor activo</p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -132,7 +131,7 @@ export default function Wishlist({ user }: { user: any }) {
 
       {isAdding && (
         <form onSubmit={saveItem} className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm md:p-6">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_160px_120px_120px]">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_160px_120px]">
             <Field label="Que queres comprar">
               <input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} className={INPUT_CLASS} placeholder="Ej: zapatillas, camara, escritorio" />
             </Field>
@@ -142,11 +141,6 @@ export default function Wishlist({ user }: { user: any }) {
             <Field label="Moneda">
               <select value={draft.currency} onChange={e => setDraft({ ...draft, currency: e.target.value })} className={INPUT_CLASS}>
                 {CURRENCIES.map(currency => <option key={currency} value={currency}>{currency}</option>)}
-              </select>
-            </Field>
-            <Field label="Prioridad">
-              <select value={draft.priority} onChange={e => setDraft({ ...draft, priority: e.target.value })} className={INPUT_CLASS}>
-                {[1, 2, 3, 4, 5].map(priority => <option key={priority} value={priority}>{priority}</option>)}
               </select>
             </Field>
           </div>
@@ -194,7 +188,13 @@ export default function Wishlist({ user }: { user: any }) {
 
       <section className="grid gap-4 xl:grid-cols-3">
         {visibleItems.map(item => (
-          <WishlistCard key={item.id} item={item} />
+          <WishlistCard
+            key={item.id}
+            item={item}
+            canMoveUp={activeItems.some(other => Number(other.priority || 999) < Number(item.priority || 999))}
+            canMoveDown={activeItems.some(other => Number(other.priority || 999) > Number(item.priority || 999))}
+            onMove={(direction) => moveWishlistItem(item, direction, activeItems)}
+          />
         ))}
         {visibleItems.length === 0 && (
           <div className="rounded-[2rem] border border-dashed border-neutral-300 bg-white p-8 text-center">
@@ -208,7 +208,36 @@ export default function Wishlist({ user }: { user: any }) {
   );
 }
 
-function WishlistCard({ item }: { item: WishlistItemRecord }) {
+async function moveWishlistItem(item: WishlistItemRecord, direction: 'up' | 'down', rankedItems: WishlistItemRecord[]) {
+  const activeRanked = rankedItems
+    .filter(candidate => candidate.status !== 'purchased' && candidate.status !== 'dismissed')
+    .sort((a, b) => Number(a.priority || 999) - Number(b.priority || 999));
+  const currentIndex = activeRanked.findIndex(candidate => candidate.id === item.id);
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  const target = activeRanked[targetIndex];
+  if (!target) return;
+
+  try {
+    await Promise.all([
+      updateWishlistItem(item.id, { priority: Number(target.priority || targetIndex + 1) }),
+      updateWishlistItem(target.id, { priority: Number(item.priority || currentIndex + 1) }),
+    ]);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, 'wishlistItems');
+  }
+}
+
+function WishlistCard({
+  item,
+  canMoveUp,
+  canMoveDown,
+  onMove,
+}: {
+  item: WishlistItemRecord;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMove: (direction: 'up' | 'down') => void;
+}) {
   const status = STATUSES.find(status => status.id === item.status);
 
   return (
@@ -216,7 +245,7 @@ function WishlistCard({ item }: { item: WishlistItemRecord }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap gap-2">
-            <span className="rounded-full bg-neutral-950 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">P{item.priority}</span>
+            <span className="rounded-full bg-neutral-950 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">#{item.priority}</span>
             <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{status?.label || item.status}</span>
             <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{item.owner === 'shared' ? 'Ambos' : item.owner}</span>
           </div>
@@ -232,6 +261,12 @@ function WishlistCard({ item }: { item: WishlistItemRecord }) {
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-4">
         <span className="text-xs font-black uppercase tracking-widest text-neutral-400">{item.category}</span>
         <div className="flex gap-1">
+          <button type="button" onClick={() => onMove('up')} disabled={!canMoveUp} className="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-25" title="Subir prioridad">
+            <ArrowUp size={17} />
+          </button>
+          <button type="button" onClick={() => onMove('down')} disabled={!canMoveDown} className="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-25" title="Bajar prioridad">
+            <ArrowDown size={17} />
+          </button>
           {item.link && (
             <a href={item.link} target="_blank" rel="noreferrer" className="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-950">
               <ExternalLink size={17} />
@@ -281,4 +316,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function getNextPriority(items: WishlistItemRecord[], visibility: WishlistVisibility, owner: WishlistOwner) {
+  const relevantItems = items.filter(item =>
+    item.status !== 'purchased' &&
+    item.status !== 'dismissed' &&
+    (visibility === 'private' ? item.visibility === 'private' && item.owner === owner : item.visibility !== 'private' || item.owner === 'shared')
+  );
+  const maxPriority = relevantItems.reduce((max, item) => Math.max(max, Number(item.priority || 0)), 0);
+  return maxPriority + 1;
 }
