@@ -3,7 +3,7 @@ import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
 import type { NeutralType, TransactionKind } from '../finance/finance.types';
 
-export type LuzActionType = 'create_finance_transaction' | 'create_journal_entry' | 'create_habit_checkin' | 'ask_follow_up';
+export type LuzActionType = 'create_finance_transaction' | 'create_journal_entry' | 'create_habit_checkin' | 'create_wishlist_item' | 'ask_follow_up';
 export type LuzConfidence = 'high' | 'medium' | 'low';
 
 export interface LuzFinanceDraft {
@@ -35,6 +35,17 @@ export interface LuzHabitCheckinDraft {
   needsReview: boolean;
 }
 
+export interface LuzWishlistDraft {
+  title: string;
+  estimatedPrice: number;
+  currency: string;
+  reason: string;
+  category: string;
+  visibility: 'private' | 'shared_with_partner' | 'household_shared';
+  owner: string;
+  needsReview: boolean;
+}
+
 export interface LuzAction {
   id: string;
   type: LuzActionType;
@@ -44,6 +55,7 @@ export interface LuzAction {
   finance?: LuzFinanceDraft;
   journal?: LuzJournalDraft;
   habitCheckin?: LuzHabitCheckinDraft;
+  wishlist?: LuzWishlistDraft;
   question?: string;
 }
 
@@ -64,6 +76,7 @@ const INCOME_WORDS = ['cobre', 'ingreso', 'me pagaron', 'me depositaron', 'sueld
 const NEGATIVE_HABIT_WORDS = ['no cumpli', 'falle', 'me comi las unas', 'me mordi las unas'];
 const POSITIVE_HABIT_WORDS = ['cumpli', 'entrene', 'medite', 'lei', 'sali a correr', 'fui al gym'];
 const PAYMENT_HINTS = ['con ', 'tarjeta', 'visa', 'master', 'mastercard', 'amex', 'mercado pago', 'mp', 'uala', 'brubank', 'galicia', 'santander', 'bbva', 'naranja', 'efectivo', 'debito', 'credito'];
+const WISHLIST_INTENT_WORDS = ['quiero comprar', 'me gustaria comprar', 'estoy pensando en comprar', 'tengo ganas de comprar', 'me quiero comprar', 'wishlist', 'lista de deseos'];
 const REFLECTIVE_JOURNAL_WORDS = [
   'me senti',
   'me siento',
@@ -96,10 +109,13 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], 
   const financeActions = parseFinanceActions(message, normalized, accounts);
   actions.push(...financeActions);
 
+  const wishlist = parseWishlistAction(message, normalized);
+  if (wishlist) actions.push(wishlist);
+
   const habit = parseHabitAction(message, normalized, habits);
   if (habit) actions.push(habit);
 
-  if (shouldCreateJournal(normalized, financeActions.length > 0, Boolean(habit))) {
+  if (shouldCreateJournal(normalized, financeActions.length > 0 || Boolean(wishlist), Boolean(habit))) {
     actions.push({
       id: createActionId('journal'),
       type: 'create_journal_entry',
@@ -129,6 +145,36 @@ export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], 
   return {
     actions,
     summary: summarizeActions(actions),
+  };
+}
+
+function parseWishlistAction(message: string, normalized: string): LuzAction | null {
+  const hasWishlistIntent = includesAny(normalized, WISHLIST_INTENT_WORDS);
+  if (!hasWishlistIntent) return null;
+
+  const moneyMentions = parseMoneyMentions(message);
+  const firstMoney = moneyMentions[0];
+  const title = inferWishlistTitle(message, normalized, firstMoney?.index) || 'Item para evaluar';
+  const category = inferWishlistCategory(normalized);
+  const visibility = includesAny(normalized, ['vicky', 'ambos', 'casa', 'pareja']) ? 'shared_with_partner' : 'private';
+  const owner = visibility === 'private' ? 'agustin' : 'shared';
+
+  return {
+    id: createActionId('wishlist'),
+    type: 'create_wishlist_item',
+    title: 'Agregar a Wishlist',
+    detail: `${title}${firstMoney ? ` - ${firstMoney.amount.toLocaleString()} ${firstMoney.currency || inferCurrency(normalized)}` : ''}. Queda al final del ranking para priorizar despues.`,
+    confidence: title === 'Item para evaluar' ? 'low' : 'medium',
+    wishlist: {
+      title,
+      estimatedPrice: firstMoney?.amount || 0,
+      currency: firstMoney?.currency || inferCurrency(normalized),
+      reason: message,
+      category,
+      visibility,
+      owner,
+      needsReview: !firstMoney,
+    },
   };
 }
 
@@ -367,6 +413,34 @@ function inferFinanceCategory(normalized: string) {
   if (includesAny(normalized, ['curso', 'libro', 'educacion', 'clase'])) return 'Educacion';
   if (includesAny(normalized, INCOME_WORDS.map(normalize))) return 'Ingresos';
   return 'Sin clasificar';
+}
+
+function inferWishlistTitle(message: string, normalized: string, moneyIndex?: number) {
+  const intent = WISHLIST_INTENT_WORDS.find(word => normalized.includes(normalize(word)));
+  if (!intent) return '';
+
+  const normalizedIntent = normalize(intent);
+  const normalizedIndex = normalized.indexOf(normalizedIntent);
+  const rawAfterIntent = normalizedIndex >= 0 ? message.slice(normalizedIndex + intent.length) : message;
+  const beforePrice = typeof moneyIndex === 'number' && moneyIndex > 0
+    ? message.slice(normalizedIndex + intent.length, moneyIndex)
+    : rawAfterIntent;
+
+  return beforePrice
+    .replace(/\b(que|un|una|unos|unas|el|la|los|las|de|para|por|con|me|a)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[,.]$/g, '')
+    .slice(0, 80);
+}
+
+function inferWishlistCategory(normalized: string) {
+  if (includesAny(normalized, ['zapatilla', 'zapatillas', 'ropa', 'campera', 'zapato'])) return 'Ropa';
+  if (includesAny(normalized, ['notebook', 'celular', 'camara', 'iphone', 'monitor', 'teclado'])) return 'Tecnologia';
+  if (includesAny(normalized, ['sillon', 'mesa', 'silla', 'escritorio', 'casa'])) return 'Casa';
+  if (includesAny(normalized, ['viaje', 'hotel', 'pasaje', 'vuelo'])) return 'Viajes';
+  if (includesAny(normalized, ['golf', 'padel', 'futbol', 'deporte', 'bicicleta'])) return 'Deporte';
+  return 'Otros';
 }
 
 function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[]) {

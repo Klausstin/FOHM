@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../firebase';
 import type { CreateWishlistItemInput, WishlistItemRecord, WishlistStatus } from './wishlist.types';
 
@@ -29,13 +29,14 @@ export function subscribeToHouseholdWishlist(
 }
 
 export async function createWishlistItem(input: CreateWishlistItemInput) {
+  const priority = input.priority || await getNextWishlistPriority(input.householdId, input.visibility, input.owner);
   await addDoc(collection(db, 'wishlistItems'), {
     uid: input.uid,
     householdId: input.householdId,
     title: input.title.trim(),
     estimatedPrice: Number(input.estimatedPrice || 0),
     currency: input.currency || 'ARS',
-    priority: Number(input.priority || 3),
+    priority,
     reason: input.reason.trim(),
     category: input.category.trim() || 'Otros',
     status: 'wanted',
@@ -47,6 +48,20 @@ export async function createWishlistItem(input: CreateWishlistItemInput) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+async function getNextWishlistPriority(householdId: string, visibility: string, owner: string) {
+  const snapshot = await getDocs(query(collection(db, 'wishlistItems'), where('householdId', '==', householdId)));
+  const relevantItems = snapshot.docs
+    .map(doc => doc.data() as WishlistItemRecord)
+    .filter(item =>
+      item.status !== 'purchased' &&
+      item.status !== 'dismissed' &&
+      (visibility === 'private'
+        ? item.visibility === 'private' && item.owner === owner
+        : item.visibility !== 'private' || item.owner === 'shared')
+    );
+  return relevantItems.reduce((max, item) => Math.max(max, Number(item.priority || 0)), 0) + 1;
 }
 
 export async function updateWishlistItem(itemId: string, input: Partial<CreateWishlistItemInput> & { status?: WishlistStatus }) {
