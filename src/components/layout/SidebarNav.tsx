@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Brain, Calendar, CheckCircle2, Home, LogOut, MessageCircle, Settings, Sparkles, Target, User as UserIcon, Wallet } from 'lucide-react';
+import { Brain, Calendar, CheckCircle2, Gift, Home, LogOut, MessageCircle, Settings, Sparkles, Target, User as UserIcon, Wallet } from 'lucide-react';
 import { auth } from '../../firebase.ts';
 
-export type AppTab = 'home' | 'luz' | 'mind' | 'finance' | 'settings' | 'goals' | 'habits' | 'calendar';
+export type AppTab = 'home' | 'luz' | 'mind' | 'finance' | 'wishlist' | 'settings' | 'goals' | 'habits' | 'calendar';
 
 interface NavItemConfig {
   id: AppTab;
@@ -15,6 +15,7 @@ const NAV_ITEMS: NavItemConfig[] = [
   { id: 'luz', label: 'Luz', icon: <MessageCircle size={20} /> },
   { id: 'mind', label: 'Diario Mental', icon: <Brain size={20} /> },
   { id: 'finance', label: 'Finanzas', icon: <Wallet size={20} /> },
+  { id: 'wishlist', label: 'Wishlist', icon: <Gift size={20} /> },
   { id: 'goals', label: 'Objetivos', icon: <Target size={20} /> },
   { id: 'habits', label: 'Habitos', icon: <CheckCircle2 size={20} /> },
   { id: 'calendar', label: 'Calendario', icon: <Calendar size={20} /> },
@@ -57,7 +58,7 @@ export default function SidebarNav({ activeTab, onTabChange, user }: SidebarNavP
           </div>
         </div>
 
-        <div className="flex w-full justify-between gap-1 md:mt-8 md:flex-col md:justify-start md:gap-1.5">
+        <div className="flex w-full justify-start gap-1 overflow-x-auto md:mt-8 md:flex-col md:justify-start md:gap-1.5 md:overflow-visible">
           <p className="mb-2 hidden px-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/30 md:block">Sistema</p>
           {NAV_ITEMS.map((item) => (
             <NavItem

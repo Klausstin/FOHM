@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard.tsx';
 import LuzWorkspace from './components/LuzWorkspace.tsx';
 import MindTracker from './components/MindTracker.tsx';
 import FinanceTracker from './components/FinanceTracker.tsx';
+import Wishlist from './components/Wishlist.tsx';
 import AnnualGoals from './components/AnnualGoals.tsx';
 import Settings from './components/Settings.tsx';
 import Habits from './components/Habits.tsx';
@@ -112,6 +113,7 @@ export default function App() {
             {activeTab === 'luz' && <LuzWorkspace user={userProfile} />}
             {activeTab === 'mind' && <MindTracker user={userProfile} />}
             {activeTab === 'finance' && <FinanceTracker user={userProfile} />}
+            {activeTab === 'wishlist' && <Wishlist user={userProfile} />}
             {activeTab === 'goals' && <AnnualGoals user={userProfile} />}
             {activeTab === 'habits' && <Habits user={userProfile} />}
             {activeTab === 'calendar' && (
