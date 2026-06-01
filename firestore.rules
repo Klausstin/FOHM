@@ -294,14 +294,18 @@ service cloud.firestore {
 
     function isValidWishlistItem(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'title', 'estimatedPrice', 'currency', 'priority', 'reason', 'category', 'status', 'visibility', 'owner']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'estimatedPrice', 'currency', 'priority', 'reason', 'category', 'status', 'visibility', 'owner', 'link', 'notes', 'tags', 'createdAt', 'updatedAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'estimatedPrice', 'currency', 'priority', 'reason', 'category', 'itemType', 'horizon', 'targetDate', 'linkedGoalId', 'status', 'visibility', 'owner', 'link', 'notes', 'tags', 'createdAt', 'updatedAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.estimatedPrice is number &&
              data.currency is string && data.currency.size() > 0 && data.currency.size() < 10 &&
-             data.priority is number && data.priority >= 1 && data.priority <= 5 &&
+             data.priority is number && data.priority >= 1 && data.priority <= 500 &&
              data.reason is string && data.reason.size() < 1000 &&
              data.category is string && data.category.size() < 100 &&
+             (!('itemType' in data) || data.itemType in ["purchase", "big_goal", "experience", "asset"]) &&
+             (!('horizon' in data) || data.horizon in ["short", "medium", "long", "open"]) &&
+             (!('targetDate' in data) || (data.targetDate is string && data.targetDate.size() < 20)) &&
+             (!('linkedGoalId' in data) || (data.linkedGoalId is string && data.linkedGoalId.size() < 200)) &&
              data.status in ["wanted", "evaluating", "approved", "purchased", "dismissed"] &&
              isValidVisibility(data.visibility) &&
              data.owner is string && data.owner.size() < 100 &&
