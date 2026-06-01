@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Brain, CheckCircle2, HelpCircle, Loader2, Mic, Send, Sparkles, Wallet, X } from 'lucide-react';
+import { Brain, CheckCircle2, Gift, HelpCircle, Loader2, Mic, Send, Sparkles, Wallet, X } from 'lucide-react';
 import { createFinancialTransaction } from '../features/finance/finance.service';
 import { createHabitLog } from '../features/habits/habit.service';
 import type { HabitRecord } from '../features/habits/habit.types';
 import { createJournalEntry } from '../features/journal/journal.service';
 import { routeLuzMessage, type LuzAction, type LuzFinancialAccountOption, type LuzRouteResult } from '../features/luz/luzRouter';
+import { createWishlistItem } from '../features/wishlist/wishlist.service';
 
 interface LuzCommandCenterProps {
   user: {
@@ -61,6 +62,24 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
             ...action,
             finance: nextFinance,
             detail: `${Number(nextFinance.amount || 0).toLocaleString()} ${nextFinance.currency} - ${nextFinance.category}. ${nextFinance.accountName ? `Cuenta sugerida: ${nextFinance.accountName}.` : 'Falta confirmar cuenta o billetera.'}`,
+          };
+        }),
+      };
+    });
+  };
+
+  const updateDraftWishlist = (actionId: string, wishlistUpdates: Partial<NonNullable<LuzAction['wishlist']>>) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        actions: prev.actions.map(action => {
+          if (action.id !== actionId || !action.wishlist) return action;
+          const nextWishlist = { ...action.wishlist, ...wishlistUpdates };
+          return {
+            ...action,
+            wishlist: nextWishlist,
+            detail: `${nextWishlist.title}${nextWishlist.estimatedPrice ? ` - ${Number(nextWishlist.estimatedPrice).toLocaleString()} ${nextWishlist.currency}` : ''}. Queda al final del ranking para priorizar despues.`,
           };
         }),
       };
@@ -134,6 +153,23 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
     if (action.type === 'create_habit_checkin' && action.habitCheckin?.habitId) {
       await createHabitLog(action.habitCheckin.habitId, user.uid, action.habitCheckin.date, action.habitCheckin.status);
     }
+
+    if (action.type === 'create_wishlist_item' && action.wishlist) {
+      await createWishlistItem({
+        uid: user.uid,
+        householdId: user.householdId || `personal-${user.uid}`,
+        title: action.wishlist.title,
+        estimatedPrice: action.wishlist.estimatedPrice,
+        currency: action.wishlist.currency,
+        priority: 0,
+        reason: action.wishlist.reason,
+        category: action.wishlist.category,
+        visibility: action.wishlist.visibility,
+        owner: action.wishlist.owner,
+        notes: message.trim(),
+        tags: [],
+      });
+    }
   };
 
   const startDictation = () => {
@@ -165,6 +201,8 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
     : 0;
   const previewType = currentActions.some(action => action.type === 'create_finance_transaction')
     ? 'Finanzas'
+    : currentActions.some(action => action.type === 'create_wishlist_item')
+      ? 'Wishlist'
     : currentActions.some(action => action.type === 'create_habit_checkin')
       ? 'Habitos'
       : 'Diario';
@@ -180,7 +218,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         </div>
         {currentActions.length > 0 && (
           <span className="hidden items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-900 sm:inline-flex">
-            {previewType === 'Finanzas' ? <Wallet size={13} /> : previewType === 'Habitos' ? <CheckCircle2 size={13} /> : <Brain size={13} />}
+            {previewType === 'Finanzas' ? <Wallet size={13} /> : previewType === 'Wishlist' ? <Gift size={13} /> : previewType === 'Habitos' ? <CheckCircle2 size={13} /> : <Brain size={13} />}
             {previewType}
           </span>
         )}
@@ -262,6 +300,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
                 }}
                 onUpdateAction={updateDraftAction}
                 onUpdateFinance={updateDraftFinance}
+                onUpdateWishlist={updateDraftWishlist}
                 accounts={accounts}
                 categories={categories}
               />
@@ -301,6 +340,7 @@ function LuzActionCard({
   onToggleRejected,
   onUpdateAction,
   onUpdateFinance,
+  onUpdateWishlist,
   accounts,
   categories,
 }: {
@@ -309,11 +349,14 @@ function LuzActionCard({
   onToggleRejected: () => void;
   onUpdateAction: (actionId: string, updates: Partial<LuzAction>) => void;
   onUpdateFinance: (actionId: string, financeUpdates: Partial<NonNullable<LuzAction['finance']>>) => void;
+  onUpdateWishlist: (actionId: string, wishlistUpdates: Partial<NonNullable<LuzAction['wishlist']>>) => void;
   accounts: LuzFinancialAccountOption[];
   categories: any[];
 }) {
   const Icon = action.type === 'create_finance_transaction'
     ? Wallet
+    : action.type === 'create_wishlist_item'
+      ? Gift
     : action.type === 'create_habit_checkin'
       ? CheckCircle2
       : action.type === 'ask_follow_up'
@@ -349,6 +392,9 @@ function LuzActionCard({
           categories={categories}
           onUpdateFinance={onUpdateFinance}
         />
+      )}
+      {!isRejected && action.type === 'create_wishlist_item' && action.wishlist && (
+        <LuzWishlistEditor action={action} onUpdateWishlist={onUpdateWishlist} />
       )}
     </div>
   );
@@ -465,6 +511,86 @@ function LuzFinanceEditor({
           type="text"
           value={finance.description}
           onChange={(event) => onUpdateFinance(action.id, { description: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+    </div>
+  );
+}
+
+function LuzWishlistEditor({
+  action,
+  onUpdateWishlist,
+}: {
+  action: LuzAction;
+  onUpdateWishlist: (actionId: string, wishlistUpdates: Partial<NonNullable<LuzAction['wishlist']>>) => void;
+}) {
+  const wishlist = action.wishlist;
+  if (!wishlist) return null;
+
+  return (
+    <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
+      <label className="space-y-1 sm:col-span-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Item</span>
+        <input
+          type="text"
+          value={wishlist.title}
+          onChange={(event) => onUpdateWishlist(action.id, { title: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Valor estimado</span>
+        <input
+          type="number"
+          value={wishlist.estimatedPrice}
+          onChange={(event) => onUpdateWishlist(action.id, { estimatedPrice: Number(event.target.value || 0), needsReview: Number(event.target.value || 0) <= 0 })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Moneda</span>
+        <select
+          value={wishlist.currency}
+          onChange={(event) => onUpdateWishlist(action.id, { currency: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          {['ARS', 'USD', 'EUR'].map(currency => <option key={currency} value={currency}>{currency}</option>)}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Categoria</span>
+        <select
+          value={wishlist.category}
+          onChange={(event) => onUpdateWishlist(action.id, { category: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          {['Ropa', 'Tecnologia', 'Casa', 'Viajes', 'Deporte', 'Hobby', 'Experiencias', 'Otros'].map(category => <option key={category} value={category}>{category}</option>)}
+        </select>
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Visibilidad</span>
+        <select
+          value={wishlist.visibility}
+          onChange={(event) => onUpdateWishlist(action.id, { visibility: event.target.value as any, owner: event.target.value === 'private' ? 'agustin' : 'shared' })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          <option value="private">Privado</option>
+          <option value="shared_with_partner">Con Vicky</option>
+          <option value="household_shared">Compartido</option>
+        </select>
+      </label>
+
+      <label className="space-y-1 sm:col-span-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Motivo</span>
+        <input
+          type="text"
+          value={wishlist.reason}
+          onChange={(event) => onUpdateWishlist(action.id, { reason: event.target.value })}
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
         />
       </label>
