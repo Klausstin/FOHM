@@ -1,5 +1,5 @@
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, handleFirestoreError, OperationType } from '../../firebase';
 import type {
   CreateFinancialAccountInput,
   CreateFinancialTransactionInput,
@@ -55,7 +55,8 @@ export async function deleteFinancialAccount(accountId: string) {
 }
 
 export async function createFinancialTransaction(input: CreateFinancialTransactionInput) {
-  return addDoc(collection(db, 'finances'), {
+  const kind = input.kind || (input.type === 'income' ? 'income' : input.type === 'neutral' || input.type === 'transfer' ? 'neutral' : 'expense');
+  const payload = compactPayload({
     uid: input.uid,
     householdId: input.householdId,
     amount: input.amount,
@@ -66,26 +67,26 @@ export async function createFinancialTransaction(input: CreateFinancialTransacti
     subCategory: input.subCategory || '',
     subSubCategory: input.subSubCategory || '',
     type: input.type,
-    kind: input.kind || (input.type === 'income' ? 'income' : input.type === 'neutral' || input.type === 'transfer' ? 'neutral' : 'expense'),
-    neutralType: input.neutralType || null,
+    kind: kind === input.type ? undefined : kind,
+    neutralType: input.neutralType || undefined,
     accountId: input.accountId || '',
     toAccountId: input.toAccountId || '',
     paymentMethodId: input.paymentMethodId || '',
     tags: input.tags || [],
-    isFixed: Boolean(input.isFixed),
+    isFixed: input.isFixed ? true : undefined,
     date: input.date,
     source: input.source || 'manual',
-    confidence: input.confidence || 'exact',
-    status: input.status || 'posted',
-    reconciliationBatchId: input.reconciliationBatchId || null,
-    estimatedReason: input.estimatedReason || null,
-    needsReview: Boolean(input.needsReview),
+    confidence: input.confidence && input.confidence !== 'exact' ? input.confidence : undefined,
+    status: input.status && input.status !== 'posted' ? input.status : undefined,
+    reconciliationBatchId: input.reconciliationBatchId || undefined,
+    estimatedReason: input.estimatedReason || undefined,
+    needsReview: input.needsReview ? true : undefined,
     isConfirmed: input.isConfirmed ?? true,
-    generatedBy: input.generatedBy || input.uid,
-    assignedTo: input.assignedTo || input.uid,
+    generatedBy: input.generatedBy && input.generatedBy !== input.uid ? input.generatedBy : undefined,
+    assignedTo: input.assignedTo && input.assignedTo !== input.uid ? input.assignedTo : undefined,
     payer: input.payer || '',
     paymentType: input.paymentType || '',
-    paymentStatus: input.paymentStatus || 'Contabilizado',
+    paymentStatus: input.paymentStatus && input.paymentStatus !== 'Contabilizado' ? input.paymentStatus : undefined,
     merchantName: input.merchantName || '',
     merchantKey: input.merchantKey || '',
     merchant: input.merchant || input.merchantName || '',
@@ -98,9 +99,26 @@ export async function createFinancialTransaction(input: CreateFinancialTransacti
     statementFingerprint: input.statementFingerprint || '',
     duplicateOfId: input.duplicateOfId || '',
     duplicateReason: input.duplicateReason || '',
-    accountBalanceApplied: Boolean(input.accountBalanceApplied),
+    accountBalanceApplied: input.accountBalanceApplied ? true : undefined,
     createdAt: new Date(),
   });
+
+  try {
+    return await addDoc(collection(db, 'finances'), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'finances');
+    throw error;
+  }
+}
+
+function compactPayload<T extends Record<string, unknown>>(payload: T) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => {
+      if (value === undefined || value === null || value === '') return false;
+      if (Array.isArray(value) && value.length === 0) return false;
+      return true;
+    }),
+  ) as Partial<T>;
 }
 
 export async function updateFinancialTransaction(transactionId: string, input: Partial<CreateFinancialTransactionInput>) {
