@@ -513,8 +513,6 @@ function LuzFinanceEditor({
   if (!finance) return null;
 
   const selectedCategory = categories.find(category => category.name === finance.category);
-  const selectedSubCategory = selectedCategory?.subCategories?.find((sub: any) => (typeof sub === 'string' ? sub : sub.name) === finance.subCategory);
-  const subSubCategories = selectedSubCategory && typeof selectedSubCategory !== 'string' ? selectedSubCategory.subCategories || [] : [];
 
   return (
     <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
@@ -561,22 +559,6 @@ function LuzFinanceEditor({
         >
           <option value="">Sin subcategoria</option>
           {(selectedCategory?.subCategories || []).map((sub: any) => {
-            const name = typeof sub === 'string' ? sub : sub.name;
-            return <option key={name} value={name}>{name}</option>;
-          })}
-        </select>
-      </label>
-
-      <label className="space-y-1">
-        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Detalle</span>
-        <select
-          value={finance.subSubCategory || ''}
-          onChange={(event) => onUpdateFinance(action.id, { subSubCategory: event.target.value })}
-          disabled={subSubCategories.length === 0}
-          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none disabled:text-neutral-300"
-        >
-          <option value="">Sin detalle</option>
-          {subSubCategories.map((sub: any) => {
             const name = typeof sub === 'string' ? sub : sub.name;
             return <option key={name} value={name}>{name}</option>;
           })}

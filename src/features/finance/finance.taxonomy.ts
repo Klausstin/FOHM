@@ -88,8 +88,8 @@ export const DEFAULT_FINANCE_CATEGORIES: FinanceCategoryDefinition[] = [
     sub('terapia', 'Terapia', ['terapia', 'psicologo']),
     sub('fitness', 'Fitness', ['gym', 'gimnasio', 'entrenador', 'deporte']),
   ]),
-  category('ropa-cuidado', 'Ropa y cuidado personal', 'expense', 70, 'ShoppingBag', '#EC4899', ['ropa', 'zapatilla', 'zapato', 'campera', 'pantalon', 'remera', 'peluqueria'], [
-    sub('ropa-calzado', 'Ropa / calzado', ['ropa', 'zapatilla', 'zapato', 'campera', 'pantalon', 'remera']),
+  category('compras', 'Compras', 'expense', 70, 'ShoppingBag', '#EC4899', ['compra', 'compre', 'ropa', 'calzado', 'zapatilla', 'zapatillas', 'zapas', 'zapato', 'zapatos', 'nike', 'adidas', 'campera', 'pantalon', 'remera', 'peluqueria'], [
+    sub('ropa-calzado', 'Ropa y calzado', ['ropa', 'calzado', 'zapatilla', 'zapatillas', 'zapas', 'zapato', 'zapatos', 'nike', 'adidas', 'campera', 'pantalon', 'remera']),
     sub('cuidado-personal', 'Cuidado personal', ['peluqueria', 'barberia', 'corte', 'belleza']),
   ]),
   category('ocio-cultura', 'Ocio y cultura', 'expense', 80, 'Sparkles', '#14B8A6', ['cine', 'teatro', 'juego', 'salida', 'spotify', 'netflix', 'evento'], [

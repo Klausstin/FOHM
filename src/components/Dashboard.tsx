@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, startOfYear, endOfYear, subDays } from 'date-fns';
 import LuzCommandCenter from './LuzCommandCenter.tsx';
+import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
 import { 
   BarChart, 
   Bar, 
@@ -175,7 +176,7 @@ export default function Dashboard({ user }: { user: any }) {
       where('householdId', '==', user.householdId)
     );
     const unsubCategories = onSnapshot(qCategories, (snap) => {
-      setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setCategories(sanitizeFinanceCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'categories');
     });
