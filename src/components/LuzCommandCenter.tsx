@@ -150,7 +150,12 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       setStatus(`Guardado: ${executableActions.length} accion(es). Lo incompleto queda para revisar.`);
     } catch (error) {
       console.error('Luz no pudo guardar la entrada:', error);
-      setStatus('No pude guardar esto todavia. Probemos de nuevo o cargalo desde la pantalla especifica.');
+      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : '';
+      if (code.includes('permission-denied')) {
+        setStatus('Firebase rechazo el guardado. Probablemente faltan publicar las reglas nuevas de Firestore.');
+      } else {
+        setStatus('No pude guardar esto todavia. Revise el detalle en la consola para corregirlo.');
+      }
     } finally {
       setIsSaving(false);
     }
