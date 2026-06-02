@@ -136,15 +136,18 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       return;
     }
 
+    const submittedMessage = message.trim();
     setIsSaving(true);
+    setStatus('Guardando...');
+    setDraft(null);
+    setRejectedActionIds([]);
+    setMessage('');
+
     try {
       for (const action of executableActions) {
-        await executeAction(action);
+        await executeAction(action, submittedMessage);
       }
       setStatus(`Guardado: ${executableActions.length} accion(es). Lo incompleto queda para revisar.`);
-      setDraft(null);
-      setRejectedActionIds([]);
-      setMessage('');
     } catch (error) {
       console.error('Luz no pudo guardar la entrada:', error);
       setStatus('No pude guardar esto todavia. Probemos de nuevo o cargalo desde la pantalla especifica.');
@@ -153,7 +156,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
     }
   };
 
-  const executeAction = async (action: LuzAction) => {
+  const executeAction = async (action: LuzAction, submittedMessage: string) => {
     if (action.type === 'create_finance_transaction' && action.finance) {
       await createFinancialTransaction({
         uid: user.uid,
@@ -161,7 +164,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         amount: action.finance.amount,
         currency: action.finance.currency,
         description: action.finance.description,
-        note: message.trim(),
+        note: submittedMessage,
         category: action.finance.category,
         subCategory: action.finance.subCategory || '',
         subSubCategory: action.finance.subSubCategory || '',
@@ -231,7 +234,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         horizon: action.wishlist.horizon,
         visibility: action.wishlist.visibility,
         owner: action.wishlist.owner,
-        notes: message.trim(),
+        notes: submittedMessage,
         tags: [],
       });
     }
