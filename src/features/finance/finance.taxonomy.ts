@@ -64,7 +64,7 @@ export const DEFAULT_FINANCE_CATEGORIES: FinanceCategoryDefinition[] = [
     sub('software-suscripciones', 'Software / suscripciones', ['spotify', 'netflix', 'youtube', 'apple', 'openai', 'chatgpt', 'software']),
   ]),
   category('transporte', 'Transporte', 'expense', 40, 'Bus', '#6B7280', ['uber', 'cabify', 'taxi', 'sube', 'subte', 'tren', 'colectivo'], [
-    sub('apps-taxi', 'Apps / taxi', ['uber', 'cabify', 'taxi']),
+    sub('uber-cabify', 'Uber-Cabify', ['uber', 'cabify', 'taxi']),
     sub('transporte-publico', 'Transporte publico', ['sube', 'subte', 'tren', 'colectivo', 'bondi']),
     sub('larga-distancia', 'Larga distancia', ['micro', 'bus', 'tren larga distancia']),
   ], 'Movilidad'),
@@ -313,7 +313,14 @@ function buildResult(
 }
 
 function scoreTerms(value: string, terms: string[]) {
-  return terms.reduce((score, term) => value.includes(normalizeFinanceText(term)) ? score + 0.18 : score, 0);
+  const tokens = new Set(value.split(' ').filter(Boolean));
+  return terms.reduce((score, term) => {
+    const normalizedTerm = normalizeFinanceText(term);
+    if (!normalizedTerm) return score;
+    const isPhrase = normalizedTerm.includes(' ');
+    const isMatch = isPhrase ? value.includes(normalizedTerm) : tokens.has(normalizedTerm);
+    return isMatch ? score + 0.18 : score;
+  }, 0);
 }
 
 function findLearnedClassification(normalized: string, learnedMappings: any[]): FinanceClassificationResult | null {
