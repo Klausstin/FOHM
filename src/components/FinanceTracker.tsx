@@ -14,6 +14,7 @@ const CategoriaIcon = ({ name, color, size = 18 }: { name: string, color?: strin
   const Icon = ICON_MAP[name] || Tag;
   return <Icon size={size} style={{ color: color || 'inherit' }} />;
 };
+
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { useDropzone } from 'react-dropzone';
@@ -35,6 +36,7 @@ import { parseFinanceStatementText } from '../features/finance/finance.import.ts
 import { formatAccountBalance } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
+import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -545,7 +547,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
     const qCats = query(collection(db, 'categories'), where('householdId', '==', user.householdId));
     const unsubCats = onSnapshot(qCats, (snap) => {
-      setUserCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setUserCategories(sanitizeFinanceCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'categories');
     });
@@ -1882,29 +1884,6 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </select>
                       </div>
                     )}
-                    {pt.subCategory && (() => {
-                      const cat = userCategories.find(c => c.name === pt.category);
-                      const sub = cat?.subCategories?.find((s: any) => (typeof s === 'string' ? s : s.name) === pt.subCategory);
-                      if (sub && typeof sub !== 'string' && sub.subCategories?.length > 0) {
-                        return (
-                          <div className="w-48 space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Detalle</label>
-                            <select
-                              value={pt.subSubCategory}
-                              onChange={(e) => updatePending(pt.id, { subSubCategory: e.target.value })}
-                              className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
-                            >
-                              <option value="">Sin detalle</option>
-                              {(sub.subCategories || []).map((ss: any) => {
-                                const name = typeof ss === 'string' ? ss : ss.name;
-                                return <option key={name} value={name}>{name}</option>;
-                              })}
-                            </select>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
                     <div className="flex items-center gap-4 pt-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input 
@@ -2194,30 +2173,6 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </select>
                     </div>
                   )}
-
-                  {subCategory && (() => {
-                    const cat = userCategories.find(c => c.name === category);
-                    const sub = cat?.subCategories?.find((s: any) => (typeof s === 'string' ? s : s.name) === subCategory);
-                    if (sub && typeof sub !== 'string' && sub.subCategories?.length > 0) {
-                      return (
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Sub-subcategoria</label>
-                          <select
-                            value={subSubCategory}
-                            onChange={(e) => setSubSubCategoria(e.target.value)}
-                            className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                          >
-                            <option value="">Ninguna</option>
-                            {(sub.subCategories || []).map((ss: any) => {
-                              const name = typeof ss === 'string' ? ss : ss.name;
-                              return <option key={name} value={name}>{name}</option>;
-                            })}
-                          </select>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Etiquetas</label>
@@ -2597,26 +2552,6 @@ export default function FinanceTracker({ user }: { user: any }) {
                               })}
                             </select>
                           )}
-                          {editForm.subCategory && (() => {
-                            const cat = userCategories.find(c => c.name === editForm.category);
-                            const sub = cat?.subCategories?.find((s: any) => (typeof s === 'string' ? s : s.name) === editForm.subCategory);
-                            if (sub && typeof sub !== 'string' && sub.subCategories?.length > 0) {
-                              return (
-                                <select
-                                  value={editForm.subSubCategory}
-                                  onChange={(e) => setEditForm({ ...editForm, subSubCategory: e.target.value })}
-                                  className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                                >
-                                  <option value="">Sin sub-subcategoria</option>
-                                  {(sub?.subCategories || []).map((ss: any) => {
-                                    const name = typeof ss === 'string' ? ss : ss.name;
-                                    return <option key={name} value={name}>{name}</option>;
-                                  })}
-                                </select>
-                              );
-                            }
-                            return null;
-                          })()}
                           <select 
                             value={editForm.accountId}
                             onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value })}
@@ -2744,11 +2679,6 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 {f.subCategory && (
                                   <span className="text-[10px] font-bold text-neutral-400 bg-neutral-50 px-2 py-0.5 rounded-full border border-neutral-100">
                                     {f.subCategory}
-                                  </span>
-                                )}
-                                {f.subSubCategory && (
-                                  <span className="text-[10px] font-bold text-neutral-300 bg-neutral-50 px-2 py-0.5 rounded-full border border-neutral-100 italic">
-                                    {f.subSubCategory}
                                   </span>
                                 )}
                                 {f.account && (
@@ -3360,8 +3290,6 @@ function CategoryLearningGroupCard({
     isFixed: false,
   });
   const selectedCategory = categories.find(category => category.name === draft.category);
-  const selectedSubCategory = selectedCategory?.subCategories?.find((sub: any) => (typeof sub === 'string' ? sub : sub.name) === draft.subCategory);
-  const subSubCategories = selectedSubCategory && typeof selectedSubCategory !== 'string' ? selectedSubCategory.subCategories || [] : [];
 
   return (
     <article className="rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-4">
@@ -3405,18 +3333,6 @@ function CategoryLearningGroupCard({
           })}
         </select>
 
-        <select
-          value={draft.subSubCategory}
-          onChange={(event) => setDraft({ ...draft, subSubCategory: event.target.value })}
-          disabled={subSubCategories.length === 0}
-          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none disabled:text-neutral-300"
-        >
-          <option value="">Detalle</option>
-          {subSubCategories.map((sub: any) => {
-            const name = typeof sub === 'string' ? sub : sub.name;
-            return <option key={name} value={name}>{name}</option>;
-          })}
-        </select>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
