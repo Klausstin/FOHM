@@ -684,6 +684,18 @@ function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[],
     };
   }
 
+  if (normalized.includes('efectivo')) {
+    return {
+      accountName: `Efectivo Agustin ${currency}`,
+      autoCreateAccount: {
+        name: `Efectivo Agustin ${currency}`,
+        currency,
+        type: 'cash' as const,
+      },
+      paymentMethod: 'Efectivo',
+    };
+  }
+
   const paymentMethod = inferPaymentMethodLabel(normalized);
   return { paymentMethod };
 }
@@ -700,6 +712,7 @@ function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccoun
   const wantsCash = normalized.includes('efectivo');
   const wantsCreditCard = normalized.includes('tarjeta') || normalized.includes('credito') || wantsVisa || wantsMastercard;
   const bankHints = ['bbva', 'galicia', 'santander', 'brubank', 'uala', 'naranja', 'mercado pago'];
+  const cardOrBankNameHints = ['bbva', 'visa', 'master', 'mastercard', 'mc', 'amex', 'galicia', 'santander'];
 
   const scored = accounts
     .map(account => {
@@ -707,12 +720,18 @@ function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccoun
       const accountType = normalize(account.type || '');
       const accountCurrency = normalize(account.currency || '');
       const accountText = `${accountName} ${accountType}`;
+      const hasCardOrBankName = cardOrBankNameHints.some(hint => accountName.includes(hint));
       let score = 0;
 
       if (currency && accountCurrency && accountCurrency !== normalize(currency)) score -= 20;
-      if (wantsCash && accountType.includes('cash')) score += 90;
-      if (wantsCash && accountName.includes('efectivo')) score += 60;
-      if (wantsCash && !accountType.includes('cash') && !accountName.includes('efectivo')) score -= 35;
+      if (wantsCash) {
+        if (accountCurrency === normalize(currency)) score += 25;
+        if (accountType.includes('cash')) score += 90;
+        if (accountType.includes('wallet')) score += 45;
+        if (accountName.includes('efectivo')) score += 70;
+        if (accountName.includes('agustin')) score += 55;
+        if (hasCardOrBankName || accountType.includes('credit_card') || accountType.includes('bank') || accountType.includes('investment')) score -= 95;
+      }
 
       if (wantsVisa && accountText.includes('visa')) score += 100;
       if (wantsMastercard && (accountText.includes('mastercard') || accountText.includes('master') || /\bmc\b/.test(accountText))) score += 100;
@@ -732,6 +751,13 @@ function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccoun
     })
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score);
+
+  if (wantsCash) {
+    const [best, second] = scored;
+    if (!best || best.score < 45) return undefined;
+    if (second && best.score - second.score < 18) return undefined;
+    return best.account;
+  }
 
   return scored[0]?.account;
 }
