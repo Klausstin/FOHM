@@ -209,12 +209,13 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
   if (!hasWishlistIntent) return null;
 
   const moneyMentions = parseMoneyMentions(message);
-  const firstMoney = moneyMentions[0];
+  const firstMoney = selectPrimaryMoneyMention(moneyMentions);
   const title = inferWishlistTitle(message, normalized, firstMoney?.index) || 'Item para evaluar';
   const category = inferWishlistCategory(normalized);
-  const itemType = inferWishlistItemType(normalized, firstMoney?.amount || 0);
+  const currency = firstMoney?.currency || inferCurrency(normalized);
+  const itemType = inferWishlistItemType(normalized, firstMoney?.amount || 0, currency);
   const horizon = itemType === 'big_goal' || itemType === 'asset' ? 'long' : 'open';
-  const visibility = includesAny(normalized, ['vicky', 'ambos', 'casa', 'pareja']) ? 'shared_with_partner' : 'private';
+  const visibility = includesAny(normalized, ['vicky', 'ambos', 'casa', 'pareja', 'living', 'hogar', 'depto', 'departamento']) ? 'shared_with_partner' : 'private';
   const owner = visibility === 'private' ? 'agustin' : 'shared';
 
   return {
@@ -227,7 +228,7 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
     wishlist: {
       title,
       estimatedPrice: firstMoney?.amount || 0,
-      currency: firstMoney?.currency || inferCurrency(normalized),
+      currency,
       reason: message,
       category,
       itemType,
@@ -241,6 +242,10 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
 
 function parseFinanceActions(message: string, normalized: string, accounts: LuzFinancialAccountOption[]): LuzAction[] {
   const moneyMentions = parseMoneyMentions(message);
+  const isFuturePurchaseIntent = includesAny(normalized, WISHLIST_INTENT_WORDS) &&
+    !includesAny(normalized, ['gaste', 'gasto', 'pague', 'pago', 'compre', 'costo', 'salio', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron']);
+  if (isFuturePurchaseIntent) return [];
+
   const looksLikeMoney = moneyMentions.length > 0 && (
     MONEY_WORDS.some(word => normalized.includes(normalize(word))) ||
     normalized.includes('pesos') ||
@@ -252,14 +257,6 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
 
   if (!looksLikeMoney) return [];
 
-  const payment = inferPayment(normalized, accounts);
-  const needsReview = !payment.accountId;
-  const paymentDetail = payment.accountName
-    ? `Cuenta sugerida: ${payment.accountName}.`
-    : payment.paymentMethod
-      ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
-      : 'Falta confirmar cuenta o billetera.';
-
   return moneyMentions.map((mention, index) => {
     const context = getMoneyMentionContext(message, mention.index);
     const normalizedContext = normalize(context);
@@ -267,17 +264,25 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
     const type = classification.suggestion.kind || (INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense');
     const category = classification.suggestion.category;
     const description = inferDescription(context || message, mention.amount) || category;
+    const currency = mention.currency || inferCurrency(normalizedContext || normalized);
+    const payment = inferPayment(normalized, accounts, currency);
+    const needsReview = !payment.accountId;
+    const paymentDetail = payment.accountName
+      ? `Cuenta sugerida: ${payment.accountName}.`
+      : payment.paymentMethod
+        ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
+        : 'Falta confirmar cuenta o billetera.';
 
     return {
       id: createActionId(`finance-${index}`),
       type: 'create_finance_transaction',
       intent: 'financial_transaction',
       title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
-      detail: `${mention.amount.toLocaleString()} ${mention.currency || inferCurrency(normalizedContext || normalized)} - ${category} / ${classification.suggestion.subcategory}. ${paymentDetail}`,
+      detail: `${mention.amount.toLocaleString()} ${currency} - ${category} / ${classification.suggestion.subcategory}. ${paymentDetail}`,
       confidence: payment.accountId ? 'high' : 'medium',
       finance: {
         amount: mention.amount,
-        currency: mention.currency || inferCurrency(normalizedContext || normalized),
+        currency,
         type,
         neutralType: classification.suggestion.neutralType,
         category,
@@ -426,7 +431,10 @@ function buildFollowUps(message: string, normalized: string, actions: LuzAction[
 
 function shouldCreateJournal(normalized: string, hasFinance: boolean, hasHabit: boolean) {
   if (!hasFinance && !hasHabit) return true;
-  const hasReflection = includesAny(normalized, REFLECTIVE_JOURNAL_WORDS);
+  const reflectionTerms = hasFinance || hasHabit
+    ? REFLECTIVE_JOURNAL_WORDS.filter(term => !['quiero', 'necesito', 'deberia'].includes(term))
+    : REFLECTIVE_JOURNAL_WORDS;
+  const hasReflection = includesAny(normalized, reflectionTerms);
   const hasPersonalContext = includesAny(normalized, ['pareja', 'trabajo', 'vicky', 'familia', 'cine', 'pelicula', 'marca', 'experiencia', 'turista']);
   const isLongNarrative = normalized.length >= 180;
   return hasReflection || hasPersonalContext || isLongNarrative;
@@ -549,6 +557,7 @@ function parseMoneyMentions(message: string) {
   const patterns = [
     /(?:\$|ars|usd|eur|€)\s*(\d+(?:[.,]\d+)?)\s*(k|mil)?/gi,
     /(\d+(?:[.,]\d+)?)\s*(k|mil)?\s*(pesos?|ars|usd|dolares?|eur|euros?|€)\b/gi,
+    /\b(\d[\d.,]*)\s*(k|mil)?\b/gi,
   ];
 
   for (const pattern of patterns) {
@@ -567,18 +576,44 @@ function parseMoneyMentions(message: string) {
   }
 
   const unique = new Map<string, { amount: number; currency?: string; index: number }>();
-  mentions.forEach(mention => unique.set(`${mention.index}-${mention.amount}-${mention.currency || ''}`, mention));
+  mentions.forEach(mention => {
+    const key = `${mention.index}-${mention.amount}`;
+    const existing = unique.get(key);
+    if (!existing || (!existing.currency && mention.currency)) unique.set(key, mention);
+  });
   return Array.from(unique.values()).sort((a, b) => a.index - b.index).slice(0, 6);
 }
 
+function selectPrimaryMoneyMention(mentions: Array<{ amount: number; currency?: string; index: number }>) {
+  if (mentions.length <= 1) return mentions[0];
+  return [...mentions].sort((a, b) => b.amount - a.amount)[0];
+}
+
 function getMoneyMentionContext(message: string, index: number) {
-  const start = Math.max(0, message.lastIndexOf(',', index - 1), message.lastIndexOf('.', index - 1), message.lastIndexOf(';', index - 1));
-  const nextComma = message.indexOf(',', index + 1);
-  const nextPeriod = message.indexOf('.', index + 1);
-  const nextSemicolon = message.indexOf(';', index + 1);
-  const nextCandidates = [nextComma, nextPeriod, nextSemicolon].filter(position => position >= 0);
-  const end = nextCandidates.length ? Math.min(...nextCandidates) : message.length;
+  const start = findPreviousContextBreak(message, index);
+  const end = findNextContextBreak(message, index + 1);
   return message.slice(start > 0 ? start + 1 : 0, end).trim();
+}
+
+function findPreviousContextBreak(message: string, index: number) {
+  for (let position = index; position >= 0; position -= 1) {
+    if (isContextBreak(message, position)) return position;
+  }
+  return 0;
+}
+
+function findNextContextBreak(message: string, index: number) {
+  for (let position = index; position < message.length; position += 1) {
+    if (isContextBreak(message, position)) return position;
+  }
+  return message.length;
+}
+
+function isContextBreak(message: string, position: number) {
+  const char = message[position];
+  if (char === ',' || char === ';') return true;
+  if (char !== '.') return false;
+  return !/\d/.test(message[position - 1] || '') || !/\d/.test(message[position + 1] || '');
 }
 
 function parseLocaleNumber(value: string) {
@@ -622,23 +657,24 @@ function inferWishlistTitle(message: string, normalized: string, moneyIndex?: nu
 
 function inferWishlistCategory(normalized: string) {
   if (includesAny(normalized, ['zapatilla', 'zapatillas', 'ropa', 'campera', 'zapato'])) return 'Ropa';
-  if (includesAny(normalized, ['notebook', 'celular', 'camara', 'iphone', 'monitor', 'teclado'])) return 'Tecnologia';
+  if (includesAny(normalized, ['tv', 'televisor', 'samsung', 'notebook', 'celular', 'camara', 'iphone', 'monitor', 'teclado'])) return 'Tecnologia';
   if (includesAny(normalized, ['casa', 'departamento', 'depto', 'terreno', 'auto', 'camioneta', 'inversion', 'invertir'])) return 'Patrimonio';
-  if (includesAny(normalized, ['sillon', 'mesa', 'silla', 'escritorio'])) return 'Casa';
+  if (includesAny(normalized, ['sillon', 'mesa', 'silla', 'escritorio', 'living', 'hogar'])) return 'Casa';
   if (includesAny(normalized, ['viaje', 'hotel', 'pasaje', 'vuelo'])) return 'Viajes';
   if (includesAny(normalized, ['golf', 'padel', 'futbol', 'deporte', 'bicicleta'])) return 'Deporte';
   return 'Otros';
 }
 
-function inferWishlistItemType(normalized: string, amount: number): WishlistItemType {
+function inferWishlistItemType(normalized: string, amount: number, currency: string): WishlistItemType {
   if (includesAny(normalized, ['inversion', 'invertir', 'terreno'])) return 'asset';
-  if (includesAny(normalized, BIG_WISHLIST_WORDS) || amount >= 100000) return 'big_goal';
+  const highAmount = currency === 'USD' || currency === 'EUR' ? amount >= 10000 : amount >= 5000000;
+  if (includesAny(normalized, BIG_WISHLIST_WORDS) || highAmount) return 'big_goal';
   if (includesAny(normalized, ['viaje', 'hotel', 'pasaje', 'vuelo', 'experiencia', 'concierto', 'recital'])) return 'experience';
   return 'purchase';
 }
 
-function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[]) {
-  const account = findBestPaymentAccount(normalized, accounts);
+function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[], currency = 'ARS') {
+  const account = findBestPaymentAccount(normalized, accounts, currency);
 
   if (account) {
     return {
@@ -658,9 +694,10 @@ function inferCurrency(normalized: string) {
   return 'ARS';
 }
 
-function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccountOption[]) {
+function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccountOption[], currency = 'ARS') {
   const wantsVisa = normalized.includes('visa');
   const wantsMastercard = normalized.includes('mastercard') || normalized.includes('master') || /\bmc\b/.test(normalized);
+  const wantsCash = normalized.includes('efectivo');
   const wantsCreditCard = normalized.includes('tarjeta') || normalized.includes('credito') || wantsVisa || wantsMastercard;
   const bankHints = ['bbva', 'galicia', 'santander', 'brubank', 'uala', 'naranja', 'mercado pago'];
 
@@ -668,8 +705,14 @@ function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccoun
     .map(account => {
       const accountName = normalize(account.name || '');
       const accountType = normalize(account.type || '');
+      const accountCurrency = normalize(account.currency || '');
       const accountText = `${accountName} ${accountType}`;
       let score = 0;
+
+      if (currency && accountCurrency && accountCurrency !== normalize(currency)) score -= 20;
+      if (wantsCash && accountType.includes('cash')) score += 90;
+      if (wantsCash && accountName.includes('efectivo')) score += 60;
+      if (wantsCash && !accountType.includes('cash') && !accountName.includes('efectivo')) score -= 35;
 
       if (wantsVisa && accountText.includes('visa')) score += 100;
       if (wantsMastercard && (accountText.includes('mastercard') || accountText.includes('master') || /\bmc\b/.test(accountText))) score += 100;
