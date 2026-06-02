@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Brain, CheckCircle2, Gift, HelpCircle, Loader2, Mic, Send, Sparkles, Wallet, X } from 'lucide-react';
-import { createFinancialTransaction } from '../features/finance/finance.service';
+import { applyTransactionToAccountBalances, createFinancialTransaction, updateFinancialTransaction } from '../features/finance/finance.service';
+import type { CreateFinancialTransactionInput } from '../features/finance/finance.types';
 import { createGoal } from '../features/goals/goal.service';
 import { createHabit, createHabitLog } from '../features/habits/habit.service';
 import type { HabitRecord } from '../features/habits/habit.types';
@@ -163,7 +164,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
 
   const executeAction = async (action: LuzAction, submittedMessage: string) => {
     if (action.type === 'create_finance_transaction' && action.finance) {
-      await createFinancialTransaction({
+      const transactionInput: CreateFinancialTransactionInput = {
         uid: user.uid,
         householdId: user.householdId || `personal-${user.uid}`,
         amount: action.finance.amount,
@@ -187,7 +188,15 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         assignedTo: user.uid,
         paymentType: action.finance.paymentMethod || '',
         paymentStatus: action.finance.needsReview ? 'Pendiente de revisar' : 'Contabilizado',
-      });
+      };
+
+      const transactionRef = await createFinancialTransaction(transactionInput);
+      if (action.finance.accountId && !action.finance.needsReview) {
+        await applyTransactionToAccountBalances(transactionInput);
+        if (transactionRef?.id) {
+          await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: true } as any);
+        }
+      }
     }
 
     if (action.type === 'create_journal_entry' && action.journal) {

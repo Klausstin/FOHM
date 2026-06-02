@@ -417,6 +417,33 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [editingAccount, setEditingAccount] = useState<any | null>(null);
   const [newAccount, setNewAccount] = useState({ name: '', currency: 'ARS', balance: 0, color: '#3B82F6', type: 'bank' });
   const [householdMembers, setHouseholdMembers] = useState<any[]>([]);
+  const uniqueHouseholdMembers = useMemo(() => {
+    const byIdentity = new Map<string, any>();
+    const fallbackUser = {
+      id: user.uid,
+      uid: user.uid,
+      displayName: user.displayName || user.email || 'Agustin',
+      email: user.email || '',
+    };
+
+    [fallbackUser, ...(householdMembers || [])].forEach(member => {
+      const uid = member.uid || member.id || member.email;
+      if (!uid) return;
+      const existing = byIdentity.get(uid);
+      byIdentity.set(uid, {
+        ...existing,
+        ...member,
+        uid,
+        id: member.id || existing?.id || uid,
+        displayName: member.displayName || existing?.displayName || member.email || existing?.email || 'Sin nombre',
+        email: member.email || existing?.email || '',
+      });
+    });
+
+    return Array.from(byIdentity.values()).sort((a, b) =>
+      (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '', 'es'),
+    );
+  }, [householdMembers, user.displayName, user.email, user.uid]);
   const [showCatchupPrompt, setShowCatchupPrompt] = useState(false);
   const [showCatchupWizard, setShowCatchupWizard] = useState(false);
   const [catchupDraft, setCatchupDraft] = useState({
@@ -538,11 +565,12 @@ export default function FinanceTracker({ user }: { user: any }) {
     });
 
     return () => {
+      unsubMembers();
       unsubCats();
       unsubMappings();
       unsubAccounts();
     };
-  }, [user.uid]);
+  }, [user.householdId, user.uid]);
 
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2311,7 +2339,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         onChange={(e) => setGeneratedBy(e.target.value)}
                         className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       >
-                        {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
+                        {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -2321,7 +2349,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         onChange={(e) => setAssignedTo(e.target.value)}
                         className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       >
-                        {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
+                        {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                         <option value="Ambos">Ambos</option>
                       </select>
                     </div>
@@ -2485,7 +2513,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
                   <option value="all">Todos</option>
-                  {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
+                  {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                 </select>
               </div>
 
@@ -2497,7 +2525,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
                   <option value="all">Todos</option>
-                  {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
+                  {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                   <option value="Ambos">Ambos</option>
                 </select>
               </div>
@@ -2520,8 +2548,8 @@ export default function FinanceTracker({ user }: { user: any }) {
               {(filteredFinances || []).map((f) => {
                 const typeInfo = FINANCE_TYPES.find(t => t.id === f.type);
                 const isEditing = editingId === f.id;
-                const generator = householdMembers.find(m => m.uid === f.generatedBy);
-                const assignee = f.assignedTo === 'Ambos' ? 'Ambos' : householdMembers.find(m => m.uid === f.assignedTo);
+                const generator = uniqueHouseholdMembers.find(m => m.uid === f.generatedBy);
+                const assignee = f.assignedTo === 'Ambos' ? 'Ambos' : uniqueHouseholdMembers.find(m => m.uid === f.assignedTo);
 
                 return (
                   <motion.div
@@ -2671,14 +2699,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                               onChange={(e) => setEditForm({ ...editForm, generatedBy: e.target.value })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
-                              {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
+                              {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                             </select>
                             <select 
                               value={editForm.assignedTo}
                               onChange={(e) => setEditForm({ ...editForm, assignedTo: e.target.value })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
-                              {(householdMembers || []).map(m => <option key={m.id} value={m.uid}>{m.displayName || m.email}</option>)}
+                              {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                               <option value="Ambos">Ambos</option>
                             </select>
                           </div>
