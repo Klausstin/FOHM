@@ -1,4 +1,5 @@
 import type { NeutralType, TransactionKind } from './finance.types';
+import { inferTravelContext } from '../travel/travelContext';
 
 export interface FinanceSubcategoryDefinition {
   id: string;
@@ -32,6 +33,8 @@ export interface FinanceClassificationSuggestion {
   neutralType?: NeutralType;
   category: string;
   subcategory: string;
+  travelCategory?: string;
+  travelTripSuggestion?: string;
   confidence: number;
   reason: string;
 }
@@ -100,6 +103,11 @@ export const DEFAULT_FINANCE_CATEGORIES: FinanceCategoryDefinition[] = [
   category('viajes', 'Viajes', 'expense', 90, 'Plane', '#0EA5E9', ['viaje', 'hotel', 'airbnb', 'pasaje', 'vuelo', 'roma', 'italia'], [
     sub('pasajes', 'Pasajes', ['pasaje', 'vuelo', 'tren']),
     sub('alojamiento', 'Alojamiento', ['hotel', 'airbnb', 'estadia']),
+    sub('comidas-salidas', 'Comidas y salidas', ['cena', 'almuerzo', 'desayuno', 'restaurant', 'bar', 'cafe']),
+    sub('traslados-locales', 'Traslados locales', ['uber', 'cabify', 'taxi', 'metro', 'bus', 'subte']),
+    sub('experiencias-entradas', 'Experiencias y entradas', ['museo', 'entrada', 'tour', 'excursion']),
+    sub('compras-ropa-viaje', 'Compras y ropa', ['ropa', 'zapatillas', 'calzado', 'shopping']),
+    sub('supermercado-farmacia-viaje', 'Supermercado y farmacia', ['supermercado', 'farmacia', 'carrefour']),
     sub('gastos-en-viaje', 'Gastos en viaje', ['viaje', 'turismo']),
   ]),
   category('educacion-trabajo', 'Educacion y trabajo', 'expense', 100, 'Briefcase', '#6366F1', ['curso', 'libro', 'educacion', 'trabajo', 'herramienta'], [
@@ -148,6 +156,19 @@ export function classifyFinanceText(input: string, learnedMappings: any[] = []):
 
   const neutral = classifyNeutral(normalized);
   if (neutral) return buildResult(input, neutral, [], getSuggestedTags(normalized));
+
+  const travel = inferTravelContext(input);
+  if (travel) {
+    return buildResult(input, {
+      kind: 'expense',
+      category: 'Viajes',
+      subcategory: travel.travelCategory,
+      travelCategory: travel.travelCategory,
+      travelTripSuggestion: travel.travelTripSuggestion,
+      confidence: travel.confidence === 'high' ? 0.94 : 0.76,
+      reason: `Detecte contexto de viaje: ${travel.travelTripSuggestion}.`,
+    }, [], getSuggestedTags(normalized));
+  }
 
   const scored = DEFAULT_FINANCE_CATEGORIES
     .filter(category => category.kind !== 'neutral')

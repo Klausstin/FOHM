@@ -209,7 +209,7 @@ service cloud.firestore {
 
     function isValidFinance(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'amount', 'type', 'date', 'category', 'source']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'travelTripId', 'travelTripName', 'travelTripSuggestion', 'travelCategory', 'originalAmount', 'originalCurrency', 'settlementAmount', 'settlementCurrency', 'fxRate', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.amount is number &&
              data.type in ["expense", "income", "neutral", "transfer"] &&
@@ -233,6 +233,15 @@ service cloud.firestore {
              (!('merchant' in data) || (data.merchant is string && data.merchant.size() < 200)) &&
              (!('owner' in data) || (data.owner is string && data.owner.size() < 100)) &&
              (!('projectId' in data) || (data.projectId is string && data.projectId.size() < 100)) &&
+             (!('travelTripId' in data) || (data.travelTripId is string && data.travelTripId.size() < 100)) &&
+             (!('travelTripName' in data) || (data.travelTripName is string && data.travelTripName.size() < 200)) &&
+             (!('travelTripSuggestion' in data) || (data.travelTripSuggestion is string && data.travelTripSuggestion.size() < 200)) &&
+             (!('travelCategory' in data) || (data.travelCategory is string && data.travelCategory.size() < 100)) &&
+             (!('originalAmount' in data) || data.originalAmount is number) &&
+             (!('originalCurrency' in data) || (data.originalCurrency is string && data.originalCurrency.size() < 10)) &&
+             (!('settlementAmount' in data) || data.settlementAmount is number) &&
+             (!('settlementCurrency' in data) || (data.settlementCurrency is string && data.settlementCurrency.size() < 10)) &&
+             (!('fxRate' in data) || data.fxRate is number) &&
              (!('isReimbursable' in data) || data.isReimbursable is bool) &&
              (!('reimbursementStatus' in data) || data.reimbursementStatus in ["pending", "reimbursed", "not_applicable"]) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
@@ -316,6 +325,24 @@ service cloud.firestore {
              (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
+    function isValidTravelTrip(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'name', 'destination', 'members', 'defaultCurrency', 'visibility', 'status']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'destination', 'country', 'city', 'startDate', 'endDate', 'members', 'defaultCurrency', 'visibility', 'status', 'createdAt', 'updatedAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.destination is string && data.destination.size() > 0 && data.destination.size() < 200 &&
+             (!('country' in data) || (data.country is string && data.country.size() < 100)) &&
+             (!('city' in data) || (data.city is string && data.city.size() < 100)) &&
+             (!('startDate' in data) || (data.startDate is string && data.startDate.size() < 20)) &&
+             (!('endDate' in data) || (data.endDate is string && data.endDate.size() < 20)) &&
+             data.members is list &&
+             data.defaultCurrency is string && data.defaultCurrency.size() < 10 &&
+             isValidVisibility(data.visibility) &&
+             data.status in ["planned", "active", "finished"] &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -375,6 +402,13 @@ service cloud.firestore {
       allow read: if isAuthenticated() && canReadVisibleDoc(resource.data, 'finances');
       allow create: if isAuthenticated() && isValidWishlistItem(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
       allow update: if isAuthenticated() && isValidWishlistItem(request.resource.data, true) && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+    }
+
+    match /travelTrips/{tripId} {
+      allow read: if isAuthenticated() && canReadVisibleDoc(resource.data, 'finances');
+      allow create: if isAuthenticated() && isValidTravelTrip(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidTravelTrip(request.resource.data, true) && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
       allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
     }
 

@@ -188,6 +188,12 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         assignedTo: user.uid,
         paymentType: action.finance.paymentMethod || '',
         paymentStatus: action.finance.needsReview ? 'Pendiente de revisar' : 'Contabilizado',
+        travelTripId: action.finance.travelTripId,
+        travelTripName: action.finance.travelTripName,
+        travelTripSuggestion: action.finance.travelTripSuggestion,
+        travelCategory: action.finance.travelCategory,
+        originalAmount: action.finance.originalAmount,
+        originalCurrency: action.finance.originalCurrency,
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
@@ -477,6 +483,18 @@ function LuzActionCard({
         </button>
       </div>
       <p className={`text-xs font-medium leading-5 ${isRejected ? 'text-white/35 line-through' : 'text-white/68'}`}>{action.detail}</p>
+      {!isRejected && action.finance?.travelTripSuggestion && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-sky-300/25 bg-sky-300/12 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-sky-100">
+            Viaje: {action.finance.travelTripSuggestion}
+          </span>
+          {action.finance.travelCategory && (
+            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">
+              {action.finance.travelCategory}
+            </span>
+          )}
+        </div>
+      )}
       {!isRejected && action.type === 'create_finance_transaction' && action.finance && (
         <LuzFinanceEditor
           action={action}
@@ -513,6 +531,14 @@ function LuzFinanceEditor({
   if (!finance) return null;
 
   const selectedCategory = categories.find(category => category.name === finance.category);
+  const categoryOptions = selectedCategory || !finance.category
+    ? categories
+    : [{ id: `inferred-${finance.category}`, name: finance.category, subCategories: [] }, ...categories];
+  const rawSubCategories = selectedCategory?.subCategories || [];
+  const hasCurrentSubCategory = rawSubCategories.some((sub: any) => (typeof sub === 'string' ? sub : sub.name) === finance.subCategory);
+  const subCategoryOptions = finance.subCategory && !hasCurrentSubCategory
+    ? [{ name: finance.subCategory }, ...rawSubCategories]
+    : rawSubCategories;
 
   return (
     <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
@@ -545,7 +571,7 @@ function LuzFinanceEditor({
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
         >
           <option value="">Elegir</option>
-          {categories.map(category => <option key={category.id} value={category.name}>{category.name}</option>)}
+          {categoryOptions.map(category => <option key={category.id || category.name} value={category.name}>{category.name}</option>)}
         </select>
       </label>
 
@@ -558,7 +584,7 @@ function LuzFinanceEditor({
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none disabled:text-neutral-300"
         >
           <option value="">Sin subcategoria</option>
-          {(selectedCategory?.subCategories || []).map((sub: any) => {
+          {subCategoryOptions.map((sub: any) => {
             const name = typeof sub === 'string' ? sub : sub.name;
             return <option key={name} value={name}>{name}</option>;
           })}
