@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
 import type { NeutralType, TransactionKind } from '../finance/finance.types';
+import { inferTravelContext } from '../travel/travelContext';
 import type { WishlistHorizon, WishlistItemType } from '../wishlist/wishlist.types';
 
 export type UniversalCaptureIntent = 'journal_entry' | 'financial_transaction' | 'wishlist_item' | 'goal' | 'habit' | 'calendar_event' | 'unknown';
@@ -28,6 +29,12 @@ export interface LuzFinanceDraft {
   accountId?: string;
   accountName?: string;
   paymentMethod?: string;
+  travelTripId?: string;
+  travelTripName?: string;
+  travelTripSuggestion?: string;
+  travelCategory?: string;
+  originalAmount?: number;
+  originalCurrency?: string;
   needsReview: boolean;
 }
 
@@ -261,9 +268,11 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
     const context = getMoneyMentionContext(message, mention.index);
     const normalizedContext = normalize(context);
     const classification = classifyFinanceText(context || message);
+    const travel = inferTravelContext(context || message);
     const type = classification.suggestion.kind || (INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense');
-    const category = classification.suggestion.category;
-    const description = inferDescription(context || message, mention.amount) || category;
+    const category = travel ? 'Viajes' : classification.suggestion.category;
+    const subCategory = travel?.travelCategory || classification.suggestion.subcategory;
+    const description = travel?.description || inferDescription(context || message, mention.amount) || category;
     const currency = mention.currency || inferCurrency(normalizedContext || normalized);
     const payment = inferPayment(normalized, accounts, currency);
     const needsReview = !payment.accountId;
@@ -278,7 +287,7 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
       type: 'create_finance_transaction',
       intent: 'financial_transaction',
       title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
-      detail: `${mention.amount.toLocaleString()} ${currency} - ${category} / ${classification.suggestion.subcategory}. ${paymentDetail}`,
+      detail: `${mention.amount.toLocaleString()} ${currency} - ${category} / ${subCategory}. ${travel ? `Viaje sugerido: ${travel.travelTripSuggestion}. ` : ''}${paymentDetail}`,
       confidence: payment.accountId ? 'high' : 'medium',
       finance: {
         amount: mention.amount,
@@ -286,12 +295,17 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
         type,
         neutralType: classification.suggestion.neutralType,
         category,
-        subCategory: classification.suggestion.subcategory,
+        subCategory,
         subSubCategory: '',
         description,
         accountId: payment.accountId,
         accountName: payment.accountName,
         paymentMethod: payment.paymentMethod,
+        travelTripName: travel?.travelTripName,
+        travelTripSuggestion: travel?.travelTripSuggestion,
+        travelCategory: travel?.travelCategory,
+        originalAmount: mention.amount,
+        originalCurrency: currency,
         needsReview,
       },
     };
@@ -784,6 +798,7 @@ function inferDescription(message: string, amount: number) {
   return message
     .replace(new RegExp(String(amount), 'i'), '')
     .replace(/\$|\bars\b|\busd\b|\bpesos?\b|\bdolares?\b/gi, '')
+    .replace(/\beur\b|\beuros?\b/gi, '')
     .replace(/\b(gaste|gasto|pague|compre|cobre|ingreso)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
