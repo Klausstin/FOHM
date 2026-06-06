@@ -362,13 +362,16 @@ export default function Dashboard({ user }: { user: any }) {
   const pendingFinance = finances.filter(record => record.status === 'needs_review' || record.needsReview);
   const recentRecords = finances.slice(0, 5);
   const primarySignal = alignment.signals[0];
+  const today = new Date();
+  const yearProgress = getYearProgress(today);
 
   return (
     <div className="min-h-screen pb-24 md:pb-8">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Inicio</p>
-          <h2 className="mt-0.5 text-3xl font-black tracking-tight text-neutral-950">Hoy</h2>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Hoy</p>
+          <h2 className="mt-0.5 text-3xl font-black tracking-tight text-neutral-950">{formatLongDate(today)}</h2>
+          <p className="mt-1 text-sm font-bold text-neutral-400">{yearProgress}% del año recorrido</p>
         </div>
 
         <div className="flex w-full gap-2 sm:w-auto">
@@ -391,8 +394,8 @@ export default function Dashboard({ user }: { user: any }) {
         </div>
       </div>
 
-      <section className="grid gap-4 xl:grid-cols-12">
-        <div className="rounded-[1.75rem] bg-neutral-950 p-3 text-white shadow-sm md:p-4 xl:col-span-7">
+      <section className="grid items-start gap-4 xl:grid-cols-12">
+        <div className="rounded-[1.75rem] bg-neutral-950 p-3 text-white shadow-sm md:p-4 xl:col-span-7 xl:self-start">
           <LuzCommandCenter user={user} habits={habits} accounts={accounts} categories={categories} />
         </div>
 
@@ -627,4 +630,22 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
       <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-neutral-400">{label}</p>
     </div>
   );
+}
+
+function formatLongDate(date: Date) {
+  const formatted = new Intl.DateTimeFormat('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function getYearProgress(date: Date) {
+  const start = new Date(date.getFullYear(), 0, 1);
+  const end = new Date(date.getFullYear() + 1, 0, 1);
+  const elapsed = date.getTime() - start.getTime();
+  const total = end.getTime() - start.getTime();
+  return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
 }

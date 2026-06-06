@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Brain, Calendar, CheckCircle2, Gift, Home, LogOut, MessageCircle, Settings, Sparkles, Target, User as UserIcon, Wallet } from 'lucide-react';
+import { Brain, Calendar, CheckCircle2, Gift, Home, LogOut, MessageCircle, Settings, Target, User as UserIcon, Wallet } from 'lucide-react';
 import { auth } from '../../firebase.ts';
 
 export type AppTab = 'home' | 'luz' | 'mind' | 'finance' | 'wishlist' | 'settings' | 'goals' | 'habits' | 'calendar';
@@ -47,15 +47,14 @@ export default function SidebarNav({ activeTab, onTabChange, user }: SidebarNavP
             </div>
           </div>
 
-          <div className="mt-8 rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-4">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
-              <Sparkles size={13} />
-              Luz
-            </div>
-            <p className="text-sm font-semibold leading-5 text-white/80">
-              Te ayuda a ver patrones, contradicciones y proximos pasos.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => onTabChange('luz')}
+            className="mt-7 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-left transition hover:bg-white/10"
+          >
+            <span className="text-sm font-black text-white">Hablar con Luz</span>
+            <MessageCircle size={18} className="text-white/45" />
+          </button>
         </div>
 
         <div className="flex w-full justify-start gap-1 overflow-x-auto md:mt-8 md:flex-col md:justify-start md:gap-1.5 md:overflow-visible">
