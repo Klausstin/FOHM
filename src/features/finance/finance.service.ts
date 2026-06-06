@@ -142,6 +142,8 @@ export async function deleteFinancialTransaction(transactionId: string) {
 }
 
 export async function applyTransactionToAccountBalances(input: CreateFinancialTransactionInput) {
+  if (!shouldApplyTransactionToAccountBalances(input)) return false;
+
   if (input.accountId) {
     const accountRef = doc(db, 'accounts', input.accountId);
     const accountSnap = await getDoc(accountRef);
@@ -171,4 +173,17 @@ export async function applyTransactionToAccountBalances(input: CreateFinancialTr
       await updateDoc(toAccountRef, { balance: newBalance });
     }
   }
+
+  return true;
+}
+
+export function shouldApplyTransactionToAccountBalances(input: CreateFinancialTransactionInput) {
+  const status = input.status || 'posted';
+  if (status === 'ignored' || status === 'pending') return false;
+  if (status === 'needs_review' && input.source !== 'catchup_estimate') return false;
+
+  if (input.type === 'neutral') return false;
+  if (input.type === 'transfer') return Boolean(input.accountId && input.toAccountId);
+
+  return Boolean(input.accountId);
 }

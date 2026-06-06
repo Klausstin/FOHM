@@ -651,9 +651,9 @@ export default function FinanceTracker({ user }: { user: any }) {
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
-      await applyTransactionToAccountBalances(transactionInput);
+      const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
       if (transactionRef?.id) {
-        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: true } as any);
+        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
       }
       setAmount('');
       setDescription('');
@@ -827,9 +827,9 @@ export default function FinanceTracker({ user }: { user: any }) {
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
-      if (transactionInput.accountId) {
-        await applyTransactionToAccountBalances(transactionInput);
-        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: true } as any);
+      const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
+      if (transactionRef?.id) {
+        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
       }
 
       // Save mapping for learning
@@ -1081,8 +1081,11 @@ export default function FinanceTracker({ user }: { user: any }) {
 
     setIsSavingCatchup(true);
     try {
-      await createFinancialTransaction(transaction);
-      await applyTransactionToAccountBalances(transaction);
+      const transactionRef = await createFinancialTransaction(transaction);
+      const balanceApplied = await applyTransactionToAccountBalances(transaction);
+      if (transactionRef?.id) {
+        await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
+      }
       setShowCatchupWizard(false);
       setShowCatchupPrompt(false);
       setCatchupDraft({
@@ -1120,8 +1123,9 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const handleConfirmReviewedFinance = async (finance: any) => {
     try {
+      let balanceApplied = Boolean(finance.accountBalanceApplied);
       if (finance.accountId && !finance.accountBalanceApplied) {
-        await applyTransactionToAccountBalances({
+        balanceApplied = await applyTransactionToAccountBalances({
           uid: finance.uid || user.uid,
           householdId: finance.householdId || user.householdId,
           amount: Number(finance.amount || 0),
@@ -1132,6 +1136,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           accountId: finance.accountId || '',
           toAccountId: finance.toAccountId || '',
           date: typeof finance.date?.toDate === 'function' ? finance.date.toDate() : new Date(finance.date),
+          status: 'posted',
         } as any);
       }
       await updateFinancialTransaction(finance.id, {
@@ -1140,7 +1145,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         needsReview: false,
         isConfirmed: true,
         paymentStatus: 'Contabilizado',
-        accountBalanceApplied: finance.accountId ? true : Boolean(finance.accountBalanceApplied),
+        accountBalanceApplied: balanceApplied,
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
@@ -1151,8 +1156,9 @@ export default function FinanceTracker({ user }: { user: any }) {
     try {
       const resolvedAccountId = accountId ?? finance.accountId ?? '';
       const resolvedToAccountId = toAccountId ?? finance.toAccountId ?? '';
+      let balanceApplied = Boolean(finance.accountBalanceApplied);
       if (resolvedAccountId && !finance.accountBalanceApplied) {
-        await applyTransactionToAccountBalances({
+        balanceApplied = await applyTransactionToAccountBalances({
           uid: finance.uid || user.uid,
           householdId: finance.householdId || user.householdId,
           amount: Number(finance.amount || 0),
@@ -1163,6 +1169,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           accountId: resolvedAccountId,
           toAccountId: resolvedToAccountId,
           date: typeof finance.date?.toDate === 'function' ? finance.date.toDate() : new Date(finance.date),
+          status: 'posted',
         } as any);
       }
       await updateFinancialTransaction(finance.id, {
@@ -1173,7 +1180,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         needsReview: false,
         isConfirmed: true,
         paymentStatus: 'Contabilizado',
-        accountBalanceApplied: resolvedAccountId ? true : Boolean(finance.accountBalanceApplied),
+        accountBalanceApplied: balanceApplied,
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);

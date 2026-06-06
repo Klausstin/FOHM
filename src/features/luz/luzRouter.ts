@@ -20,7 +20,7 @@ export type LuzConfidence = 'high' | 'medium' | 'low';
 export interface LuzFinanceDraft {
   amount: number;
   currency: string;
-  type: TransactionKind;
+  type: TransactionKind | 'transfer';
   date: string;
   neutralType?: NeutralType;
   category: string;
@@ -29,6 +29,8 @@ export interface LuzFinanceDraft {
   description: string;
   accountId?: string;
   accountName?: string;
+  toAccountId?: string;
+  toAccountName?: string;
   paymentMethod?: string;
   travelTripId?: string;
   travelTripName?: string;
@@ -270,38 +272,53 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
     const normalizedContext = normalize(context);
     const classification = classifyFinanceText(context || message);
     const travel = inferTravelContext(context || message);
-    const type = classification.suggestion.kind || (INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense');
+    const neutralType = classification.suggestion.neutralType;
+    const baseType = classification.suggestion.kind || (INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense');
+    const type = neutralType === 'credit_card_payment' || neutralType === 'internal_transfer'
+      ? 'transfer'
+      : baseType;
     const category = travel ? 'Viajes' : classification.suggestion.category;
     const subCategory = travel?.travelCategory || classification.suggestion.subcategory;
     const description = travel?.description || inferDescription(context || message, mention.amount) || category;
     const currency = mention.currency || inferCurrency(normalizedContext || normalized);
     const payment = inferPayment(normalized, accounts, currency);
-    const needsReview = !payment.accountId;
-    const paymentDetail = payment.accountName
-      ? `Cuenta sugerida: ${payment.accountName}.`
-      : payment.paymentMethod
-        ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
-        : 'Falta confirmar cuenta o billetera.';
+    const transferAccounts = type === 'transfer'
+      ? inferTransferAccounts(normalized, accounts, currency, neutralType, payment.accountId)
+      : null;
+    const accountId = transferAccounts?.accountId || payment.accountId;
+    const accountName = transferAccounts?.accountName || payment.accountName;
+    const toAccountId = transferAccounts?.toAccountId;
+    const toAccountName = transferAccounts?.toAccountName;
+    const needsReview = type === 'transfer' ? !(accountId && toAccountId) : !accountId;
+    const paymentDetail = type === 'transfer'
+      ? `Transferencia sugerida: ${accountName || 'origen pendiente'} -> ${toAccountName || 'destino pendiente'}.`
+      : payment.accountName
+        ? `Cuenta sugerida: ${payment.accountName}.`
+        : payment.paymentMethod
+          ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
+          : 'Falta confirmar cuenta o billetera.';
 
     return {
       id: createActionId(`finance-${index}`),
       type: 'create_finance_transaction',
       intent: 'financial_transaction',
-      title: type === 'income' ? 'Registrar ingreso' : 'Registrar gasto',
+      title: type === 'income' ? 'Registrar ingreso' : type === 'transfer' ? 'Registrar transferencia' : 'Registrar gasto',
       detail: `${mention.amount.toLocaleString()} ${currency} - ${category} / ${subCategory}. ${travel ? `Viaje sugerido: ${travel.travelTripSuggestion}. ` : ''}${paymentDetail}`,
-      confidence: payment.accountId ? 'high' : 'medium',
+      confidence: needsReview ? 'medium' : 'high',
       finance: {
         amount: mention.amount,
         currency,
         type,
         date: inferTransactionDate(context || message),
-        neutralType: classification.suggestion.neutralType,
+        neutralType,
         category,
         subCategory,
         subSubCategory: '',
         description,
-        accountId: payment.accountId,
-        accountName: payment.accountName,
+        accountId,
+        accountName,
+        toAccountId,
+        toAccountName,
         paymentMethod: payment.paymentMethod,
         travelTripName: travel?.travelTripName,
         travelTripSuggestion: travel?.travelTripSuggestion,
@@ -730,6 +747,35 @@ function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[],
   return { paymentMethod };
 }
 
+function inferTransferAccounts(
+  normalized: string,
+  accounts: LuzFinancialAccountOption[],
+  currency = 'ARS',
+  neutralType?: NeutralType,
+  fallbackAccountId?: string,
+) {
+  if (neutralType !== 'credit_card_payment') {
+    const source = findBestNonCardAccount(normalized, accounts, currency);
+    const destination = accounts.find(account => account.id !== source?.id && normalize(account.currency || '') === normalize(currency));
+    return {
+      accountId: source?.id || fallbackAccountId || '',
+      accountName: source?.name || '',
+      toAccountId: destination?.id || '',
+      toAccountName: destination?.name || '',
+    };
+  }
+
+  const creditCard = findBestCreditCardAccount(normalized, accounts, currency);
+  const source = findBestNonCardAccount(normalized, accounts, currency, creditCard?.id);
+
+  return {
+    accountId: source?.id || '',
+    accountName: source?.name || '',
+    toAccountId: creditCard?.id || fallbackAccountId || '',
+    toAccountName: creditCard?.name || '',
+  };
+}
+
 function inferCurrency(normalized: string) {
   if (normalized.includes('eur') || normalized.includes('euro')) return 'EUR';
   if (normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares')) return 'USD';
@@ -813,6 +859,57 @@ function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccoun
     if (second && best.score - second.score < 18) return undefined;
     return best.account;
   }
+
+  return scored[0]?.account;
+}
+
+function findBestCreditCardAccount(normalized: string, accounts: LuzFinancialAccountOption[], currency = 'ARS') {
+  const wantsVisa = normalized.includes('visa');
+  const wantsMastercard = normalized.includes('mastercard') || normalized.includes('master') || /\bmc\b/.test(normalized);
+
+  const scored = accounts
+    .filter(account => normalize(account.type || '').includes('credit_card'))
+    .map(account => {
+      const accountName = normalize(account.name || '');
+      const accountCurrency = normalize(account.currency || '');
+      let score = 0;
+      if (accountCurrency === normalize(currency)) score += 10;
+      if (wantsVisa && accountName.includes('visa')) score += 100;
+      if (wantsMastercard && (accountName.includes('mastercard') || accountName.includes('master') || /\bmc\b/.test(accountName))) score += 100;
+      if (normalized.includes('bbva') && accountName.includes('bbva')) score += 20;
+      if (normalized.includes('galicia') && accountName.includes('galicia')) score += 20;
+      if (!wantsVisa && !wantsMastercard) score += 5;
+      return { account, score };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.account;
+}
+
+function findBestNonCardAccount(normalized: string, accounts: LuzFinancialAccountOption[], currency = 'ARS', excludeId?: string) {
+  const scored = accounts
+    .filter(account => account.id !== excludeId && !normalize(account.type || '').includes('credit_card'))
+    .map(account => {
+      const accountName = normalize(account.name || '');
+      const accountType = normalize(account.type || '');
+      const accountCurrency = normalize(account.currency || '');
+      let score = 0;
+
+      if (accountCurrency === normalize(currency)) score += 25;
+      if (normalized.includes('bbva') && accountName.includes('bbva')) score += 35;
+      if (normalized.includes('galicia') && accountName.includes('galicia')) score += 35;
+      if (normalized.includes('santander') && accountName.includes('santander')) score += 35;
+      if (normalized.includes('efectivo') && accountType.includes('cash')) score += 90;
+      if (normalized.includes('efectivo') && accountName.includes('agustin')) score += 30;
+      if (normalized.includes('mercado pago') && accountName.includes('mercado')) score += 45;
+      if (accountType.includes('bank')) score += 8;
+      if (accountName.includes('agustin')) score += 5;
+
+      return { account, score };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
 
   return scored[0]?.account;
 }
