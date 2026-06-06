@@ -176,9 +176,10 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         subCategory: action.finance.subCategory || '',
         subSubCategory: action.finance.subSubCategory || '',
         type: action.finance.type,
-        kind: action.finance.type,
+        kind: action.finance.type === 'transfer' ? 'neutral' : action.finance.type,
         neutralType: action.finance.neutralType,
         accountId: action.finance.accountId || '',
+        toAccountId: action.finance.toAccountId || '',
         date: createLocalDate(action.finance.date),
         source: 'manual',
         confidence: action.confidence === 'high' ? 'exact' : 'inferred',
@@ -198,10 +199,10 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
-      if (action.finance.accountId && !action.finance.needsReview) {
-        await applyTransactionToAccountBalances(transactionInput);
+      if (!action.finance.needsReview) {
+        const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
         if (transactionRef?.id) {
-          await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: true } as any);
+          await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
         }
       }
     }
@@ -546,7 +547,9 @@ function buildCompactActionSummary(action: LuzAction) {
       `${Number(finance.amount || 0).toLocaleString()} ${finance.currency}`,
       [finance.category, finance.subCategory].filter(Boolean).join(' / '),
       finance.travelTripSuggestion ? `Viaje: ${finance.travelTripSuggestion}` : '',
-      finance.accountName || 'Sin cuenta',
+      finance.type === 'transfer'
+        ? `${finance.accountName || 'Sin origen'} -> ${finance.toAccountName || 'Sin destino'}`
+        : finance.accountName || 'Sin cuenta',
     ].filter(Boolean).join(' · ');
   }
 
@@ -663,7 +666,9 @@ function LuzFinanceEditor({
       </label>
 
       <label className="space-y-1">
-        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Cuenta</span>
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">
+          {finance.type === 'transfer' ? 'Cuenta origen' : 'Cuenta'}
+        </span>
         <select
           value={finance.accountId || ''}
           onChange={(event) => {
@@ -681,6 +686,27 @@ function LuzFinanceEditor({
           {accounts.map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency || 'ARS'})</option>)}
         </select>
       </label>
+
+      {finance.type === 'transfer' && (
+        <label className="space-y-1">
+          <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Cuenta destino</span>
+          <select
+            value={finance.toAccountId || ''}
+            onChange={(event) => {
+              const account = accounts.find(item => item.id === event.target.value);
+              onUpdateFinance(action.id, {
+                toAccountId: account?.id || '',
+                toAccountName: account?.name || '',
+                needsReview: !(finance.accountId && account?.id),
+              });
+            }}
+            className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+          >
+            <option value="">Sin destino</option>
+            {accounts.map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency || 'ARS'})</option>)}
+          </select>
+        </label>
+      )}
 
       <label className="space-y-1">
         <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Fecha</span>
