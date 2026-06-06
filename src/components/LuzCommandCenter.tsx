@@ -8,6 +8,7 @@ import type { HabitRecord } from '../features/habits/habit.types';
 import { createJournalEntry } from '../features/journal/journal.service';
 import { routeLuzMessage, type LuzAction, type LuzFinancialAccountOption, type LuzRouteResult } from '../features/luz/luzRouter';
 import { createWishlistItem } from '../features/wishlist/wishlist.service';
+import { TRAVEL_CATEGORIES } from '../features/travel/travel.types';
 
 interface LuzCommandCenterProps {
   user: {
@@ -531,10 +532,15 @@ function LuzFinanceEditor({
   if (!finance) return null;
 
   const selectedCategory = categories.find(category => category.name === finance.category);
+  const inferredTravelSubCategories = finance.category === 'Viajes'
+    ? TRAVEL_CATEGORIES.map(name => ({ name }))
+    : [];
   const categoryOptions = selectedCategory || !finance.category
     ? categories
     : [{ id: `inferred-${finance.category}`, name: finance.category, subCategories: [] }, ...categories];
-  const rawSubCategories = selectedCategory?.subCategories || [];
+  const rawSubCategories = selectedCategory?.subCategories?.length
+    ? selectedCategory.subCategories
+    : inferredTravelSubCategories;
   const hasCurrentSubCategory = rawSubCategories.some((sub: any) => (typeof sub === 'string' ? sub : sub.name) === finance.subCategory);
   const subCategoryOptions = finance.subCategory && !hasCurrentSubCategory
     ? [{ name: finance.subCategory }, ...rawSubCategories]
@@ -579,8 +585,12 @@ function LuzFinanceEditor({
         <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Subcategoria</span>
         <select
           value={finance.subCategory || ''}
-          onChange={(event) => onUpdateFinance(action.id, { subCategory: event.target.value, subSubCategory: '' })}
-          disabled={!selectedCategory}
+          onChange={(event) => onUpdateFinance(action.id, {
+            subCategory: event.target.value,
+            travelCategory: finance.category === 'Viajes' ? event.target.value : finance.travelCategory,
+            subSubCategory: '',
+          })}
+          disabled={!finance.category || subCategoryOptions.length === 0}
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none disabled:text-neutral-300"
         >
           <option value="">Sin subcategoria</option>
