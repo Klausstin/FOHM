@@ -16,6 +16,21 @@ export type TravelCategory =
   | 'Imprevistos'
   | 'Otros';
 
+export const TRAVEL_CATEGORIES: TravelCategory[] = [
+  'Pasajes',
+  'Alojamiento',
+  'Comidas y salidas',
+  'Traslados locales',
+  'Experiencias y entradas',
+  'Compras y ropa',
+  'Supermercado y farmacia',
+  'Conectividad',
+  'Seguro / documentacion',
+  'Comisiones e impuestos',
+  'Imprevistos',
+  'Otros',
+];
+
 export interface TravelTrip {
   id: string;
   uid: string;
