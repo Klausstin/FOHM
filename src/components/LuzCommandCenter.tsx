@@ -299,8 +299,8 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       : 'Diario';
 
   return (
-    <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.08] p-4">
-      <div className="mb-3 flex items-center justify-between gap-4">
+    <div className="rounded-[1.45rem] border border-white/10 bg-white/[0.08] p-3 md:p-4">
+      <div className="mb-2.5 flex items-center justify-between gap-4">
         <div>
           <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-white/45">
             <Sparkles size={13} />
@@ -330,10 +330,10 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
             }
           }}
           placeholder="Escribi o dicta..."
-          className="min-h-40 w-full resize-none rounded-[1.25rem] border border-white/10 bg-white p-4 text-base font-medium leading-7 text-neutral-900 outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-white/30"
+          className="min-h-[120px] w-full resize-none rounded-[1.1rem] border border-white/10 bg-white p-4 text-base font-medium leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 focus:ring-2 focus:ring-white/30 lg:min-h-[132px]"
         />
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-h-6 text-xs font-semibold text-white/62">
             {status || preview?.summary || ''}
           </div>
@@ -341,7 +341,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
             <button
               type="button"
               onClick={startDictation}
-              className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 transition ${isListening ? 'bg-red-500 text-white' : 'bg-white/10 text-white hover:bg-white/15'}`}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 transition ${isListening ? 'bg-red-500 text-white' : 'bg-white/10 text-white hover:bg-white/15'}`}
               title="Dictar"
             >
               <Mic size={18} />
@@ -349,7 +349,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
             <button
               type="submit"
               disabled={!message.trim() || isSaving}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100 disabled:opacity-45"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100 disabled:opacity-45"
             >
               <Send size={16} />
               Enviar
@@ -359,7 +359,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       </form>
 
       {draft && (
-        <div className="mt-4 space-y-3 rounded-[1.25rem] border border-white/10 bg-black/15 p-4">
+        <div className="mt-3 space-y-3 rounded-[1.15rem] border border-white/10 bg-black/15 p-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">Antes de guardar</p>
@@ -376,7 +376,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
             </button>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid gap-2">
             {draft.actions.map(action => (
               <LuzActionCard
                 key={action.id}
@@ -407,7 +407,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
                 setDraft(null);
                 setRejectedActionIds([]);
               }}
-              className="rounded-2xl border border-white/10 px-4 py-3 text-xs font-black uppercase tracking-widest text-white/50 transition hover:bg-white/10 hover:text-white"
+              className="rounded-2xl border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-white/50 transition hover:bg-white/10 hover:text-white"
             >
               Editar y reinterpretar
             </button>
@@ -415,7 +415,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
               type="button"
               onClick={confirmDraft}
               disabled={isSaving || selectedExecutableCount === 0}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100 disabled:opacity-45"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-2.5 text-xs font-black uppercase tracking-widest text-neutral-950 transition hover:bg-neutral-100 disabled:opacity-45"
             >
               {isSaving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
               Confirmar acciones{selectedExecutableCount > 0 ? ` (${selectedExecutableCount})` : ''}
@@ -461,12 +461,15 @@ function LuzActionCard({
     : action.type === 'ask_follow_up'
       ? HelpCircle
       : Brain;
+  const [isEditing, setIsEditing] = useState(false);
+  const compactSummary = buildCompactActionSummary(action);
+  const chips = buildActionChips(action);
 
   return (
-    <div className={`rounded-2xl border p-4 transition ${isRejected ? 'border-white/5 bg-white/[0.04] opacity-45' : 'border-white/10 bg-white/10'}`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <div className={`rounded-2xl border p-3 transition ${isRejected ? 'border-white/5 bg-white/[0.04] opacity-45' : 'border-white/10 bg-white/10'}`}>
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-neutral-950">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-neutral-950">
             <Icon size={16} />
           </div>
           <div>
@@ -483,38 +486,96 @@ function LuzActionCard({
           {isRejected ? 'Incluir' : 'Quitar'}
         </button>
       </div>
-      <p className={`text-xs font-medium leading-5 ${isRejected ? 'text-white/35 line-through' : 'text-white/68'}`}>{action.detail}</p>
-      {!isRejected && action.finance?.travelTripSuggestion && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-sky-300/25 bg-sky-300/12 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-sky-100">
-            Viaje: {action.finance.travelTripSuggestion}
-          </span>
-          {action.finance.travelCategory && (
-            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/55">
-              {action.finance.travelCategory}
+
+      <p className={`mt-3 text-sm font-black leading-5 ${isRejected ? 'text-white/35 line-through' : 'text-white'}`}>{compactSummary}</p>
+      {!isRejected && chips.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {chips.map(chip => (
+            <span
+              key={chip}
+              className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-white/55"
+            >
+              {chip}
             </span>
+          ))}
+        </div>
+      )}
+
+      {!isRejected && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
+          <p className="text-xs font-semibold leading-5 text-white/50">{isEditing ? 'Editando campos antes de guardar.' : action.detail}</p>
+          {action.type !== 'ask_follow_up' && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(prev => !prev)}
+              className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white/55 transition hover:bg-white/10 hover:text-white"
+            >
+              {isEditing ? 'Cerrar' : 'Editar'}
+            </button>
           )}
         </div>
       )}
+
       {!isRejected && action.type === 'create_finance_transaction' && action.finance && (
-        <LuzFinanceEditor
-          action={action}
-          accounts={accounts}
-          categories={categories}
-          onUpdateFinance={onUpdateFinance}
-        />
+        isEditing ? (
+          <LuzFinanceEditor
+            action={action}
+            accounts={accounts}
+            categories={categories}
+            onUpdateFinance={onUpdateFinance}
+          />
+        ) : null
       )}
-      {!isRejected && action.type === 'create_wishlist_item' && action.wishlist && (
+      {!isRejected && isEditing && action.type === 'create_wishlist_item' && action.wishlist && (
         <LuzWishlistEditor action={action} onUpdateWishlist={onUpdateWishlist} />
       )}
-      {!isRejected && action.type === 'create_goal' && action.goal && (
+      {!isRejected && isEditing && action.type === 'create_goal' && action.goal && (
         <LuzGoalEditor action={action} onUpdateGoal={onUpdateGoal} />
       )}
-      {!isRejected && action.type === 'create_habit' && action.habit && (
+      {!isRejected && isEditing && action.type === 'create_habit' && action.habit && (
         <LuzHabitEditor action={action} onUpdateHabit={onUpdateHabit} />
       )}
     </div>
   );
+}
+
+function buildCompactActionSummary(action: LuzAction) {
+  if (action.finance) {
+    const finance = action.finance;
+    return [
+      `${Number(finance.amount || 0).toLocaleString()} ${finance.currency}`,
+      [finance.category, finance.subCategory].filter(Boolean).join(' / '),
+      finance.travelTripSuggestion ? `Viaje: ${finance.travelTripSuggestion}` : '',
+      finance.accountName || 'Sin cuenta',
+    ].filter(Boolean).join(' · ');
+  }
+
+  if (action.wishlist) {
+    const price = action.wishlist.estimatedPrice
+      ? `${Number(action.wishlist.estimatedPrice).toLocaleString()} ${action.wishlist.currency}`
+      : 'Sin valor';
+    return `${action.wishlist.title} · ${price} · ${action.wishlist.visibility === 'private' ? 'Privado' : 'Compartido'}`;
+  }
+
+  if (action.goal) return `${action.goal.title} · Objetivo ${action.goal.year}`;
+  if (action.habit) return `${action.habit.title} · Habito nuevo`;
+  if (action.habitCheckin) return `${action.habitCheckin.habitTitle} · ${action.habitCheckin.status}`;
+  return action.detail;
+}
+
+function buildActionChips(action: LuzAction) {
+  if (action.finance) {
+    return [
+      action.finance.travelTripSuggestion ? `Viaje: ${action.finance.travelTripSuggestion}` : '',
+      action.finance.travelCategory,
+      action.finance.paymentMethod,
+      action.finance.date,
+    ].filter(Boolean) as string[];
+  }
+
+  if (action.journal) return action.journal.categories.map(category => `Diario: ${category}`);
+  if (action.wishlist) return [action.wishlist.category, action.wishlist.horizon, action.wishlist.itemType];
+  return [];
 }
 
 function LuzFinanceEditor({

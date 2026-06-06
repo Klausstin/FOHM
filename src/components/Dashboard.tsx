@@ -365,17 +365,17 @@ export default function Dashboard({ user }: { user: any }) {
 
   return (
     <div className="min-h-screen pb-24 md:pb-8">
-      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-neutral-400">Inicio</p>
-          <h2 className="mt-1 text-3xl font-black tracking-tight text-neutral-950 md:text-4xl">Hoy</h2>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Inicio</p>
+          <h2 className="mt-0.5 text-3xl font-black tracking-tight text-neutral-950">Hoy</h2>
         </div>
 
         <div className="flex w-full gap-2 sm:w-auto">
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-            className="h-12 flex-1 rounded-2xl border border-neutral-200 bg-white px-4 text-sm font-black text-neutral-900 outline-none sm:w-40 sm:flex-none"
+            className="h-11 flex-1 rounded-2xl border border-neutral-200 bg-white px-4 text-sm font-black text-neutral-900 outline-none sm:w-40 sm:flex-none"
           >
             <option>Este mes</option>
             <option>Mes pasado</option>
@@ -383,7 +383,7 @@ export default function Dashboard({ user }: { user: any }) {
           </select>
           <button
             onClick={() => setIsAddingAccount(true)}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-950 px-4 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-neutral-950 px-4 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
           >
             <Plus size={16} />
             Cuenta
@@ -391,37 +391,32 @@ export default function Dashboard({ user }: { user: any }) {
         </div>
       </div>
 
-      <section className="grid gap-5 2xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
-        <div className="rounded-[2rem] bg-neutral-950 p-4 text-white shadow-sm md:p-5">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_340px]">
-            <div className="flex flex-col gap-4">
-              <LuzCommandCenter user={user} habits={habits} accounts={accounts} categories={categories} />
-            </div>
-
-            <aside className="grid gap-4">
-              <FocusCard title="Foco de la semana" body={alignment.weeklyFocus} />
-              <SignalCard signal={primarySignal} />
-              <div className="grid grid-cols-3 gap-2">
-                <MetricTile label="Objetivos" value={activeGoals.length} />
-                <MetricTile label="Habitos" value={activeHabits.length} />
-                <MetricTile label="Pendientes" value={pendingFinance.length} />
-              </div>
-            </aside>
-          </div>
+      <section className="grid gap-4 xl:grid-cols-12">
+        <div className="rounded-[1.75rem] bg-neutral-950 p-3 text-white shadow-sm md:p-4 xl:col-span-7">
+          <LuzCommandCenter user={user} habits={habits} accounts={accounts} categories={categories} />
         </div>
 
-        <aside className="grid gap-5 lg:grid-cols-3 2xl:grid-cols-1">
+        <aside className="grid gap-4 md:grid-cols-2 xl:col-span-5 xl:grid-cols-2">
+          <FocusCard title="Foco de la semana" body={alignment.weeklyFocus} />
+          <SignalCard signal={primarySignal} />
+          <div className="grid grid-cols-3 gap-2 md:col-span-2">
+            <MetricTile label="Objetivos" value={activeGoals.length} />
+            <MetricTile label="Habitos" value={activeHabits.length} />
+            <MetricTile label="Pendientes" value={pendingFinance.length} />
+          </div>
           <FinanceSnapshot stats={stats} pendingFinance={pendingFinance.length} />
           <LifeSnapshot alignment={alignment} />
-          <RecentActivity records={recentRecords} />
+          <div className="md:col-span-2">
+            <RecentActivity records={recentRecords} />
+          </div>
         </aside>
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Flujo del periodo</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Flujo del periodo</p>
               <h3 className="mt-1 text-xl font-black text-neutral-950">Movimiento</h3>
             </div>
             <div className="flex items-center gap-4 text-[11px] font-black uppercase tracking-widest text-neutral-400">
@@ -429,7 +424,7 @@ export default function Dashboard({ user }: { user: any }) {
               <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-rose-500" />Gastos</span>
             </div>
           </div>
-          <div className="h-72">
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.trendData} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eeeeee" />
@@ -454,17 +449,17 @@ export default function Dashboard({ user }: { user: any }) {
 
 function MetricTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.07] p-4">
-      <p className="text-3xl font-black tracking-tight text-white">{value}</p>
-      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/38">{label}</p>
+    <div className="rounded-[1.15rem] border border-neutral-200 bg-white p-3 shadow-sm xl:border-white/10 xl:bg-neutral-950 xl:text-white">
+      <p className="text-2xl font-black tracking-tight text-neutral-950 xl:text-white">{value}</p>
+      <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-neutral-400 xl:text-white/38">{label}</p>
     </div>
   );
 }
 
 function FocusCard({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-[1.5rem] bg-white p-4 text-neutral-950">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">{title}</p>
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 text-neutral-950 shadow-sm">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{title}</p>
       <p className="mt-2 text-base font-black leading-snug">{body}</p>
     </div>
   );
@@ -480,14 +475,14 @@ function SignalCard({ signal }: { signal: any }) {
       : 'bg-white/12 text-white';
 
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.07] p-4">
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 rounded-full p-1.5 ${toneClass}`}>
           {signal.tone === 'positive' ? <CheckCircle2 size={15} /> : signal.tone === 'warning' ? <AlertCircle size={15} /> : <Brain size={15} />}
         </div>
         <div>
-          <p className="text-sm font-black text-white">{signal.title}</p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-white/52">{signal.body}</p>
+          <p className="text-sm font-black text-neutral-950">{signal.title}</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-neutral-500">{signal.body}</p>
         </div>
       </div>
     </div>
@@ -498,10 +493,10 @@ function FinanceSnapshot({ stats, pendingFinance }: { stats: any; pendingFinance
   const balances = Object.entries(stats.balancesByCurrency || {});
 
   return (
-    <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Finanzas</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Finanzas</p>
           <h3 className="mt-1 text-xl font-black text-neutral-950">Caja</h3>
         </div>
         {pendingFinance > 0 && (
@@ -511,10 +506,10 @@ function FinanceSnapshot({ stats, pendingFinance }: { stats: any; pendingFinance
         )}
       </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-4 space-y-2">
         {balances.length > 0 ? balances.map(([currency, value]: [string, any]) => (
           <div key={currency} className="flex items-end justify-between gap-4">
-            <span className="text-3xl font-black tracking-tight text-neutral-950 tabular-nums">{Number(value || 0).toLocaleString()}</span>
+            <span className="text-2xl font-black tracking-tight text-neutral-950 tabular-nums">{Number(value || 0).toLocaleString()}</span>
             <span className="rounded-full bg-neutral-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-neutral-500">{currency}</span>
           </div>
         )) : (
@@ -522,8 +517,8 @@ function FinanceSnapshot({ stats, pendingFinance }: { stats: any; pendingFinance
         )}
       </div>
 
-      <div className="mt-5 rounded-2xl bg-neutral-50 p-4">
-        <p className={`text-3xl font-black tracking-tight tabular-nums ${stats.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+      <div className="mt-4 rounded-2xl bg-neutral-50 p-3">
+        <p className={`text-2xl font-black tracking-tight tabular-nums ${stats.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
           {stats.net >= 0 ? '+' : ''}{stats.net.toLocaleString()}
         </p>
         <p className="mt-1 text-xs font-semibold leading-5 text-neutral-500">Flujo del periodo</p>
@@ -534,9 +529,9 @@ function FinanceSnapshot({ stats, pendingFinance }: { stats: any; pendingFinance
 
 function LifeSnapshot({ alignment }: { alignment: any }) {
   return (
-    <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Vida en orden</p>
-      <div className="mt-4 grid grid-cols-3 gap-2">
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Vida en orden</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
         <MiniStat label="Base" value={`${alignment.score}%`} />
         <MiniStat label="Con habito" value={alignment.activeSupportedGoals} />
         <MiniStat label="Diario" value={alignment.recentThoughts} />
@@ -547,11 +542,11 @@ function LifeSnapshot({ alignment }: { alignment: any }) {
 
 function RecentActivity({ records }: { records: any[] }) {
   return (
-    <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Ultimos registros</p>
-      <div className="mt-4 space-y-3">
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Ultimos registros</p>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
         {records.length > 0 ? records.map(record => (
-          <div key={record.id} className="flex items-center justify-between gap-3">
+          <div key={record.id} className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-50 px-3 py-2.5">
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-neutral-900">{record.description || record.category || 'Movimiento'}</p>
               <p className="text-[11px] font-semibold text-neutral-400">{record.category || 'Sin categoria'}</p>
@@ -570,7 +565,7 @@ function RecentActivity({ records }: { records: any[] }) {
 
 function AccountsPanel({ accounts, onAdd }: { accounts: any[]; onAdd: () => void }) {
   return (
-    <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Cuentas</p>
@@ -611,9 +606,9 @@ function NextStepsPanel({ alignment, stats, pendingFinance }: { alignment: any; 
   ].filter(Boolean);
 
   return (
-    <div className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Proximos pasos</p>
-      <div className="mt-4 space-y-3">
+    <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Proximos pasos</p>
+      <div className="mt-3 space-y-2">
         {(steps.length > 0 ? steps : ['Sin pendientes urgentes.']).map((step, index) => (
           <div key={`${step}-${index}`} className="flex gap-3 rounded-2xl bg-neutral-50 p-3">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-[11px] font-black text-white">{index + 1}</span>
@@ -629,7 +624,7 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-2xl bg-neutral-50 p-3">
       <p className="text-xl font-black text-neutral-950">{value}</p>
-      <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
+      <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-neutral-400">{label}</p>
     </div>
   );
 }
