@@ -67,6 +67,7 @@ Avances ya integrados:
 - Dashboard con primera lectura de alineacion sin IA real.
 - Servicios separados para journal, goals, habits y finance.
 - Finanzas con base para puesta al dia, movimientos estimados, `needs_review`, `confidence`, `source` y revision.
+- Finanzas con primera base de inflacion para leer gastos, ingresos y proyecciones en valor nominal y real.
 
 ## Stack
 
@@ -179,3 +180,4 @@ src/
 - `IMPLEMENTATION_PLAN.md`: auditoria tecnica y plan por fases.
 - `PHASE_TODOS.md`: pendientes operativos por fase.
 - `docs/VEO_PRODUCT_VISION.md`: definicion conceptual de VEO y Luz.
+- `docs/FINANCE_INFLATION_STRATEGY.md`: estrategia para lectura nominal, real e inflacionaria de Finanzas.

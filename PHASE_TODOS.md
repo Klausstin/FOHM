@@ -28,6 +28,14 @@
 
 ## Fase 3 - Finanzas
 
+- Tratar inflacion como dimension estructural de lectura financiera, no como agregado menor.
+- Mantener fuente automatica/cacheada de IPC; no pedir inflacion mensual al usuario.
+- Mostrar lecturas nominales vs reales en comparaciones mes contra mes.
+- Detectar gastos fijos que suben por encima o por debajo de inflacion.
+- Detectar ingresos reales en crecimiento o caida.
+- Proyectar gastos 6/12 meses con inflacion y explicar supuestos.
+- Ajustar Wishlist y objetivos grandes en ARS por inflacion estimada.
+- Medir patrimonio nominal vs patrimonio real.
 - Separar cuentas, movimientos, transferencias e inversiones con modelos consistentes.
 - Calcular saldos de forma derivada o atomica con criterio unico.
 - Separar finanzas personales y compartidas con `visibility`.

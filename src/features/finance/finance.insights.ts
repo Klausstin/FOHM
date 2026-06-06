@@ -1,5 +1,6 @@
 import type { FinancialTransactionRecord } from './finance.types';
 import { buildMerchantRecurringKey, suggestMerchant } from './finance.merchants';
+import { compareNominalAndRealChange, type InflationAwareChange } from './finance.realValue';
 
 export interface RecurringExpenseInsight {
   key: string;
@@ -33,6 +34,8 @@ export interface FinancialProjection {
   inflationMonthlyRate?: number | null;
   inflationAdjustedExpense6Months?: number;
   inflationAdjustedExpense12Months?: number;
+  expenseChangeRealVsPreviousMonth?: InflationAwareChange;
+  incomeChangeRealVsPreviousMonth?: InflationAwareChange;
 }
 
 export interface MonthlyExpenseProfile {
@@ -176,6 +179,12 @@ function buildLuzFinancialRead(
   if (projection.monthlyNetAverage < 0) {
     signals.push('el promedio reciente proyecta perdida si no cambia nada');
   }
+  if (projection.expenseChangeRealVsPreviousMonth?.interpretation === 'real_increase') {
+    signals.push('tus gastos subieron en terminos reales contra el mes anterior');
+  }
+  if (projection.incomeChangeRealVsPreviousMonth?.interpretation === 'real_decrease') {
+    signals.push('tus ingresos cayeron en terminos reales contra el mes anterior');
+  }
 
   if (signals.length === 0) {
     return 'Con la data actual, tus gastos no muestran tensiones fuertes. Conviene seguir cargando resumenes para confirmar si el patron se sostiene.';
@@ -280,6 +289,8 @@ function buildProjection(monthly: { income: number; expenses: number; net: numbe
   const monthlyIncomeAverage = average(sample.map(item => item.income));
   const monthlyExpenseAverage = average(sample.map(item => item.expenses));
   const monthlyNetAverage = average(sample.map(item => item.net));
+  const previousMonth = monthly.at(-2);
+  const currentMonth = monthly.at(-1);
 
   return {
     monthlyNetAverage,
@@ -290,6 +301,12 @@ function buildProjection(monthly: { income: number; expenses: number; net: numbe
     inflationMonthlyRate,
     inflationAdjustedExpense6Months: inflationMonthlyRate ? projectInflatedMonthlyValue(monthlyExpenseAverage, inflationMonthlyRate, 6) : undefined,
     inflationAdjustedExpense12Months: inflationMonthlyRate ? projectInflatedMonthlyValue(monthlyExpenseAverage, inflationMonthlyRate, 12) : undefined,
+    expenseChangeRealVsPreviousMonth: previousMonth && currentMonth
+      ? compareNominalAndRealChange('Gasto mensual', previousMonth.expenses, currentMonth.expenses, inflationMonthlyRate)
+      : undefined,
+    incomeChangeRealVsPreviousMonth: previousMonth && currentMonth
+      ? compareNominalAndRealChange('Ingreso mensual', previousMonth.income, currentMonth.income, inflationMonthlyRate)
+      : undefined,
   };
 }
 
