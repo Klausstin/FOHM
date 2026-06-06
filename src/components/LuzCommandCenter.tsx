@@ -179,7 +179,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         kind: action.finance.type,
         neutralType: action.finance.neutralType,
         accountId: action.finance.accountId || '',
-        date: new Date(),
+        date: createLocalDate(action.finance.date),
         source: 'manual',
         confidence: action.confidence === 'high' ? 'exact' : 'inferred',
         status: action.finance.needsReview ? 'needs_review' : 'posted',
@@ -621,6 +621,16 @@ function LuzFinanceEditor({
         </select>
       </label>
 
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Fecha</span>
+        <input
+          type="date"
+          value={finance.date}
+          onChange={(event) => onUpdateFinance(action.id, { date: event.target.value })}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        />
+      </label>
+
       <label className="space-y-1 sm:col-span-2">
         <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Descripcion</span>
         <input
@@ -632,6 +642,13 @@ function LuzFinanceEditor({
       </label>
     </div>
   );
+}
+
+function createLocalDate(dateValue?: string) {
+  if (!dateValue) return new Date();
+  const [year, month, day] = dateValue.split('-').map(Number);
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day, 12, 0, 0);
 }
 
 function LuzWishlistEditor({

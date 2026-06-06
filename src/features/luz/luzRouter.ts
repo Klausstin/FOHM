@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
 import type { NeutralType, TransactionKind } from '../finance/finance.types';
@@ -21,6 +21,7 @@ export interface LuzFinanceDraft {
   amount: number;
   currency: string;
   type: TransactionKind;
+  date: string;
   neutralType?: NeutralType;
   category: string;
   subCategory?: string;
@@ -293,6 +294,7 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
         amount: mention.amount,
         currency,
         type,
+        date: inferTransactionDate(context || message),
         neutralType: classification.suggestion.neutralType,
         category,
         subCategory,
@@ -568,6 +570,7 @@ function parseAmount(normalized: string) {
 
 function parseMoneyMentions(message: string) {
   const mentions: Array<{ amount: number; currency?: string; index: number }> = [];
+  const dateSpans = getDateSpans(message);
   const patterns = [
     /(?:\$|ars|usd|eur|€)\s*(\d+(?:[.,]\d+)?)\s*(k|mil)?/gi,
     /(\d+(?:[.,]\d+)?)\s*(k|mil)?\s*(pesos?|ars|usd|dolares?|eur|euros?|€)\b/gi,
@@ -576,6 +579,7 @@ function parseMoneyMentions(message: string) {
 
   for (const pattern of patterns) {
     for (const match of message.matchAll(pattern)) {
+      if (isInsideDateSpan(match.index || 0, dateSpans)) continue;
       const rawAmount = match[1];
       const multiplier = match[2] || '';
       const currencyText = match[3] || match[0] || '';
@@ -596,6 +600,18 @@ function parseMoneyMentions(message: string) {
     if (!existing || (!existing.currency && mention.currency)) unique.set(key, mention);
   });
   return Array.from(unique.values()).sort((a, b) => a.index - b.index).slice(0, 6);
+}
+
+function getDateSpans(message: string) {
+  return Array.from(message.matchAll(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g))
+    .map(match => ({
+      start: match.index || 0,
+      end: (match.index || 0) + match[0].length,
+    }));
+}
+
+function isInsideDateSpan(index: number, spans: Array<{ start: number; end: number }>) {
+  return spans.some(span => index >= span.start && index < span.end);
 }
 
 function selectPrimaryMoneyMention(mentions: Array<{ amount: number; currency?: string; index: number }>) {
@@ -718,6 +734,31 @@ function inferCurrency(normalized: string) {
   if (normalized.includes('eur') || normalized.includes('euro')) return 'EUR';
   if (normalized.includes('usd') || normalized.includes('dolar') || normalized.includes('dolares')) return 'USD';
   return 'ARS';
+}
+
+function inferTransactionDate(message: string) {
+  const normalized = normalize(message);
+  const today = new Date();
+  if (normalized.includes('anteayer')) return format(subDays(today, 2), 'yyyy-MM-dd');
+  if (normalized.includes('ayer')) return format(subDays(today, 1), 'yyyy-MM-dd');
+
+  const explicitDate = normalized.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+  if (explicitDate) {
+    const day = Number(explicitDate[1]);
+    const month = Number(explicitDate[2]);
+    const rawYear = explicitDate[3] ? Number(explicitDate[3]) : today.getFullYear();
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    const candidate = new Date(year, month - 1, day);
+    if (
+      candidate.getFullYear() === year &&
+      candidate.getMonth() === month - 1 &&
+      candidate.getDate() === day
+    ) {
+      return format(candidate, 'yyyy-MM-dd');
+    }
+  }
+
+  return format(today, 'yyyy-MM-dd');
 }
 
 function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccountOption[], currency = 'ARS') {
