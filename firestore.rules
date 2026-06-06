@@ -325,6 +325,26 @@ service cloud.firestore {
              (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
+    function isValidTask(data, isUpdate) {
+      return hasRequiredFields(['uid', 'householdId', 'title', 'status', 'importance', 'urgency', 'visibility', 'owner']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'title', 'notes', 'status', 'importance', 'urgency', 'owner', 'visibility', 'dueDate', 'linkedGoalId', 'projectId', 'tags', 'createdAt', 'updatedAt', 'completedAt', 'id']) &&
+             (isUpdate ? true : data.uid == request.auth.uid) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 240 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 2000)) &&
+             data.status in ["inbox", "next", "scheduled", "waiting", "done", "discarded"] &&
+             data.importance in ["low", "medium", "high"] &&
+             data.urgency in ["low", "medium", "high"] &&
+             isValidVisibility(data.visibility) &&
+             data.owner is string && data.owner.size() < 100 &&
+             (!('dueDate' in data) || (data.dueDate is string && data.dueDate.size() < 20)) &&
+             (!('linkedGoalId' in data) || (data.linkedGoalId is string && data.linkedGoalId.size() < 200)) &&
+             (!('projectId' in data) || (data.projectId is string && data.projectId.size() < 200)) &&
+             (!('tags' in data) || data.tags is list) &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+             (!('completedAt' in data) || data.completedAt is timestamp);
+    }
+
     function isValidTravelTrip(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'name', 'destination', 'members', 'defaultCurrency', 'visibility', 'status']) &&
              hasOnlyAllowedFields(['uid', 'householdId', 'name', 'destination', 'country', 'city', 'startDate', 'endDate', 'members', 'defaultCurrency', 'visibility', 'status', 'createdAt', 'updatedAt', 'id']) &&
@@ -402,6 +422,13 @@ service cloud.firestore {
       allow read: if isAuthenticated() && canReadVisibleDoc(resource.data, 'finances');
       allow create: if isAuthenticated() && isValidWishlistItem(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
       allow update: if isAuthenticated() && isValidWishlistItem(request.resource.data, true) && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated() && canReadVisibleDoc(resource.data, 'habits');
+      allow create: if isAuthenticated() && isValidTask(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && isValidTask(request.resource.data, true) && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
       allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
     }
 

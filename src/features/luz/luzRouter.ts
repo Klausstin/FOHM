@@ -230,7 +230,7 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
     id: createActionId('wishlist'),
     type: 'create_wishlist_item',
     intent: 'wishlist_item',
-    title: 'Agregar a Wishlist',
+    title: 'Agregar a La Lista',
     detail: `${title}${firstMoney ? ` - ${firstMoney.amount.toLocaleString()} ${firstMoney.currency || inferCurrency(normalized)}` : ''}. ${itemType === 'big_goal' || itemType === 'asset' ? 'Lo marco como objetivo grande para mirarlo contra ingresos, gastos y plan.' : 'Queda al final del ranking para priorizar despues.'}`,
     confidence: title === 'Item para evaluar' ? 'low' : 'medium',
     wishlist: {
@@ -325,7 +325,7 @@ function parseGoalAction(message: string, normalized: string): LuzAction | null 
     type: 'create_goal',
     intent: 'goal',
     title: 'Crear objetivo',
-    detail: `${title}. Queda como objetivo anual para conectar despues con habitos, calendario, finanzas y Wishlist.`,
+      detail: `${title}. Queda como objetivo anual para conectar despues con habitos, calendario, finanzas y La Lista.`,
     confidence: title ? 'medium' : 'low',
     goal: {
       title: title || 'Objetivo para definir',
