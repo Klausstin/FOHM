@@ -100,7 +100,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
           return {
             ...action,
             goal: nextGoal,
-            detail: `${nextGoal.title}. Queda como objetivo anual para conectar despues con habitos, calendario, finanzas y Wishlist.`,
+            detail: `${nextGoal.title}. Queda como objetivo anual para conectar despues con habitos, calendario, finanzas y La Lista.`,
           };
         }),
       };
@@ -291,7 +291,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
   const previewType = currentActions.some(action => action.type === 'create_finance_transaction')
     ? 'Finanzas'
     : currentActions.some(action => action.type === 'create_wishlist_item')
-      ? 'Wishlist'
+      ? 'La Lista'
     : currentActions.some(action => action.type === 'create_goal')
       ? 'Objetivos'
     : currentActions.some(action => action.type === 'create_habit_checkin' || action.type === 'create_habit')
@@ -309,7 +309,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         </div>
         {currentActions.length > 0 && (
           <span className="hidden items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-900 sm:inline-flex">
-            {previewType === 'Finanzas' ? <Wallet size={13} /> : previewType === 'Wishlist' ? <Gift size={13} /> : previewType === 'Habitos' ? <CheckCircle2 size={13} /> : <Brain size={13} />}
+            {previewType === 'Finanzas' ? <Wallet size={13} /> : previewType === 'La Lista' ? <Gift size={13} /> : previewType === 'Habitos' ? <CheckCircle2 size={13} /> : <Brain size={13} />}
             {previewType}
           </span>
         )}

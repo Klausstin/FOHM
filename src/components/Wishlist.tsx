@@ -107,9 +107,9 @@ export default function Wishlist({ user }: { user: any }) {
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/40">Decidi mejor</p>
           <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-4xl font-black tracking-tight md:text-6xl">Wishlist</h2>
+              <h2 className="text-4xl font-black tracking-tight md:text-6xl">La Lista</h2>
               <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/60 md:text-base">
-                Un lugar para ordenar compras, experiencias y objetivos grandes antes de convertirlos en decisiones reales.
+                Deseos materiales, compras posibles y objetivos grandes ordenados antes de convertirlos en decisiones reales.
               </p>
             </div>
             <button

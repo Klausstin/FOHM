@@ -369,7 +369,7 @@ export default function Dashboard({ user }: { user: any }) {
     <div className="min-h-screen pb-24 md:pb-8">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Hoy</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">Panel General</p>
           <h2 className="mt-0.5 text-3xl font-black tracking-tight text-neutral-950">{formatLongDate(today)}</h2>
           <p className="mt-1 text-sm font-bold text-neutral-400">{yearProgress}% del año recorrido</p>
         </div>

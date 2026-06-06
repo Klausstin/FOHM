@@ -6,6 +6,7 @@ import Auth from './components/Auth.tsx';
 import Dashboard from './components/Dashboard.tsx';
 import LuzWorkspace from './components/LuzWorkspace.tsx';
 import MindTracker from './components/MindTracker.tsx';
+import Tasks from './components/Tasks.tsx';
 import FinanceTracker from './components/FinanceTracker.tsx';
 import Wishlist from './components/Wishlist.tsx';
 import AnnualGoals from './components/AnnualGoals.tsx';
@@ -21,7 +22,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<AppTab>('home');
+  const [activeTab, setActiveTab] = useState<AppTab>('luz');
   const [habits, setHabits] = useState<any[]>([]);
   const [goals, setGoals] = useState<any[]>([]);
   const [thoughts, setThoughts] = useState<any[]>([]);
@@ -112,6 +113,7 @@ export default function App() {
             {activeTab === 'home' && <Dashboard user={userProfile} />}
             {activeTab === 'luz' && <LuzWorkspace user={userProfile} />}
             {activeTab === 'mind' && <MindTracker user={userProfile} />}
+            {activeTab === 'tasks' && <Tasks user={userProfile} />}
             {activeTab === 'finance' && <FinanceTracker user={userProfile} />}
             {activeTab === 'wishlist' && <Wishlist user={userProfile} />}
             {activeTab === 'goals' && <AnnualGoals user={userProfile} />}
