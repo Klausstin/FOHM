@@ -336,7 +336,7 @@ function suggestMovementClassification(description: string, signedAmount: number
     return {
       type: 'income' as const,
       category: 'Ingresos',
-      subCategory: 'Intereses',
+      subCategory: 'Rendimientos',
       isFixed: false,
       confidence: 0.9,
       needsReview: false,

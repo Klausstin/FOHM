@@ -55,7 +55,7 @@ const KNOWN_MERCHANTS = [
     name: 'Uber',
     patterns: [/uber/i],
     category: 'Transporte',
-    subCategory: 'Apps / taxi',
+    subCategory: 'Uber-Cabify',
     recurring: false,
   },
   {
@@ -63,7 +63,7 @@ const KNOWN_MERCHANTS = [
     name: 'Cabify',
     patterns: [/cabify/i],
     category: 'Transporte',
-    subCategory: 'Apps / taxi',
+    subCategory: 'Uber-Cabify',
     recurring: false,
   },
   {
@@ -127,7 +127,7 @@ const KNOWN_MERCHANTS = [
     name: 'KFC',
     patterns: [/\bkfc\b/i],
     category: 'Comida',
-    subCategory: 'Restaurantes',
+    subCategory: 'Almuerzo / cena afuera',
     recurring: false,
   },
   {
