@@ -26,6 +26,7 @@ export interface UnusualExpenseInsight {
 }
 
 export interface FinancialProjection {
+  currency: string;
   monthlyNetAverage: number;
   monthlyExpenseAverage: number;
   monthlyIncomeAverage: number;
@@ -39,6 +40,7 @@ export interface FinancialProjection {
 }
 
 export interface MonthlyExpenseProfile {
+  currency: string;
   fixedDeclared: number;
   recurringDetected: number;
   variable: number;
@@ -47,12 +49,36 @@ export interface MonthlyExpenseProfile {
   month?: string;
 }
 
+export interface PeriodCurrencyTotal {
+  currency: string;
+  income: number;
+  expenses: number;
+  net: number;
+}
+
+export interface CategorySpendInsight {
+  category: string;
+  amount: number;
+  currency: string;
+  share: number;
+}
+
+export interface PeriodFinanceDashboard {
+  month?: string;
+  currency: string;
+  byCurrency: PeriodCurrencyTotal[];
+  topCategories: CategorySpendInsight[];
+  realExpenseRead?: string;
+  realIncomeRead?: string;
+}
+
 export interface FinancialInsights {
   fixedDeclared: RecurringExpenseInsight[];
   recurringDetected: RecurringExpenseInsight[];
   unusualExpenses: UnusualExpenseInsight[];
   monthlyProfile: MonthlyExpenseProfile;
   projection: FinancialProjection;
+  periodDashboard: PeriodFinanceDashboard;
   summaryBullets: string[];
   luzRead: string;
 }
@@ -62,12 +88,15 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
   const expenses = posted.filter(transaction => transaction.type === 'expense');
   const income = posted.filter(transaction => transaction.type === 'income');
   const monthly = buildMonthlyTotals(posted);
+  const primaryCurrency = getPrimaryCurrency(posted);
+  const primaryMonthly = monthly.filter(item => item.currency === primaryCurrency);
   const recurring = detectRecurringExpenses(expenses);
   const fixedDeclared = recurring.filter(item => item.declaredFixed);
   const recurringDetected = recurring.filter(item => !item.declaredFixed);
   const unusualExpenses = detectUnusualExpenses(expenses, recurring);
-  const monthlyProfile = buildMonthlyExpenseProfile(expenses, recurring, unusualExpenses);
-  const projection = buildProjection(monthly, inflationMonthlyRate);
+  const monthlyProfile = buildMonthlyExpenseProfile(expenses, recurring, unusualExpenses, primaryCurrency);
+  const projection = buildProjection(primaryMonthly, primaryCurrency, inflationMonthlyRate);
+  const periodDashboard = buildPeriodDashboard(monthly, expenses, projection, primaryCurrency);
   const luzRead = buildLuzFinancialRead(monthlyProfile, recurringDetected, unusualExpenses, projection);
 
   const summaryBullets = [
@@ -91,6 +120,7 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
     unusualExpenses,
     monthlyProfile,
     projection,
+    periodDashboard,
     summaryBullets,
     luzRead,
   };
@@ -100,10 +130,11 @@ function buildMonthlyExpenseProfile(
   expenses: FinancialTransactionRecord[],
   recurring: RecurringExpenseInsight[],
   unusualExpenses: UnusualExpenseInsight[],
+  currency: string,
 ): MonthlyExpenseProfile {
   const usableExpenses = expenses
     .map(expense => ({ expense, date: toDate(expense.date) }))
-    .filter(item => item.date);
+    .filter(item => item.date && normalizeCurrency(item.expense.currency) === currency);
   const latestMonth = usableExpenses
     .map(item => monthKey(item.date))
     .filter(Boolean)
@@ -111,7 +142,7 @@ function buildMonthlyExpenseProfile(
     .at(-1);
 
   if (!latestMonth) {
-    return { fixedDeclared: 0, recurringDetected: 0, variable: 0, unusual: 0, totalExpenses: 0 };
+    return { currency, fixedDeclared: 0, recurringDetected: 0, variable: 0, unusual: 0, totalExpenses: 0 };
   }
 
   const recurringByKey = new Map(recurring.map(item => [item.key, item]));
@@ -142,6 +173,7 @@ function buildMonthlyExpenseProfile(
   }
 
   return {
+    currency,
     fixedDeclared,
     recurringDetected,
     variable,
@@ -149,6 +181,57 @@ function buildMonthlyExpenseProfile(
     totalExpenses: fixedDeclared + recurringDetected + variable + unusual,
     month: latestMonth,
   };
+}
+
+function buildPeriodDashboard(
+  monthly: { month: string; currency: string; income: number; expenses: number; net: number }[],
+  expenses: FinancialTransactionRecord[],
+  projection: FinancialProjection,
+  primaryCurrency: string,
+): PeriodFinanceDashboard {
+  const latestMonth = monthly.map(item => item.month).sort().at(-1);
+  const byCurrency = latestMonth
+    ? monthly
+        .filter(item => item.month === latestMonth)
+        .sort((a, b) => Math.abs(b.expenses + b.income) - Math.abs(a.expenses + a.income))
+        .map(({ currency, income, expenses, net }) => ({ currency, income, expenses, net }))
+    : [];
+
+  const topCategories = buildTopCategoriesForMonth(expenses, latestMonth, primaryCurrency);
+
+  return {
+    month: latestMonth,
+    currency: primaryCurrency,
+    byCurrency,
+    topCategories,
+    realExpenseRead: projection.expenseChangeRealVsPreviousMonth?.read,
+    realIncomeRead: projection.incomeChangeRealVsPreviousMonth?.read,
+  };
+}
+
+function buildTopCategoriesForMonth(expenses: FinancialTransactionRecord[], month?: string, currency = 'ARS') {
+  if (!month) return [];
+  const totals = new Map<string, number>();
+  let total = 0;
+
+  for (const expense of expenses) {
+    const date = toDate(expense.date);
+    if (monthKey(date) !== month || normalizeCurrency(expense.currency) !== currency) continue;
+    const category = expense.category || 'Sin categoria';
+    const amount = Number(expense.amount || 0);
+    totals.set(category, (totals.get(category) || 0) + amount);
+    total += amount;
+  }
+
+  return Array.from(totals.entries())
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      currency,
+      share: total > 0 ? amount / total : 0,
+    }));
 }
 
 function buildLuzFinancialRead(
@@ -267,24 +350,30 @@ function detectUnusualExpenses(expenses: FinancialTransactionRecord[], recurring
 }
 
 function buildMonthlyTotals(transactions: FinancialTransactionRecord[]) {
-  const totals = new Map<string, { income: number; expenses: number }>();
+  const totals = new Map<string, { month: string; currency: string; income: number; expenses: number }>();
 
   for (const transaction of transactions) {
-    const key = monthKey(toDate(transaction.date));
-    if (!key) continue;
-    const current = totals.get(key) || { income: 0, expenses: 0 };
+    const month = monthKey(toDate(transaction.date));
+    if (!month) continue;
+    const currency = normalizeCurrency(transaction.currency);
+    const key = `${month}:${currency}`;
+    const current = totals.get(key) || { month, currency, income: 0, expenses: 0 };
     if (transaction.type === 'income') current.income += Number(transaction.amount || 0);
     if (transaction.type === 'expense') current.expenses += Number(transaction.amount || 0);
     totals.set(key, current);
   }
 
-  return Array.from(totals.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
+  return Array.from(totals.values())
+    .sort((a, b) => `${a.month}:${a.currency}`.localeCompare(`${b.month}:${b.currency}`))
     .slice(-12)
-    .map(([month, total]) => ({ month, ...total, net: total.income - total.expenses }));
+    .map(total => ({ ...total, net: total.income - total.expenses }));
 }
 
-function buildProjection(monthly: { income: number; expenses: number; net: number }[], inflationMonthlyRate?: number | null): FinancialProjection {
+function buildProjection(
+  monthly: { income: number; expenses: number; net: number }[],
+  currency: string,
+  inflationMonthlyRate?: number | null,
+): FinancialProjection {
   const sample = monthly.slice(-6);
   const monthlyIncomeAverage = average(sample.map(item => item.income));
   const monthlyExpenseAverage = average(sample.map(item => item.expenses));
@@ -293,6 +382,7 @@ function buildProjection(monthly: { income: number; expenses: number; net: numbe
   const currentMonth = monthly.at(-1);
 
   return {
+    currency,
     monthlyNetAverage,
     monthlyExpenseAverage,
     monthlyIncomeAverage,
@@ -311,7 +401,8 @@ function buildProjection(monthly: { income: number; expenses: number; net: numbe
 }
 
 function buildRecurringKey(transaction: FinancialTransactionRecord) {
-  return transaction.merchantKey || buildMerchantRecurringKey(transaction.description || '', transaction.category || '');
+  const key = transaction.merchantKey || buildMerchantRecurringKey(transaction.description || '', transaction.category || '');
+  return key ? `${key}:${normalizeCurrency(transaction.currency)}` : '';
 }
 
 function displayRecurringLabel(transaction: FinancialTransactionRecord) {
@@ -339,6 +430,20 @@ function toDate(value: any) {
 function monthKey(date?: Date | null) {
   if (!date) return '';
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getPrimaryCurrency(transactions: FinancialTransactionRecord[]) {
+  const totals = new Map<string, number>();
+  for (const transaction of transactions) {
+    if (transaction.type !== 'expense' && transaction.type !== 'income') continue;
+    const currency = normalizeCurrency(transaction.currency);
+    totals.set(currency, (totals.get(currency) || 0) + Math.abs(Number(transaction.amount || 0)));
+  }
+  return Array.from(totals.entries()).sort(([, a], [, b]) => b - a)[0]?.[0] || 'ARS';
+}
+
+function normalizeCurrency(value?: string | null) {
+  return String(value || 'ARS').toUpperCase();
 }
 
 function average(values: number[]) {
