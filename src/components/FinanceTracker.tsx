@@ -706,6 +706,56 @@ function hasFinanceTrace(trace: ParsedFinanceTrace, finance: any) {
   );
 }
 
+function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
+  const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
+  const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
+  const generator = members.find(member => member.uid === finance.generatedBy || member.id === finance.generatedBy);
+  const trace = parseFinanceTraceNote(finance.note);
+
+  return [
+    finance.description,
+    finance.note,
+    finance.category,
+    finance.subCategory,
+    finance.subSubCategory,
+    finance.type,
+    finance.currency,
+    finance.amount,
+    finance.paymentType,
+    finance.paymentStatus,
+    finance.source,
+    finance.confidence,
+    finance.importSource,
+    finance.merchantName,
+    finance.merchant,
+    finance.merchantKey,
+    finance.beneficiaryLabel,
+    finance.scope,
+    finance.originalDescription,
+    finance.duplicateReason,
+    sourceAccount?.name,
+    sourceAccount?.currency,
+    sourceAccount?.type,
+    destinationAccount?.name,
+    destinationAccount?.currency,
+    destinationAccount?.type,
+    generator?.displayName,
+    generator?.email,
+    trace.originalConcept,
+    trace.transferDetail,
+    trace.counterpartyName,
+    trace.counterpartyAlias,
+    trace.counterpartyAccount,
+    trace.importedFile,
+    ...trace.reconciliations,
+    ...trace.otherLines,
+    ...(Array.isArray(finance.tags) ? finance.tags : []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
 interface PendingTransaction {
   id: string;
   amount: number;
@@ -848,6 +898,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [filterAssignedTo, setFilterAssignedTo] = useState('all');
   const [filterBeneficiary, setFilterBeneficiary] = useState('all');
   const [filterScope, setFilterScope] = useState('all');
+  const [filterAccount, setFilterAccount] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
 
@@ -1505,16 +1556,12 @@ export default function FinanceTracker({ user }: { user: any }) {
     if (filterAssignedTo !== 'all' && f.assignedTo !== filterAssignedTo) return false;
     if (filterBeneficiary !== 'all' && (f.beneficiaryLabel || legacyBeneficiaryLabel(f)) !== filterBeneficiary) return false;
     if (filterScope !== 'all' && (f.scope || legacyScope(f)) !== filterScope) return false;
+    if (filterAccount !== 'all' && (f.sourceAccountId || f.accountId) !== filterAccount && f.toAccountId !== filterAccount) return false;
 
     // Search Query
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
-      const matchesDesc = f.description?.toLowerCase().includes(searchLower);
-      const matchesCat = f.category?.toLowerCase().includes(searchLower);
-      const matchesSub = f.subCategory?.toLowerCase().includes(searchLower);
-      const matchesSubSub = f.subSubCategory?.toLowerCase().includes(searchLower);
-      const matchesBeneficiary = f.beneficiaryLabel?.toLowerCase().includes(searchLower);
-      if (!matchesDesc && !matchesCat && !matchesSub && !matchesSubSub && !matchesBeneficiary) return false;
+      if (!getFinanceSearchText(f, userAccounts, uniqueHouseholdMembers).includes(searchLower)) return false;
     }
 
     return true;
@@ -2930,7 +2977,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 <Filter size={18} className="text-neutral-400" />
                 Filtros y busqueda
               </h3>
-              {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || filterBeneficiary !== 'all' || filterScope !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
+              {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || filterBeneficiary !== 'all' || filterScope !== 'all' || filterAccount !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
                 <button 
                   onClick={() => {
                     setFilterDateRange('all');
@@ -2939,6 +2986,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     setFilterAssignedTo('all');
                     setFilterBeneficiary('all');
                     setFilterScope('all');
+                    setFilterAccount('all');
                     setSearchQuery('');
                     setFilterAmountMin('');
                     setFilterAmountMax('');
@@ -3041,13 +3089,27 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </select>
               </div>
 
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cuenta usada</label>
+                <select 
+                  value={filterAccount}
+                  onChange={(e) => setFilterAccount(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
+                >
+                  <option value="all">Todas las cuentas</option>
+                  {(userAccounts || []).map(account => (
+                    <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-1 lg:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Buscar</label>
                 <input 
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar descripcion, categoria..."
+                  placeholder="Buscar descripcion, comercio, alias, CBU, cuenta, PDF..."
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 />
               </div>
