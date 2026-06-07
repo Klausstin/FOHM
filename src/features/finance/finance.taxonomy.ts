@@ -84,12 +84,16 @@ export const DEFAULT_FINANCE_CATEGORIES: FinanceCategoryDefinition[] = [
     sub('multas', 'Multas', ['multa'], { vehicleCostType: 'uso' }),
     sub('reparaciones', 'Reparaciones', ['reparacion', 'neumatico', 'cubierta'], { vehicleCostType: 'uso' }),
   ], 'Movilidad'),
-  category('salud', 'Salud', 'expense', 60, 'HeartPulse', '#10B981', ['salud', 'medico', 'farmacia', 'terapia', 'osde', 'dentista'], [
+  category('salud', 'Salud', 'expense', 60, 'HeartPulse', '#10B981', ['salud', 'medico', 'pediatra', 'farmacia', 'terapia', 'osde', 'dentista'], [
     sub('prepaga-obra-social', 'Prepaga / obra social', ['osde', 'prepaga', 'obra social']),
-    sub('medicos-estudios', 'Medicos / estudios', ['medico', 'estudio', 'clinica']),
+    sub('medicos-estudios', 'Medicos / estudios', ['medico', 'pediatra', 'estudio', 'clinica']),
     sub('farmacia', 'Farmacia', ['farmacia']),
     sub('terapia', 'Terapia', ['terapia', 'psicologo']),
     sub('fitness', 'Fitness', ['gym', 'gimnasio', 'entrenador', 'deporte']),
+  ]),
+  category('higiene-cuidado', 'Higiene', 'expense', 65, 'Heart', '#06B6D4', ['higiene', 'panal', 'panales', 'pañal', 'pañales', 'toallitas', 'bebe', 'beba', 'maximo', 'máximo'], [
+    sub('bebe', 'Bebé', ['panal', 'panales', 'pañal', 'pañales', 'toallitas', 'bebe', 'beba', 'maximo', 'máximo']),
+    sub('higiene-personal', 'Higiene personal', ['higiene', 'shampoo', 'jabon', 'desodorante', 'toallitas']),
   ]),
   category('compras', 'Compras', 'expense', 70, 'ShoppingBag', '#EC4899', ['compra', 'compre', 'ropa', 'calzado', 'zapatilla', 'zapatillas', 'zapas', 'zapato', 'zapatos', 'nike', 'adidas', 'campera', 'pantalon', 'remera', 'peluqueria'], [
     sub('ropa-calzado', 'Ropa y calzado', ['ropa', 'calzado', 'zapatilla', 'zapatillas', 'zapas', 'zapato', 'zapatos', 'nike', 'adidas', 'campera', 'pantalon', 'remera']),

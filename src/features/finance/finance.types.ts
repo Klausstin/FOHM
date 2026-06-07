@@ -23,6 +23,10 @@ export type FinanceConfidence = 'exact' | 'estimated' | 'inferred';
 
 export type FinanceStatus = 'pending' | 'posted' | 'ignored' | 'needs_review';
 
+export type FinanceBeneficiaryType = 'user' | 'couple' | 'household' | 'child' | 'family' | 'other';
+export type FinanceScope = 'personal' | 'pareja' | 'hogar' | 'familia';
+export type FinanceVisibility = 'private' | 'shared_with_partner' | 'household_shared';
+
 export interface FinancialAccountRecord {
   id: string;
   uid: string;
@@ -51,6 +55,7 @@ export interface FinancialTransactionRecord {
   kind?: TransactionKind;
   neutralType?: NeutralType;
   accountId?: string;
+  sourceAccountId?: string;
   toAccountId?: string;
   paymentMethodId?: string;
   tags?: string[];
@@ -64,9 +69,17 @@ export interface FinancialTransactionRecord {
   pdfName?: string;
   isFixed?: boolean;
   isConfirmed?: boolean;
+  createdByUserId?: string;
   generatedBy?: string;
+  executedByUserId?: string;
+  executedByLabel?: string;
   assignedTo?: string;
   payer?: string;
+  beneficiaryType?: FinanceBeneficiaryType;
+  beneficiaryId?: string;
+  beneficiaryLabel?: string;
+  scope?: FinanceScope;
+  visibility?: FinanceVisibility;
   paymentType?: string;
   paymentStatus?: string;
   merchantName?: string;
@@ -119,6 +132,7 @@ export interface CreateFinancialTransactionInput {
   kind?: TransactionKind;
   neutralType?: NeutralType;
   accountId?: string;
+  sourceAccountId?: string;
   toAccountId?: string;
   paymentMethodId?: string;
   tags?: string[];
@@ -131,9 +145,17 @@ export interface CreateFinancialTransactionInput {
   needsReview?: boolean;
   isFixed?: boolean;
   isConfirmed?: boolean;
+  createdByUserId?: string;
   generatedBy?: string;
+  executedByUserId?: string;
+  executedByLabel?: string;
   assignedTo?: string;
   payer?: string;
+  beneficiaryType?: FinanceBeneficiaryType;
+  beneficiaryId?: string;
+  beneficiaryLabel?: string;
+  scope?: FinanceScope;
+  visibility?: FinanceVisibility;
   paymentType?: string;
   paymentStatus?: string;
   merchantName?: string;

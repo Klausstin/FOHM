@@ -209,7 +209,7 @@ service cloud.firestore {
 
     function isValidFinance(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'amount', 'type', 'date', 'category', 'source']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'generatedBy', 'assignedTo', 'payer', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'travelTripId', 'travelTripName', 'travelTripSuggestion', 'travelCategory', 'originalAmount', 'originalCurrency', 'settlementAmount', 'settlementCurrency', 'fxRate', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'sourceAccountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'createdByUserId', 'generatedBy', 'executedByUserId', 'executedByLabel', 'assignedTo', 'payer', 'beneficiaryType', 'beneficiaryId', 'beneficiaryLabel', 'scope', 'visibility', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'travelTripId', 'travelTripName', 'travelTripSuggestion', 'travelCategory', 'originalAmount', 'originalCurrency', 'settlementAmount', 'settlementCurrency', 'fxRate', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.amount is number &&
              data.type in ["expense", "income", "neutral", "transfer"] &&
@@ -218,6 +218,9 @@ service cloud.firestore {
              data.source in ["manual", "pdf", "csv", "catchup_estimate", "catchup_inferred"] &&
              (!('confidence' in data) || data.confidence in ["exact", "estimated", "inferred"]) &&
              (!('status' in data) || data.status in ["pending", "posted", "ignored", "needs_review"]) &&
+             (!('visibility' in data) || data.visibility in ["private", "shared_with_partner", "household_shared"]) &&
+             (!('scope' in data) || data.scope in ["personal", "pareja", "hogar", "familia"]) &&
+             (!('beneficiaryType' in data) || data.beneficiaryType in ["user", "couple", "household", "child", "family", "other"]) &&
              (!('reconciliationBatchId' in data) || data.reconciliationBatchId == null || (data.reconciliationBatchId is string && data.reconciliationBatchId.size() < 100)) &&
              (!('estimatedReason' in data) || data.estimatedReason == null || (data.estimatedReason is string && data.estimatedReason.size() < 1000)) &&
              (!('needsReview' in data) || data.needsReview is bool) &&
@@ -228,6 +231,12 @@ service cloud.firestore {
              (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
              (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
              (!('currency' in data) || (data.currency is string && data.currency.size() < 10)) &&
+             (!('sourceAccountId' in data) || (data.sourceAccountId is string && data.sourceAccountId.size() < 100)) &&
+             (!('createdByUserId' in data) || (data.createdByUserId is string && data.createdByUserId.size() < 100)) &&
+             (!('executedByUserId' in data) || (data.executedByUserId is string && data.executedByUserId.size() < 100)) &&
+             (!('executedByLabel' in data) || (data.executedByLabel is string && data.executedByLabel.size() < 100)) &&
+             (!('beneficiaryId' in data) || (data.beneficiaryId is string && data.beneficiaryId.size() < 100)) &&
+             (!('beneficiaryLabel' in data) || (data.beneficiaryLabel is string && data.beneficiaryLabel.size() < 100)) &&
              (!('merchantName' in data) || (data.merchantName is string && data.merchantName.size() < 200)) &&
              (!('merchantKey' in data) || (data.merchantKey is string && data.merchantKey.size() < 200)) &&
              (!('merchant' in data) || (data.merchant is string && data.merchant.size() < 200)) &&
