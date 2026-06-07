@@ -37,6 +37,7 @@ import { formatAccountBalance } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
 import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
+import { upsertFinanceLearningMapping } from '../features/finance/finance.learning.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
@@ -1157,31 +1158,20 @@ export default function FinanceTracker({ user }: { user: any }) {
         await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
       }
 
-      // Save mapping for learning
-      const existingMapping = userMappings.find(m => m.originalDescription.toLowerCase() === pt.originalDescription.toLowerCase());
-      const mappingPatch = {
+      await upsertFinanceLearningMapping({
+        uid: user.uid,
+        householdId: user.householdId,
+        originalDescription: pt.originalDescription || pt.description,
         mappedDescription: pt.description,
         category: pt.category,
         subCategory: pt.subCategory || '',
         subSubCategory: pt.subSubCategory || '',
+        kind: pt.type === 'transfer' ? 'neutral' : pt.type as any,
         isFixed: pt.isFixed,
         merchantName: pt.merchantName || '',
         merchantKey: pt.merchantKey || '',
         transactionFingerprint: pt.transactionFingerprint || '',
-        learningKey: buildFinanceLearningKey(pt.originalDescription || pt.description),
-        useCount: (existingMapping?.useCount || 0) + 1,
-        lastUsedAt: new Date(),
-      };
-      if (existingMapping) {
-        await updateDoc(doc(db, 'mappings', existingMapping.id), mappingPatch);
-      } else {
-        await addDoc(collection(db, 'mappings'), {
-          uid: user.uid,
-          householdId: user.householdId,
-          originalDescription: pt.originalDescription,
-          ...mappingPatch,
-        });
-      }
+      }, userMappings);
 
       setPendingTransactions(prev => prev.filter(t => t.id !== pt.id));
     } catch (error) {
@@ -1375,32 +1365,19 @@ export default function FinanceTracker({ user }: { user: any }) {
       const categoryChanged = category !== originalCategory || (subCategory || '') !== (originalSubCategory || '') || (subSubCategory || '') !== (originalSubSubCategory || '');
       if ((originalDescription || merchantKey) && categoryChanged) {
         const normalizedOriginal = normalizeDuplicateText(originalDescription || description || '');
-        const existingMapping = userMappings.find(m => {
-          const mappingText = normalizeDuplicateText(m.originalDescription || '');
-          return (merchantKey && m.merchantKey === merchantKey) || (mappingText && mappingText === normalizedOriginal);
-        });
-        const learnedPatch = {
-          mappedDescription: description,
+        await upsertFinanceLearningMapping({
+          uid: user.uid,
+          householdId: user.householdId,
+          originalDescription: originalDescription || description,
+          mappedDescription: description || originalDescription,
           category,
           subCategory: subCategory || '',
           subSubCategory: subSubCategory || '',
+          kind: type === 'transfer' ? 'neutral' : type,
           isFixed,
           merchantName: merchantName || '',
           merchantKey: merchantKey || '',
-          learningKey: buildFinanceLearningKey(originalDescription || description),
-          useCount: (existingMapping?.useCount || 0) + 1,
-          lastUsedAt: new Date(),
-        };
-        if (existingMapping) {
-          await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
-        } else {
-          await addDoc(collection(db, 'mappings'), {
-            uid: user.uid,
-            householdId: user.householdId,
-            originalDescription: originalDescription || description,
-            ...learnedPatch,
-          });
-        }
+        }, userMappings);
 
         const similarFinances = finances.filter(finance => {
           if (finance.id === editingId) return false;
@@ -1664,34 +1641,19 @@ export default function FinanceTracker({ user }: { user: any }) {
     if (!draft.category || !group.transactionIds?.length) return;
 
     try {
-      const existingMapping = userMappings.find(mapping => {
-        const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
-        const groupText = normalizeDuplicateText(group.originalDescription || group.label || '');
-        return (group.merchantKey && mapping.merchantKey === group.merchantKey) || (mappingText && mappingText === groupText);
-      });
-      const learnedPatch = {
+      await upsertFinanceLearningMapping({
+        uid: user.uid,
+        householdId: user.householdId,
+        originalDescription: group.originalDescription || group.label,
         mappedDescription: group.label,
         category: draft.category,
         subCategory: draft.subCategory || '',
         subSubCategory: draft.subSubCategory || '',
+        kind: 'expense',
         isFixed: draft.isFixed,
         merchantName: group.merchantName || '',
         merchantKey: group.merchantKey || '',
-        learningKey: buildFinanceLearningKey(group.originalDescription || group.label),
-        useCount: (existingMapping?.useCount || 0) + group.transactionIds.length,
-        lastUsedAt: new Date(),
-      };
-
-      if (existingMapping) {
-        await updateDoc(doc(db, 'mappings', existingMapping.id), learnedPatch);
-      } else {
-        await addDoc(collection(db, 'mappings'), {
-          uid: user.uid,
-          householdId: user.householdId,
-          originalDescription: group.originalDescription || group.label,
-          ...learnedPatch,
-        });
-      }
+      }, userMappings);
 
       await Promise.all(
         group.transactionIds.map((transactionId: string) =>
