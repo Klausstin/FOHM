@@ -498,6 +498,73 @@ function getPendingImportGroupKey(transaction: PendingTransaction) {
   ].join(':');
 }
 
+function buildAccountBalanceSummary(accounts: any[]) {
+  const byCurrency = new Map<string, {
+    currency: string;
+    liquidity: number;
+    creditCardDebt: number;
+    investments: number;
+    netWorth: number;
+    accountCount: number;
+  }>();
+
+  for (const account of accounts || []) {
+    const currency = account.currency || 'ARS';
+    const current = byCurrency.get(currency) || {
+      currency,
+      liquidity: 0,
+      creditCardDebt: 0,
+      investments: 0,
+      netWorth: 0,
+      accountCount: 0,
+    };
+    const balance = Number(account.balance || 0);
+    const type = String(account.type || '').toLowerCase();
+
+    current.accountCount += 1;
+    if (type === 'credit_card') {
+      current.creditCardDebt += Math.min(balance, 0);
+    } else if (type === 'investment') {
+      current.investments += balance;
+      current.netWorth += balance;
+    } else {
+      current.liquidity += balance;
+      current.netWorth += balance;
+    }
+
+    if (type === 'credit_card') {
+      current.netWorth += balance;
+    }
+
+    byCurrency.set(currency, current);
+  }
+
+  return Array.from(byCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency));
+}
+
+function getAccountTypeLabel(type?: string) {
+  const normalized = String(type || '').toLowerCase();
+  if (normalized === 'bank') return 'Banco';
+  if (normalized === 'wallet') return 'Billetera';
+  if (normalized === 'cash') return 'Efectivo';
+  if (normalized === 'credit_card') return 'Tarjeta';
+  if (normalized === 'investment') return 'Inversion';
+  return normalized || 'Cuenta';
+}
+
+function getAccountHealthLabel(account: any) {
+  const type = String(account.type || '').toLowerCase();
+  const balance = Number(account.balance || 0);
+  if (type === 'credit_card') {
+    if (balance < 0) return 'Deuda abierta';
+    if (balance === 0) return 'Sin deuda';
+    return 'Saldo a favor';
+  }
+  if (type === 'investment') return 'Patrimonio';
+  if (balance < 0) return 'Revisar saldo';
+  return 'Disponible';
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -1348,15 +1415,8 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
-  const totalBalance = userAccounts.reduce((acc, a) => acc + (a.balance || 0), 0);
-
-  const monthlyIncome = finances
-    .filter(f => f.type === 'income' && format(f.date.toDate(), 'yyyy-MM') === format(new Date(), 'yyyy-MM'))
-    .reduce((acc, f) => acc + f.amount, 0);
-
-  const monthlyExpense = finances
-    .filter(f => f.type === 'expense' && format(f.date.toDate(), 'yyyy-MM') === format(new Date(), 'yyyy-MM'))
-    .reduce((acc, f) => acc + f.amount, 0);
+  const accountBalanceSummary = useMemo(() => buildAccountBalanceSummary(userAccounts), [userAccounts]);
+  const primaryBalanceSummary = accountBalanceSummary.find(item => item.currency === 'ARS') || accountBalanceSummary[0];
 
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
@@ -1792,7 +1852,18 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </div>
               </div>
               <h4 className="font-bold text-neutral-800 mb-1">{acc.name}</h4>
-              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-2">{acc.type}</p>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">{getAccountTypeLabel(acc.type)}</p>
+                <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+                  acc.type === 'credit_card' && Number(acc.balance || 0) < 0
+                    ? 'bg-red-50 text-red-700'
+                    : acc.type === 'investment'
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'bg-emerald-50 text-emerald-700'
+                }`}>
+                  {getAccountHealthLabel(acc)}
+                </span>
+              </div>
               <p className="text-2xl font-black text-neutral-900">
                 {formatAccountBalance(Number(acc.balance || 0), acc.type)} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
               </p>
@@ -2312,21 +2383,44 @@ export default function FinanceTracker({ user }: { user: any }) {
           <div className="bg-neutral-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-neutral-400 mb-1">Saldo total</p>
+                <p className="text-xs font-black uppercase tracking-widest text-neutral-400 mb-1">Caja disponible</p>
                 <h3 className="text-4xl font-black tracking-tighter">
-                  ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {primaryBalanceSummary
+                    ? `${primaryBalanceSummary.liquidity.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${primaryBalanceSummary.currency}`
+                    : 'Sin cuentas'}
                 </h3>
+                <p className="mt-2 text-xs font-bold leading-5 text-neutral-400">
+                  No mezcla monedas. Las tarjetas se leen como deuda separada.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-neutral-800">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-green-500 mb-1">Ingresos del mes</p>
-                  <p className="text-lg font-bold text-white">+${monthlyIncome.toLocaleString()}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Deuda tarjetas</p>
+                  <p className="text-lg font-bold text-white">
+                    {primaryBalanceSummary
+                      ? `${Math.abs(primaryBalanceSummary.creditCardDebt).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${primaryBalanceSummary.currency}`
+                      : '-'}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-1">Gastos del mes</p>
-                  <p className="text-lg font-bold text-white">-${monthlyExpense.toLocaleString()}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-1">Neto moneda</p>
+                  <p className="text-lg font-bold text-white">
+                    {primaryBalanceSummary
+                      ? `${primaryBalanceSummary.netWorth.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${primaryBalanceSummary.currency}`
+                      : '-'}
+                  </p>
                 </div>
               </div>
+              {accountBalanceSummary.length > 1 && (
+                <div className="space-y-2 rounded-2xl bg-white/5 p-3">
+                  {accountBalanceSummary.map(item => (
+                    <div key={item.currency} className="flex items-center justify-between text-xs font-black">
+                      <span className="text-neutral-400">{item.currency}</span>
+                      <span>{item.netWorth.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="absolute -bottom-4 -right-4 opacity-10">
               <Wallet size={100} />
