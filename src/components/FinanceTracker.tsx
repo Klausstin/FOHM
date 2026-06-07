@@ -458,11 +458,44 @@ function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   };
 }
 
+function isUnclearFinanceCategory(finance: any) {
+  const category = normalizeDuplicateText(finance.category || '');
+  const subCategory = normalizeDuplicateText(finance.subCategory || '');
+  return (
+    !category ||
+    category === 'sin categorizar' ||
+    category === 'sin categoria' ||
+    category === 'otros' ||
+    subCategory === 'otros' ||
+    finance.confidence === 'inferred'
+  );
+}
+
+function getFinanceCategoryClarityStats(finances: any[]) {
+  const expenses = finances.filter(finance => finance.status !== 'ignored' && finance.type === 'expense');
+  const unclear = expenses.filter(isUnclearFinanceCategory);
+  const totalAmountByCurrency = new Map<string, number>();
+
+  for (const finance of unclear) {
+    const currency = finance.currency || 'ARS';
+    totalAmountByCurrency.set(currency, (totalAmountByCurrency.get(currency) || 0) + Number(finance.amount || 0));
+  }
+
+  return {
+    count: unclear.length,
+    expenseCount: expenses.length,
+    share: expenses.length ? unclear.length / expenses.length : 0,
+    totalAmountByCurrency: Array.from(totalAmountByCurrency.entries())
+      .map(([currency, amount]) => ({ currency, amount }))
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+  };
+}
+
 function buildFinanceCategoryGroups(finances: any[]) {
   const groups = new Map<string, any[]>();
   const candidates = finances.filter(finance => {
     if (finance.status === 'ignored' || finance.type !== 'expense') return false;
-    return !finance.category || finance.category === 'Sin categorizar' || finance.confidence === 'inferred';
+    return isUnclearFinanceCategory(finance);
   });
 
   for (const finance of candidates) {
@@ -482,6 +515,7 @@ function buildFinanceCategoryGroups(finances: any[]) {
         averageAmount: amounts.length ? amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length : 0,
         currency: first.currency || 'ARS',
         currentCategory: first.category || 'Sin categorizar',
+        reason: getFinanceCategoryGroupReason(first),
         originalDescription: first.originalDescription || first.description || '',
         merchantName: first.merchantName || '',
         merchantKey: first.merchantKey || '',
@@ -499,6 +533,15 @@ function buildFinanceCategoryGroups(finances: any[]) {
     .filter(group => group.count >= 2)
     .sort((a, b) => b.count - a.count || b.averageAmount - a.averageAmount)
     .slice(0, 6);
+}
+
+function getFinanceCategoryGroupReason(finance: any) {
+  const category = normalizeDuplicateText(finance.category || '');
+  const subCategory = normalizeDuplicateText(finance.subCategory || '');
+  if (!category || category === 'sin categorizar' || category === 'sin categoria') return 'Sin categoria clara';
+  if (category === 'otros' || subCategory === 'otros') return 'Cayo en Otros';
+  if (finance.confidence === 'inferred') return 'Clasificacion inferida';
+  return 'Revisar precision';
 }
 
 function buildPendingImportGroups(transactions: PendingTransaction[]): PendingImportGroup[] {
@@ -1713,6 +1756,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
   const financialInsights = useMemo(() => buildFinancialInsights(finances, inflationMonthlyRate), [finances, inflationMonthlyRate]);
+  const categoryClarityStats = useMemo(() => getFinanceCategoryClarityStats(finances), [finances]);
   const categoryLearningGroups = useMemo(() => buildFinanceCategoryGroups(finances), [finances]);
   const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
 
@@ -1984,6 +2028,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         groups={categoryLearningGroups}
         categories={userCategories}
         accounts={userAccounts}
+        clarityStats={categoryClarityStats}
         onApply={handleApplyCategoryToGroup}
       />
 
@@ -4415,11 +4460,13 @@ function CategoryLearningGroupsPanel({
   groups,
   categories,
   accounts,
+  clarityStats,
   onApply,
 }: {
   groups: any[];
   categories: any[];
   accounts: any[];
+  clarityStats: ReturnType<typeof getFinanceCategoryClarityStats>;
   onApply: (group: any, draft: {
     category: string;
     subCategory: string;
@@ -4434,7 +4481,8 @@ function CategoryLearningGroupsPanel({
     visibility: string;
   }) => void;
 }) {
-  if (groups.length === 0) return null;
+  if (groups.length === 0 && clarityStats.count === 0) return null;
+  const hasClarityDebt = clarityStats.count > 0;
 
   return (
     <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
@@ -4443,25 +4491,63 @@ function CategoryLearningGroupsPanel({
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Aprendizaje</p>
           <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Corregir grupos similares</h3>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-neutral-500">
-            VEO encontro movimientos parecidos que puede aprender juntos. Corregis una vez y aplica la regla al grupo.
+            VEO revisa movimientos en Otros, Sin categoria o inferidos para detectar donde el analisis pierde precision.
           </p>
         </div>
-        <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-          {groups.length} grupo(s)
-        </span>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+            {groups.length} grupo(s)
+          </span>
+          {hasClarityDebt && (
+            <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 border border-amber-100">
+              {clarityStats.count} poco claros
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
-        {groups.map(group => (
-          <CategoryLearningGroupCard
-            key={group.key}
-            group={group}
-            categories={categories}
-            accounts={accounts}
-            onApply={onApply}
-          />
-        ))}
-      </div>
+      {hasClarityDebt && (
+        <div className="mb-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+          <div className="rounded-2xl bg-amber-50 p-4 border border-amber-100">
+            <p className="text-[9px] font-black uppercase tracking-widest text-amber-700">Calidad</p>
+            <p className="mt-1 text-3xl font-black text-neutral-950">{Math.round(clarityStats.share * 100)}%</p>
+            <p className="mt-1 text-xs font-bold text-amber-800">del gasto tiene categoria debil</p>
+          </div>
+          <div className="rounded-2xl bg-neutral-50 p-4 border border-neutral-100">
+            <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Monto afectado</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {clarityStats.totalAmountByCurrency.length > 0 ? clarityStats.totalAmountByCurrency.map(item => (
+                <span key={item.currency} className="rounded-full bg-white px-3 py-2 text-xs font-black text-neutral-700 border border-neutral-100">
+                  {item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {item.currency}
+                </span>
+              )) : (
+                <span className="text-xs font-bold text-neutral-400">Sin monto relevante</span>
+              )}
+            </div>
+            <p className="mt-3 text-xs font-semibold leading-5 text-neutral-500">
+              Corregir estos grupos mejora reportes, recurrentes, proyecciones y memoria futura de Luz.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {groups.length > 0 ? (
+        <div className="grid gap-3 xl:grid-cols-2">
+          {groups.map(group => (
+            <CategoryLearningGroupCard
+              key={group.key}
+              group={group}
+              categories={categories}
+              accounts={accounts}
+              onApply={onApply}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 p-4 text-sm font-bold leading-6 text-neutral-500">
+          Hay movimientos poco claros, pero todavia no forman patrones repetidos. Cuando aparezcan similitudes, VEO los va a agrupar para corregirlos de una vez.
+        </div>
+      )}
     </section>
   );
 }
@@ -4526,6 +4612,11 @@ function CategoryLearningGroupCard({
           <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
             Actual: {group.currentCategory || 'Sin categoria'}
           </p>
+          {group.reason && (
+            <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-amber-600">
+              {group.reason}
+            </p>
+          )}
           <p className="mt-1 text-[10px] font-bold text-neutral-400">
             {[
               group.accountId ? `Cuenta: ${accounts.find(account => account.id === group.accountId)?.name || 'asignada'}` : '',
