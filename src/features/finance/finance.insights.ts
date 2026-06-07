@@ -63,11 +63,28 @@ export interface CategorySpendInsight {
   share: number;
 }
 
+export interface BeneficiarySpendInsight {
+  label: string;
+  beneficiaryType: string;
+  amount: number;
+  currency: string;
+  share: number;
+}
+
+export interface ScopeSpendInsight {
+  scope: string;
+  amount: number;
+  currency: string;
+  share: number;
+}
+
 export interface PeriodFinanceDashboard {
   month?: string;
   currency: string;
   byCurrency: PeriodCurrencyTotal[];
   topCategories: CategorySpendInsight[];
+  byBeneficiary: BeneficiarySpendInsight[];
+  byScope: ScopeSpendInsight[];
   realExpenseRead?: string;
   realIncomeRead?: string;
 }
@@ -198,12 +215,16 @@ function buildPeriodDashboard(
     : [];
 
   const topCategories = buildTopCategoriesForMonth(expenses, latestMonth, primaryCurrency);
+  const byBeneficiary = buildBeneficiaryBreakdownForMonth(expenses, latestMonth, primaryCurrency);
+  const byScope = buildScopeBreakdownForMonth(expenses, latestMonth, primaryCurrency);
 
   return {
     month: latestMonth,
     currency: primaryCurrency,
     byCurrency,
     topCategories,
+    byBeneficiary,
+    byScope,
     realExpenseRead: projection.expenseChangeRealVsPreviousMonth?.read,
     realIncomeRead: projection.incomeChangeRealVsPreviousMonth?.read,
   };
@@ -228,6 +249,61 @@ function buildTopCategoriesForMonth(expenses: FinancialTransactionRecord[], mont
     .slice(0, 5)
     .map(([category, amount]) => ({
       category,
+      amount,
+      currency,
+      share: total > 0 ? amount / total : 0,
+    }));
+}
+
+function buildBeneficiaryBreakdownForMonth(expenses: FinancialTransactionRecord[], month?: string, currency = 'ARS') {
+  if (!month) return [];
+  const totals = new Map<string, { label: string; beneficiaryType: string; amount: number }>();
+  let total = 0;
+
+  for (const expense of expenses) {
+    const date = toDate(expense.date);
+    if (monthKey(date) !== month || normalizeCurrency(expense.currency) !== currency) continue;
+
+    const label = expense.beneficiaryLabel || legacyBeneficiaryLabel(expense);
+    const beneficiaryType = expense.beneficiaryType || legacyBeneficiaryType(expense);
+    const amount = Number(expense.amount || 0);
+    const key = `${beneficiaryType}:${label}`;
+    const current = totals.get(key) || { label, beneficiaryType, amount: 0 };
+    current.amount += amount;
+    totals.set(key, current);
+    total += amount;
+  }
+
+  return Array.from(totals.values())
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 6)
+    .map(item => ({
+      ...item,
+      currency,
+      share: total > 0 ? item.amount / total : 0,
+    }));
+}
+
+function buildScopeBreakdownForMonth(expenses: FinancialTransactionRecord[], month?: string, currency = 'ARS') {
+  if (!month) return [];
+  const totals = new Map<string, number>();
+  let total = 0;
+
+  for (const expense of expenses) {
+    const date = toDate(expense.date);
+    if (monthKey(date) !== month || normalizeCurrency(expense.currency) !== currency) continue;
+
+    const scope = expense.scope || legacyScope(expense);
+    const amount = Number(expense.amount || 0);
+    totals.set(scope, (totals.get(scope) || 0) + amount);
+    total += amount;
+  }
+
+  return Array.from(totals.entries())
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+    .map(([scope, amount]) => ({
+      scope,
       amount,
       currency,
       share: total > 0 ? amount / total : 0,
@@ -440,6 +516,21 @@ function getPrimaryCurrency(transactions: FinancialTransactionRecord[]) {
     totals.set(currency, (totals.get(currency) || 0) + Math.abs(Number(transaction.amount || 0)));
   }
   return Array.from(totals.entries()).sort(([, a], [, b]) => b - a)[0]?.[0] || 'ARS';
+}
+
+function legacyBeneficiaryLabel(transaction: FinancialTransactionRecord) {
+  if (transaction.assignedTo === 'Ambos') return 'Pareja';
+  return transaction.beneficiaryLabel || 'Familia';
+}
+
+function legacyBeneficiaryType(transaction: FinancialTransactionRecord) {
+  if (transaction.assignedTo === 'Ambos') return 'couple';
+  return transaction.beneficiaryType || 'family';
+}
+
+function legacyScope(transaction: FinancialTransactionRecord) {
+  if (transaction.assignedTo === 'Ambos') return 'pareja';
+  return transaction.scope || 'familia';
 }
 
 function normalizeCurrency(value?: string | null) {

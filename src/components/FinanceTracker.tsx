@@ -3793,6 +3793,25 @@ function FinancialInsightsPanel({
           </div>
         </div>
 
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <InsightList
+            title="Para quien"
+            empty="Sin beneficiarios claros"
+            items={dashboard.byBeneficiary.map(item => ({
+              title: item.label,
+              detail: `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${item.currency} - ${Math.round(item.share * 100)}% del gasto`,
+            }))}
+          />
+          <InsightList
+            title="Scope familiar"
+            empty="Sin scope claro"
+            items={dashboard.byScope.map(item => ({
+              title: formatFinanceScope(item.scope),
+              detail: `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${item.currency} - ${Math.round(item.share * 100)}% del gasto`,
+            }))}
+          />
+        </div>
+
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           <InsightList
             title="Fijos declarados"
@@ -3915,6 +3934,16 @@ function formatFinanceMonth(monthKey: string) {
     month: 'long',
     year: 'numeric',
   });
+}
+
+function formatFinanceScope(scope: string) {
+  const labels: Record<string, string> = {
+    personal: 'Personal',
+    pareja: 'Pareja',
+    hogar: 'Hogar',
+    familia: 'Familia',
+  };
+  return labels[scope] || scope || 'Familia';
 }
 
 function ProjectionRow({ label, value }: { label: string; value: number }) {
