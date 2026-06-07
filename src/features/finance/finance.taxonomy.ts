@@ -88,7 +88,7 @@ export const DEFAULT_FINANCE_CATEGORIES: FinanceCategoryDefinition[] = [
     sub('prepaga-obra-social', 'Prepaga / obra social', ['osde', 'prepaga', 'obra social']),
     sub('medicos-estudios', 'Medicos / estudios', ['medico', 'pediatra', 'estudio', 'clinica']),
     sub('farmacia', 'Farmacia', ['farmacia']),
-    sub('terapia', 'Terapia', ['terapia', 'psicologo']),
+    sub('terapia-psicologia', 'Terapia / psicologia', ['terapia', 'psicologo', 'psicologa', 'psicologia', 'psicoanalista']),
     sub('fitness', 'Fitness', ['gym', 'gimnasio', 'entrenador', 'deporte']),
   ]),
   category('higiene-cuidado', 'Higiene', 'expense', 65, 'Heart', '#06B6D4', ['higiene', 'panal', 'panales', 'pañal', 'pañales', 'toallitas', 'bebe', 'beba', 'maximo', 'máximo'], [
