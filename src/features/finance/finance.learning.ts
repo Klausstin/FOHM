@@ -15,6 +15,14 @@ export interface FinanceLearningMapping {
   kind?: TransactionKind;
   neutralType?: NeutralType;
   isFixed?: boolean;
+  accountId?: string;
+  sourceAccountId?: string;
+  toAccountId?: string;
+  paymentType?: string;
+  beneficiaryType?: string;
+  beneficiaryLabel?: string;
+  scope?: string;
+  visibility?: string;
   merchantName?: string;
   merchantKey?: string;
   transactionFingerprint?: string;
@@ -56,6 +64,14 @@ export async function upsertFinanceLearningMapping(input: Omit<FinanceLearningMa
     kind: input.kind || 'expense',
     neutralType: input.neutralType,
     isFixed: input.isFixed || false,
+    accountId: input.accountId || '',
+    sourceAccountId: input.sourceAccountId || input.accountId || '',
+    toAccountId: input.toAccountId || '',
+    paymentType: input.paymentType || '',
+    beneficiaryType: input.beneficiaryType || undefined,
+    beneficiaryLabel: input.beneficiaryLabel || '',
+    scope: input.scope || undefined,
+    visibility: input.visibility || undefined,
     merchantName: input.merchantName || '',
     merchantKey: input.merchantKey || '',
     transactionFingerprint: input.transactionFingerprint || '',

@@ -424,6 +424,14 @@ function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
     subCategory: learnedMapping.subCategory || transaction.subCategory || '',
     subSubCategory: learnedMapping.subSubCategory || transaction.subSubCategory || '',
     isFixed: learnedMapping.isFixed ?? transaction.isFixed,
+    accountId: transaction.accountId || learnedMapping.accountId || '',
+    sourceAccountId: transaction.sourceAccountId || transaction.accountId || learnedMapping.sourceAccountId || learnedMapping.accountId || '',
+    toAccountId: transaction.toAccountId || (transaction.type === 'transfer' ? learnedMapping.toAccountId || '' : ''),
+    paymentType: transaction.paymentType && transaction.paymentType !== 'Otro' ? transaction.paymentType : learnedMapping.paymentType || transaction.paymentType,
+    beneficiaryType: transaction.beneficiaryType || learnedMapping.beneficiaryType,
+    beneficiaryLabel: transaction.beneficiaryLabel || learnedMapping.beneficiaryLabel,
+    scope: transaction.scope || learnedMapping.scope,
+    visibility: transaction.visibility || learnedMapping.visibility,
     merchantName: learnedMapping.merchantName || transaction.merchantName,
     merchantKey: learnedMapping.merchantKey || transaction.merchantKey,
   };
@@ -1283,6 +1291,14 @@ export default function FinanceTracker({ user }: { user: any }) {
         subSubCategory: pt.subSubCategory || '',
         kind: pt.type === 'transfer' ? 'neutral' : pt.type as any,
         isFixed: pt.isFixed,
+        accountId: pt.accountId || '',
+        sourceAccountId: pt.accountId || '',
+        toAccountId: pt.toAccountId || '',
+        paymentType: pt.type === 'transfer' ? 'Transferencia' : '',
+        beneficiaryType: transactionInput.beneficiaryType,
+        beneficiaryLabel: transactionInput.beneficiaryLabel,
+        scope: transactionInput.scope,
+        visibility: transactionInput.visibility,
         merchantName: pt.merchantName || '',
         merchantKey: pt.merchantKey || '',
         transactionFingerprint: pt.transactionFingerprint || '',
@@ -1437,6 +1453,12 @@ export default function FinanceTracker({ user }: { user: any }) {
       originalCategory: f.category,
       originalSubCategory: f.subCategory || '',
       originalSubSubCategory: f.subSubCategory || '',
+      originalAccountId: f.accountId || '',
+      originalSourceAccountId: f.sourceAccountId || '',
+      originalToAccountId: f.toAccountId || '',
+      originalPaymentType: f.paymentType || '',
+      originalBeneficiaryLabel: f.beneficiaryLabel || legacyBeneficiaryLabel(f),
+      originalScope: f.scope || legacyScope(f),
       date: format(f.date.toDate(), "yyyy-MM-dd'T'HH:mm"),
     });
   };
@@ -1444,7 +1466,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const saveEdit = async () => {
     if (!editingId || !editForm) return;
     try {
-      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, merchantName, merchantKey } = editForm;
+      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, originalAccountId, originalSourceAccountId, originalToAccountId, originalPaymentType, originalBeneficiaryLabel, originalScope, merchantName, merchantKey } = editForm;
       
       await updateDoc(doc(db, 'finances', editingId), {
         amount: parseFloat(amount),
@@ -1478,7 +1500,14 @@ export default function FinanceTracker({ user }: { user: any }) {
 
       // If it was an AI transaction and the user corrected it, update mappings
       const categoryChanged = category !== originalCategory || (subCategory || '') !== (originalSubCategory || '') || (subSubCategory || '') !== (originalSubSubCategory || '');
-      if ((originalDescription || merchantKey) && categoryChanged) {
+      const contextChanged =
+        (accountId || '') !== (originalAccountId || '') ||
+        (sourceAccountId || '') !== (originalSourceAccountId || '') ||
+        (toAccountId || '') !== (originalToAccountId || '') ||
+        (paymentType || '') !== (originalPaymentType || '') ||
+        (beneficiaryLabel || '') !== (originalBeneficiaryLabel || '') ||
+        (scope || '') !== (originalScope || '');
+      if ((originalDescription || description || merchantKey) && (categoryChanged || contextChanged)) {
         const normalizedOriginal = normalizeDuplicateText(originalDescription || description || '');
         await upsertFinanceLearningMapping({
           uid: user.uid,
@@ -1490,6 +1519,14 @@ export default function FinanceTracker({ user }: { user: any }) {
           subSubCategory: subSubCategory || '',
           kind: type === 'transfer' ? 'neutral' : type,
           isFixed,
+          accountId: accountId || '',
+          sourceAccountId: sourceAccountId || accountId || '',
+          toAccountId: toAccountId || '',
+          paymentType: paymentType || '',
+          beneficiaryType: beneficiaryType || '',
+          beneficiaryLabel: beneficiaryLabel || '',
+          scope: scope || '',
+          visibility: visibility || 'household_shared',
           merchantName: merchantName || '',
           merchantKey: merchantKey || '',
         }, userMappings);
