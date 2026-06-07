@@ -396,6 +396,27 @@ function shortFingerprint(value?: string) {
   return value.length > 18 ? `${value.slice(0, 18)}...` : value;
 }
 
+function getPendingImportNextStep(summary: {
+  readyCount: number;
+  duplicateCount: number;
+  missingAccountCount: number;
+  cardPaymentCount: number;
+}) {
+  if (summary.duplicateCount > 0) {
+    return 'Primero resolvemos duplicados: vinculalos si son el mismo gasto que ya cargaste, descartalos si el resumen ya estaba importado, o guardalos igual solo si fueron compras realmente separadas.';
+  }
+  if (summary.missingAccountCount > 0) {
+    return 'Despues asignamos cuenta: elegi de donde salio cada grupo. Si es pago de tarjeta, VEO necesita origen y destino para no contarlo como gasto doble.';
+  }
+  if (summary.readyCount > 0) {
+    return `Hay ${summary.readyCount} movimiento(s) listos. Podes guardarlos juntos y corregir categorias despues si hace falta; VEO aprende de esas correcciones.`;
+  }
+  if (summary.cardPaymentCount > 0) {
+    return 'Los pagos de tarjeta se tratan como transferencias entre cuentas: sirven para saldos, pero no duplican los consumos.';
+  }
+  return 'No queda ninguna accion clara pendiente. Si algo no corresponde, limpialo y volve a importar.';
+}
+
 function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   const originalText = normalizeDuplicateText(transaction.originalDescription || transaction.description || '');
   const learningKey = buildFinanceLearningKey(transaction.originalDescription || transaction.description || '');
@@ -917,6 +938,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [filterAccount, setFilterAccount] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
+  const [showPendingImportDetails, setShowPendingImportDetails] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
@@ -2345,6 +2367,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                   <p className="text-sm text-amber-700 font-medium">
                     {pendingTransactions.length} movimientos extraidos. Guardamos solo lo que confirmes.
                   </p>
+                  <p className="mt-2 max-w-3xl text-xs font-bold leading-5 text-amber-800">
+                    {getPendingImportNextStep(pendingImportSummary)}
+                  </p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -2360,6 +2385,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                   className="rounded-2xl bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-700 transition hover:bg-amber-100"
                 >
                   Limpiar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPendingImportDetails(prev => !prev)}
+                  className="rounded-2xl bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-700 transition hover:bg-amber-100"
+                >
+                  {showPendingImportDetails ? 'Ocultar detalle' : `Ver detalle (${pendingTransactions.length})`}
                 </button>
               </div>
             </div>
@@ -2400,6 +2432,13 @@ export default function FinanceTracker({ user }: { user: any }) {
               onLinkGroup={linkPendingDuplicateGroup}
             />
 
+            {!showPendingImportDetails && (
+              <div className="rounded-2xl border border-amber-100 bg-white/70 p-4 text-xs font-bold leading-5 text-amber-800">
+                El detalle individual esta oculto para mantener limpia la revision. Usa los grupos de arriba para resolver rapido; abrilo solo si queres revisar un movimiento puntual.
+              </div>
+            )}
+
+            {showPendingImportDetails && (
             <div className="grid grid-cols-1 gap-4">
               {(pendingTransactions || []).map((pt) => (
                 <div key={pt.id} className="bg-white p-6 rounded-2xl border border-amber-100 shadow-sm space-y-4">
@@ -2599,6 +2638,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </div>
               ))}
             </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
