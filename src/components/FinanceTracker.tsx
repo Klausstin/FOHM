@@ -1265,6 +1265,27 @@ export default function FinanceTracker({ user }: { user: any }) {
     }));
   };
 
+  const applyCategoryToPendingGroup = (
+    group: PendingImportGroup,
+    updates: { category: string; subCategory?: string; subSubCategory?: string; isFixed?: boolean },
+  ) => {
+    if (!updates.category) return;
+    const ids = new Set(group.transactionIds);
+    setPendingTransactions(prev => prev.map(transaction => {
+      if (!ids.has(transaction.id)) return transaction;
+      const nextType = getPendingCategoryType(updates.category);
+      return {
+        ...transaction,
+        category: updates.category,
+        subCategory: updates.subCategory || '',
+        subSubCategory: updates.subSubCategory || '',
+        type: nextType,
+        isFixed: Boolean(updates.isFixed),
+        toAccountId: nextType === 'transfer' ? transaction.toAccountId : '',
+      };
+    }));
+  };
+
   const discardPendingGroup = (group: PendingImportGroup) => {
     const ids = new Set(group.transactionIds);
     setPendingTransactions(prev => prev.filter(transaction => !ids.has(transaction.id)));
@@ -2206,7 +2227,9 @@ export default function FinanceTracker({ user }: { user: any }) {
             <PendingImportGroupsPanel
               groups={pendingImportGroups}
               accounts={userAccounts}
+              categories={userCategories}
               onApplyAccounts={applyAccountToPendingGroup}
+              onApplyCategory={applyCategoryToPendingGroup}
               onConfirmGroup={confirmPendingGroup}
               onDiscardGroup={discardPendingGroup}
               onLinkGroup={linkPendingDuplicateGroup}
@@ -3504,27 +3527,34 @@ function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; v
 function PendingImportGroupsPanel({
   groups,
   accounts,
+  categories,
   onApplyAccounts,
+  onApplyCategory,
   onConfirmGroup,
   onDiscardGroup,
   onLinkGroup,
 }: {
   groups: PendingImportGroup[];
   accounts: any[];
+  categories: any[];
   onApplyAccounts: (group: PendingImportGroup, accountId: string, toAccountId?: string) => void;
+  onApplyCategory: (group: PendingImportGroup, updates: { category: string; subCategory?: string; subSubCategory?: string; isFixed?: boolean }) => void;
   onConfirmGroup: (group: PendingImportGroup, forceDuplicates?: boolean) => void;
   onDiscardGroup: (group: PendingImportGroup) => void;
   onLinkGroup: (group: PendingImportGroup) => void;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, { accountId: string; toAccountId: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { accountId: string; toAccountId: string; category: string; subCategory: string; isFixed: boolean }>>({});
   if (groups.length === 0) return null;
 
-  const updateDraft = (groupKey: string, patch: Partial<{ accountId: string; toAccountId: string }>) => {
+  const updateDraft = (groupKey: string, patch: Partial<{ accountId: string; toAccountId: string; category: string; subCategory: string; isFixed: boolean }>) => {
     setDrafts(prev => ({
       ...prev,
       [groupKey]: {
         accountId: prev[groupKey]?.accountId || '',
         toAccountId: prev[groupKey]?.toAccountId || '',
+        category: prev[groupKey]?.category || '',
+        subCategory: prev[groupKey]?.subCategory || '',
+        isFixed: prev[groupKey]?.isFixed || false,
         ...patch,
       },
     }));
@@ -3547,9 +3577,15 @@ function PendingImportGroupsPanel({
           const draft = drafts[group.key] || {
             accountId: group.sample.accountId || '',
             toAccountId: group.sample.toAccountId || '',
+            category: group.category || '',
+            subCategory: group.subCategory || '',
+            isFixed: Boolean(group.sample.isFixed),
           };
           const requiresDestination = group.sample.type === 'transfer';
           const canApplyAccounts = Boolean(draft.accountId && (!requiresDestination || draft.toAccountId));
+          const selectedCategory = categories.find(category => category.name === draft.category);
+          const subCategories = selectedCategory?.subCategories || [];
+          const canApplyCategory = Boolean(draft.category);
           const groupTone = group.kind === 'duplicate'
             ? 'border-red-100 bg-red-50'
             : group.kind === 'missing_account'
@@ -3600,7 +3636,37 @@ function PendingImportGroupsPanel({
               </div>
 
               {group.kind !== 'duplicate' && (
-                <div className="mt-4 grid gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                <div className="mt-4 grid gap-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end">
+                  <label className="space-y-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Categoria</span>
+                    <select
+                      value={draft.category}
+                      onChange={event => updateDraft(group.key, { category: event.target.value, subCategory: '' })}
+                      className="w-full rounded-xl border border-white bg-white px-3 py-2 text-xs font-black text-neutral-900 outline-none"
+                    >
+                      <option value="">Elegir categoria</option>
+                      {categories.map(category => (
+                        <option key={category.id || category.name} value={category.name}>{category.name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Subcategoria</span>
+                    <select
+                      value={draft.subCategory}
+                      onChange={event => updateDraft(group.key, { subCategory: event.target.value })}
+                      disabled={!draft.category || subCategories.length === 0}
+                      className="w-full rounded-xl border border-white bg-white px-3 py-2 text-xs font-black text-neutral-900 outline-none disabled:text-neutral-300"
+                    >
+                      <option value="">Sin subcategoria</option>
+                      {subCategories.map((subcategory: any) => {
+                        const name = typeof subcategory === 'string' ? subcategory : subcategory.name;
+                        return <option key={name} value={name}>{name}</option>;
+                      })}
+                    </select>
+                  </label>
+
                   <label className="space-y-1">
                     <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</span>
                     <select
@@ -3629,9 +3695,27 @@ function PendingImportGroupsPanel({
                         ))}
                       </select>
                     </label>
-                  ) : <div />}
+                  ) : (
+                    <label className="flex items-center gap-2 rounded-xl bg-white px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={draft.isFixed}
+                        onChange={event => updateDraft(group.key, { isFixed: event.target.checked })}
+                        className="h-4 w-4 rounded border-neutral-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Fijo</span>
+                    </label>
+                  )}
 
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onApplyCategory(group, { category: draft.category, subCategory: draft.subCategory, isFixed: draft.isFixed })}
+                      disabled={!canApplyCategory}
+                      className="rounded-xl bg-amber-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                    >
+                      Categorizar
+                    </button>
                     <button
                       type="button"
                       onClick={() => onApplyAccounts(group, draft.accountId, draft.toAccountId)}
