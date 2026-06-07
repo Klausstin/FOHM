@@ -574,6 +574,25 @@ const FINANCE_TYPES = [
 const CURRENCIES = ['ARS', 'USD', 'EUR', 'BRL', 'CLP', 'UYU'];
 const PAYMENT_TYPES = ['Efectivo', 'Tarjeta de Débito', 'Tarjeta de credito', 'Transferencia', 'Mercado Pago', 'Otro'];
 const PAYMENT_STATUSES = ['Contabilizado', 'Pendiente', 'Anulado'];
+const FINANCE_BENEFICIARIES = [
+  { type: 'family', label: 'Familia', scope: 'familia' },
+  { type: 'household', label: 'Hogar', scope: 'hogar' },
+  { type: 'couple', label: 'Pareja', scope: 'pareja' },
+  { type: 'child', label: 'Máximo', scope: 'familia' },
+  { type: 'user', label: 'Agustín', scope: 'personal' },
+  { type: 'user', label: 'Vicky', scope: 'personal' },
+  { type: 'other', label: 'Otro', scope: 'familia' },
+];
+
+function legacyBeneficiaryLabel(finance: any) {
+  if (finance.assignedTo === 'Ambos') return 'Pareja';
+  return finance.beneficiaryLabel || 'Familia';
+}
+
+function legacyScope(finance: any) {
+  if (finance.assignedTo === 'Ambos') return 'pareja';
+  return finance.scope || 'familia';
+}
 
 interface PendingTransaction {
   id: string;
@@ -634,6 +653,9 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [isFixed, setIsFijo] = useState(false);
   const [payer, setPayer] = useState('');
+  const [beneficiaryType, setBeneficiaryType] = useState('family');
+  const [beneficiaryLabel, setBeneficiaryLabel] = useState('Familia');
+  const [scope, setScope] = useState('familia');
   const [paymentType, setPaymentType] = useState('Efectivo');
   const [paymentStatus, setPaymentStatus] = useState('Contabilizado');
   const [generatedBy, setGeneratedBy] = useState(user.uid);
@@ -706,6 +728,8 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [filterAmountMax, setFilterAmountMax] = useState('');
   const [filterGeneratedBy, setFilterGeneratedBy] = useState('all');
   const [filterAssignedTo, setFilterAssignedTo] = useState('all');
+  const [filterBeneficiary, setFilterBeneficiary] = useState('all');
+  const [filterScope, setFilterScope] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
 
@@ -863,6 +887,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         subSubCategory,
         type,
         accountId,
+        sourceAccountId: accountId,
         toAccountId,
         tags,
         isFixed,
@@ -874,9 +899,14 @@ export default function FinanceTracker({ user }: { user: any }) {
         reconciliationBatchId: null,
         estimatedReason: null,
         isConfirmed: true,
+        createdByUserId: generatedBy || user.uid,
         generatedBy: generatedBy || user.uid,
         assignedTo: assignedTo || user.uid,
         payer,
+        beneficiaryType: beneficiaryType as any,
+        beneficiaryLabel,
+        scope: scope as any,
+        visibility: 'household_shared',
         paymentType,
         paymentStatus
       };
@@ -901,6 +931,9 @@ export default function FinanceTracker({ user }: { user: any }) {
         setDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
         setIsFijo(false);
         setPayer('');
+        setBeneficiaryType('family');
+        setBeneficiaryLabel('Familia');
+        setScope('familia');
         setPaymentType('Efectivo');
         setPaymentStatus('Contabilizado');
         setGeneratedBy(user.uid);
@@ -1036,6 +1069,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         subSubCategory: pt.subSubCategory || '',
         type: pt.type,
         accountId: pt.accountId || '',
+        sourceAccountId: pt.accountId || '',
         toAccountId: pt.toAccountId || '',
         tags: ['pdf', ...(pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' ? ['pago-tarjeta'] : [])],
         isFixed: pt.isFixed,
@@ -1044,6 +1078,11 @@ export default function FinanceTracker({ user }: { user: any }) {
         isConfirmed: true,
         generatedBy: user.uid,
         assignedTo: user.uid,
+        createdByUserId: user.uid,
+        beneficiaryType: 'household',
+        beneficiaryLabel: 'Hogar',
+        scope: 'hogar',
+        visibility: 'household_shared',
         confidence: pt.confidence >= 0.9 ? 'exact' : pt.confidence >= 0.7 ? 'estimated' : 'inferred',
         status: 'posted',
         needsReview: false,
@@ -1213,7 +1252,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const saveEdit = async () => {
     if (!editingId || !editForm) return;
     try {
-      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, merchantName, merchantKey } = editForm;
+      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, merchantName, merchantKey } = editForm;
       
       await updateDoc(doc(db, 'finances', editingId), {
         amount: parseFloat(amount),
@@ -1225,6 +1264,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         subSubCategory: subSubCategory || '',
         type,
         accountId,
+        sourceAccountId: sourceAccountId || accountId || '',
         toAccountId: toAccountId || null,
         tags,
         isFixed,
@@ -1232,6 +1272,12 @@ export default function FinanceTracker({ user }: { user: any }) {
         generatedBy,
         assignedTo,
         payer,
+        createdByUserId: editForm.createdByUserId || generatedBy || user.uid,
+        beneficiaryType: beneficiaryType || 'household',
+        beneficiaryId: beneficiaryId || '',
+        beneficiaryLabel: beneficiaryLabel || 'Hogar',
+        scope: scope || 'familia',
+        visibility: visibility || 'household_shared',
         paymentType,
         paymentStatus,
         isConfirmed: true, // Mark as confirmed when edited/saved
@@ -1329,6 +1375,8 @@ export default function FinanceTracker({ user }: { user: any }) {
     // Person Filters
     if (filterGeneratedBy !== 'all' && f.generatedBy !== filterGeneratedBy) return false;
     if (filterAssignedTo !== 'all' && f.assignedTo !== filterAssignedTo) return false;
+    if (filterBeneficiary !== 'all' && (f.beneficiaryLabel || legacyBeneficiaryLabel(f)) !== filterBeneficiary) return false;
+    if (filterScope !== 'all' && (f.scope || legacyScope(f)) !== filterScope) return false;
 
     // Search Query
     if (searchQuery) {
@@ -1337,7 +1385,8 @@ export default function FinanceTracker({ user }: { user: any }) {
       const matchesCat = f.category?.toLowerCase().includes(searchLower);
       const matchesSub = f.subCategory?.toLowerCase().includes(searchLower);
       const matchesSubSub = f.subSubCategory?.toLowerCase().includes(searchLower);
-      if (!matchesDesc && !matchesCat && !matchesSub && !matchesSubSub) return false;
+      const matchesBeneficiary = f.beneficiaryLabel?.toLowerCase().includes(searchLower);
+      if (!matchesDesc && !matchesCat && !matchesSub && !matchesSubSub && !matchesBeneficiary) return false;
     }
 
     return true;
@@ -2477,7 +2526,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">
-                      {type === 'transfer' ? 'Desde cuenta' : 'Cuenta'}
+                      {type === 'transfer' ? 'Cuenta origen' : 'Cuenta usada'}
                     </label>
                     <select
                       value={accountId}
@@ -2617,14 +2666,22 @@ export default function FinanceTracker({ user }: { user: any }) {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Pagador</label>
-                    <input
-                      type="text"
-                      value={payer}
-                      onChange={(e) => setPayer(e.target.value)}
-                      placeholder="Nombre del pagador"
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para</label>
+                    <select
+                      value={`${beneficiaryType}:${beneficiaryLabel}`}
+                      onChange={(e) => {
+                        const [nextType, nextLabel] = e.target.value.split(':');
+                        const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                        setBeneficiaryType(nextType);
+                        setBeneficiaryLabel(nextLabel);
+                        setScope(option?.scope || 'familia');
+                      }}
                       className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    />
+                    >
+                      {FINANCE_BENEFICIARIES.map(item => (
+                        <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="space-y-1">
@@ -2651,7 +2708,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
                   <div className="grid grid-cols-2 gap-3 pt-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Generado por</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Registrado por</label>
                       <select
                         value={generatedBy}
                         onChange={(e) => setGeneratedBy(e.target.value)}
@@ -2661,14 +2718,16 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Asignado a</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Scope</label>
                       <select
-                        value={assignedTo}
-                        onChange={(e) => setAssignedTo(e.target.value)}
+                        value={scope}
+                        onChange={(e) => setScope(e.target.value)}
                         className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       >
-                        {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
-                        <option value="Ambos">Ambos</option>
+                        <option value="personal">Personal</option>
+                        <option value="pareja">Pareja</option>
+                        <option value="hogar">Hogar</option>
+                        <option value="familia">Familia</option>
                       </select>
                     </div>
                   </div>
@@ -2753,13 +2812,15 @@ export default function FinanceTracker({ user }: { user: any }) {
                 <Filter size={18} className="text-neutral-400" />
                 Filtros y busqueda
               </h3>
-              {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
+              {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || filterBeneficiary !== 'all' || filterScope !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
                 <button 
                   onClick={() => {
                     setFilterDateRange('all');
                     setFilterCategory('all');
                     setFilterGeneratedBy('all');
                     setFilterAssignedTo('all');
+                    setFilterBeneficiary('all');
+                    setFilterScope('all');
                     setSearchQuery('');
                     setFilterAmountMin('');
                     setFilterAmountMax('');
@@ -2836,15 +2897,29 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Responsable</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para</label>
                 <select 
-                  value={filterAssignedTo}
-                  onChange={(e) => setFilterAssignedTo(e.target.value)}
+                  value={filterBeneficiary}
+                  onChange={(e) => setFilterBeneficiary(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
                   <option value="all">Todos</option>
-                  {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
-                  <option value="Ambos">Ambos</option>
+                  {FINANCE_BENEFICIARIES.map(item => <option key={item.label} value={item.label}>{item.label}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Scope</label>
+                <select 
+                  value={filterScope}
+                  onChange={(e) => setFilterScope(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
+                >
+                  <option value="all">Todos</option>
+                  <option value="personal">Personal</option>
+                  <option value="pareja">Pareja</option>
+                  <option value="hogar">Hogar</option>
+                  <option value="familia">Familia</option>
                 </select>
               </div>
 
@@ -2868,6 +2943,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const isEditing = editingId === f.id;
                 const generator = uniqueHouseholdMembers.find(m => m.uid === f.generatedBy);
                 const assignee = f.assignedTo === 'Ambos' ? 'Ambos' : uniqueHouseholdMembers.find(m => m.uid === f.assignedTo);
+                const sourceAccount = userAccounts.find(account => account.id === (f.sourceAccountId || f.accountId));
+                const beneficiary = f.beneficiaryLabel || legacyBeneficiaryLabel(f);
 
                 return (
                   <motion.div
@@ -2917,10 +2994,10 @@ export default function FinanceTracker({ user }: { user: any }) {
                           )}
                           <select 
                             value={editForm.accountId}
-                            onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value })}
+                            onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value, sourceAccountId: e.target.value })}
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           >
-                            <option value="">Sin cuenta</option>
+                            <option value="">Sin cuenta usada</option>
                             {(userAccounts || []).map(acc => (
                               <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
                             ))}
@@ -2961,13 +3038,25 @@ export default function FinanceTracker({ user }: { user: any }) {
                           />
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <input 
-                            type="text"
-                            value={editForm.payer}
-                            onChange={(e) => setEditForm({ ...editForm, payer: e.target.value })}
-                            placeholder="Pagador"
+                          <select
+                            value={`${editForm.beneficiaryType || 'family'}:${editForm.beneficiaryLabel || legacyBeneficiaryLabel(editForm)}`}
+                            onChange={(e) => {
+                              const [nextType, nextLabel] = e.target.value.split(':');
+                              const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                              setEditForm({
+                                ...editForm,
+                                beneficiaryType: nextType,
+                                beneficiaryLabel: nextLabel,
+                                scope: option?.scope || editForm.scope || 'familia',
+                                visibility: editForm.visibility || 'household_shared',
+                              });
+                            }}
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          />
+                          >
+                            {FINANCE_BENEFICIARIES.map(item => (
+                              <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
+                            ))}
+                          </select>
                           <select 
                             value={editForm.paymentType}
                             onChange={(e) => setEditForm({ ...editForm, paymentType: e.target.value })}
@@ -3000,12 +3089,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                               {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                             </select>
                             <select 
-                              value={editForm.assignedTo}
-                              onChange={(e) => setEditForm({ ...editForm, assignedTo: e.target.value })}
+                              value={editForm.scope || 'familia'}
+                              onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
-                              {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
-                              <option value="Ambos">Ambos</option>
+                              <option value="personal">Personal</option>
+                              <option value="pareja">Pareja</option>
+                              <option value="hogar">Hogar</option>
+                              <option value="familia">Familia</option>
                             </select>
                           </div>
                           <div className="flex gap-2">
@@ -3044,9 +3135,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                                     {f.subCategory}
                                   </span>
                                 )}
-                                {f.account && (
+                                {sourceAccount && (
                                   <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                    {f.account}
+                                    Salio de {sourceAccount.name}
+                                  </span>
+                                )}
+                                {beneficiary && (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                                    Para {beneficiary}
                                   </span>
                                 )}
                                 {f.isFixed && (
@@ -3113,14 +3209,18 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </div>
                           )}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Por</span>
+                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Registrado por</span>
                             <span className="text-[10px] font-bold text-neutral-500">{generator?.displayName || 'Sin dato'}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Para</span>
                             <span className="text-[10px] font-bold text-neutral-500">
-                              {f.assignedTo === 'Ambos' ? 'Ambos' : (assignee?.displayName || 'Sin dato')}
+                              {beneficiary || (f.assignedTo === 'Ambos' ? 'Pareja' : (assignee?.displayName || 'Familia'))}
                             </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Scope</span>
+                            <span className="text-[10px] font-bold text-neutral-500">{f.scope || legacyScope(f)}</span>
                           </div>
                           {f.estimatedReason && (
                             <div className="flex-1 min-w-0">

@@ -64,7 +64,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
           return {
             ...action,
             finance: nextFinance,
-            detail: `${Number(nextFinance.amount || 0).toLocaleString()} ${nextFinance.currency} - ${nextFinance.category}. ${nextFinance.accountName ? `Cuenta sugerida: ${nextFinance.accountName}.` : 'Falta confirmar cuenta o billetera.'}`,
+            detail: `${Number(nextFinance.amount || 0).toLocaleString()} ${nextFinance.currency} - ${nextFinance.category}. ${nextFinance.beneficiaryLabel ? `Para ${nextFinance.beneficiaryLabel}. ` : ''}${nextFinance.accountName ? `Salio de: ${nextFinance.accountName}.` : 'Falta confirmar cuenta o billetera.'}`,
           };
         }),
       };
@@ -179,6 +179,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         kind: action.finance.type === 'transfer' ? 'neutral' : action.finance.type,
         neutralType: action.finance.neutralType,
         accountId: action.finance.accountId || '',
+        sourceAccountId: action.finance.sourceAccountId || action.finance.accountId || '',
         toAccountId: action.finance.toAccountId || '',
         date: createLocalDate(action.finance.date),
         source: 'manual',
@@ -186,8 +187,16 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         status: action.finance.needsReview ? 'needs_review' : 'posted',
         needsReview: action.finance.needsReview,
         isConfirmed: !action.finance.needsReview,
+        createdByUserId: user.uid,
         generatedBy: user.uid,
+        executedByUserId: action.finance.executedByUserId,
+        executedByLabel: action.finance.executedByLabel,
         assignedTo: user.uid,
+        beneficiaryType: action.finance.beneficiaryType || 'household',
+        beneficiaryId: action.finance.beneficiaryId,
+        beneficiaryLabel: action.finance.beneficiaryLabel || 'Familia',
+        scope: action.finance.scope || 'familia',
+        visibility: action.finance.visibility || 'household_shared',
         paymentType: action.finance.paymentMethod || '',
         paymentStatus: action.finance.needsReview ? 'Pendiente de revisar' : 'Contabilizado',
         travelTripId: action.finance.travelTripId,
@@ -546,10 +555,11 @@ function buildCompactActionSummary(action: LuzAction) {
     return [
       `${Number(finance.amount || 0).toLocaleString()} ${finance.currency}`,
       [finance.category, finance.subCategory].filter(Boolean).join(' / '),
+      finance.beneficiaryLabel ? `Para ${finance.beneficiaryLabel}` : '',
       finance.travelTripSuggestion ? `Viaje: ${finance.travelTripSuggestion}` : '',
       finance.type === 'transfer'
         ? `${finance.accountName || 'Sin origen'} -> ${finance.toAccountName || 'Sin destino'}`
-        : finance.accountName || 'Sin cuenta',
+        : finance.accountName ? `Salio de ${finance.accountName}` : 'Sin cuenta',
     ].filter(Boolean).join(' · ');
   }
 
@@ -571,6 +581,7 @@ function buildActionChips(action: LuzAction) {
     return [
       action.finance.travelTripSuggestion ? `Viaje: ${action.finance.travelTripSuggestion}` : '',
       action.finance.travelCategory,
+      action.finance.scope,
       action.finance.paymentMethod,
       action.finance.date,
     ].filter(Boolean) as string[];
@@ -667,7 +678,7 @@ function LuzFinanceEditor({
 
       <label className="space-y-1">
         <span className="text-[9px] font-black uppercase tracking-widest text-white/35">
-          {finance.type === 'transfer' ? 'Cuenta origen' : 'Cuenta'}
+          {finance.type === 'transfer' ? 'Cuenta origen' : 'Cuenta usada'}
         </span>
         <select
           value={finance.accountId || ''}
@@ -675,6 +686,7 @@ function LuzFinanceEditor({
             const account = accounts.find(item => item.id === event.target.value);
             onUpdateFinance(action.id, {
               accountId: account?.id || '',
+              sourceAccountId: account?.id || '',
               accountName: account?.name || '',
               needsReview: !account?.id,
               paymentMethod: account?.name || finance.paymentMethod,
@@ -716,6 +728,31 @@ function LuzFinanceEditor({
           onChange={(event) => onUpdateFinance(action.id, { date: event.target.value })}
           className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
         />
+      </label>
+
+      <label className="space-y-1">
+        <span className="text-[9px] font-black uppercase tracking-widest text-white/35">Para</span>
+        <select
+          value={`${finance.beneficiaryType || 'household'}:${finance.beneficiaryLabel || 'Familia'}`}
+          onChange={(event) => {
+            const [beneficiaryType, beneficiaryLabel] = event.target.value.split(':');
+            onUpdateFinance(action.id, {
+              beneficiaryType: beneficiaryType as any,
+              beneficiaryLabel,
+              scope: beneficiaryType === 'child' || beneficiaryType === 'family' ? 'familia' : beneficiaryType === 'couple' ? 'pareja' : beneficiaryType === 'household' ? 'hogar' : 'personal',
+              visibility: beneficiaryType === 'user' ? 'household_shared' : 'household_shared',
+            });
+          }}
+          className="w-full rounded-xl border border-white/10 bg-white px-3 py-2 text-xs font-black text-neutral-950 outline-none"
+        >
+          <option value="family:Familia">Familia</option>
+          <option value="household:Hogar">Hogar</option>
+          <option value="couple:Pareja">Pareja</option>
+          <option value="child:Máximo">Máximo</option>
+          <option value="user:Agustín">Agustín</option>
+          <option value="user:Vicky">Vicky</option>
+          <option value="other:Otro">Otro</option>
+        </select>
       </label>
 
       <label className="space-y-1 sm:col-span-2">

@@ -1,7 +1,7 @@
 import { format, subDays } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
-import type { NeutralType, TransactionKind } from '../finance/finance.types';
+import type { FinanceBeneficiaryType, FinanceScope, FinanceVisibility, NeutralType, TransactionKind } from '../finance/finance.types';
 import { inferTravelContext } from '../travel/travelContext';
 import type { WishlistHorizon, WishlistItemType } from '../wishlist/wishlist.types';
 
@@ -28,6 +28,7 @@ export interface LuzFinanceDraft {
   subSubCategory?: string;
   description: string;
   accountId?: string;
+  sourceAccountId?: string;
   accountName?: string;
   toAccountId?: string;
   toAccountName?: string;
@@ -38,6 +39,14 @@ export interface LuzFinanceDraft {
   travelCategory?: string;
   originalAmount?: number;
   originalCurrency?: string;
+  createdByUserId?: string;
+  executedByUserId?: string;
+  executedByLabel?: string;
+  beneficiaryType?: FinanceBeneficiaryType;
+  beneficiaryId?: string;
+  beneficiaryLabel?: string;
+  scope?: FinanceScope;
+  visibility?: FinanceVisibility;
   needsReview: boolean;
 }
 
@@ -272,6 +281,7 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
     const normalizedContext = normalize(context);
     const classification = classifyFinanceText(context || message);
     const travel = inferTravelContext(context || message);
+    const familyContext = inferFamilyContext(normalizedContext || normalized);
     const neutralType = classification.suggestion.neutralType;
     const baseType = classification.suggestion.kind || (INCOME_WORDS.some(word => normalized.includes(normalize(word))) ? 'income' : 'expense');
     const type = neutralType === 'credit_card_payment' || neutralType === 'internal_transfer'
@@ -293,17 +303,18 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
     const paymentDetail = type === 'transfer'
       ? `Transferencia sugerida: ${accountName || 'origen pendiente'} -> ${toAccountName || 'destino pendiente'}.`
       : payment.accountName
-        ? `Cuenta sugerida: ${payment.accountName}.`
+        ? `Salio de: ${payment.accountName}.`
         : payment.paymentMethod
           ? `Medio detectado: ${payment.paymentMethod}. Falta asociarlo a una cuenta.`
           : 'Falta confirmar cuenta o billetera.';
+    const beneficiaryDetail = familyContext.beneficiaryLabel ? ` Para ${familyContext.beneficiaryLabel}.` : '';
 
     return {
       id: createActionId(`finance-${index}`),
       type: 'create_finance_transaction',
       intent: 'financial_transaction',
       title: type === 'income' ? 'Registrar ingreso' : type === 'transfer' ? 'Registrar transferencia' : 'Registrar gasto',
-      detail: `${mention.amount.toLocaleString()} ${currency} - ${category} / ${subCategory}. ${travel ? `Viaje sugerido: ${travel.travelTripSuggestion}. ` : ''}${paymentDetail}`,
+      detail: `${mention.amount.toLocaleString()} ${currency} - ${category} / ${subCategory}.${beneficiaryDetail} ${travel ? `Viaje sugerido: ${travel.travelTripSuggestion}. ` : ''}${paymentDetail}`,
       confidence: needsReview ? 'medium' : 'high',
       finance: {
         amount: mention.amount,
@@ -316,6 +327,7 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
         subSubCategory: '',
         description,
         accountId,
+        sourceAccountId: accountId,
         accountName,
         toAccountId,
         toAccountName,
@@ -325,6 +337,11 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
         travelCategory: travel?.travelCategory,
         originalAmount: mention.amount,
         originalCurrency: currency,
+        executedByLabel: familyContext.executedByLabel,
+        beneficiaryType: familyContext.beneficiaryType,
+        beneficiaryLabel: familyContext.beneficiaryLabel,
+        scope: familyContext.scope,
+        visibility: familyContext.visibility,
         needsReview,
       },
     };
@@ -747,6 +764,57 @@ function inferPayment(normalized: string, accounts: LuzFinancialAccountOption[],
   return { paymentMethod };
 }
 
+function inferFamilyContext(normalized: string): {
+  executedByLabel?: string;
+  beneficiaryType: FinanceBeneficiaryType;
+  beneficiaryLabel: string;
+  scope: FinanceScope;
+  visibility: FinanceVisibility;
+} {
+  const mentionsMaximo = includesAny(normalized, ['maximo', 'máximo', 'maxi', 'hijo', 'bebe', 'beba', 'panal', 'panales', 'pañal', 'pañales', 'pediatra']);
+  const mentionsVicky = includesAny(normalized, ['vicky', 'victoria']);
+  const mentionsCouple = includesAny(normalized, ['pareja', 'nosotros', 'salida con vicky', 'con vicky', 'cena con vicky']);
+  const mentionsHome = includesAny(normalized, ['hogar', 'casa', 'departamento', 'depto', 'living', 'familia']);
+
+  if (mentionsMaximo) {
+    return {
+      executedByLabel: mentionsVicky ? 'Vicky' : undefined,
+      beneficiaryType: 'child',
+      beneficiaryLabel: 'Máximo',
+      scope: 'familia',
+      visibility: 'household_shared',
+    };
+  }
+
+  if (mentionsCouple) {
+    return {
+      executedByLabel: mentionsVicky && includesAny(normalized, ['vicky pago', 'vicky pagó', 'vicky compro', 'vicky compró']) ? 'Vicky' : undefined,
+      beneficiaryType: 'couple',
+      beneficiaryLabel: 'Pareja',
+      scope: 'pareja',
+      visibility: 'household_shared',
+    };
+  }
+
+  if (mentionsHome) {
+    return {
+      executedByLabel: mentionsVicky && includesAny(normalized, ['vicky pago', 'vicky pagó', 'vicky compro', 'vicky compró']) ? 'Vicky' : undefined,
+      beneficiaryType: 'household',
+      beneficiaryLabel: 'Hogar',
+      scope: 'hogar',
+      visibility: 'household_shared',
+    };
+  }
+
+  return {
+    executedByLabel: mentionsVicky && includesAny(normalized, ['vicky pago', 'vicky pagó', 'vicky compro', 'vicky compró']) ? 'Vicky' : undefined,
+    beneficiaryType: 'household',
+    beneficiaryLabel: 'Familia',
+    scope: 'familia',
+    visibility: 'household_shared',
+  };
+}
+
 function inferTransferAccounts(
   normalized: string,
   accounts: LuzFinancialAccountOption[],
@@ -844,6 +912,8 @@ function findBestPaymentAccount(normalized: string, accounts: LuzFinancialAccoun
       }
 
       if (accountName && normalized.includes(accountName)) score += 40;
+      if (normalized.includes('vicky') && (accountName.includes('vicky') || accountName.includes('victoria'))) score += 35;
+      if (!normalized.includes('vicky') && (accountName.includes('agustin') || accountName.includes('agustín'))) score += 8;
       for (const part of accountName.split(/\s+/)) {
         if (part.length > 3 && normalized.includes(part)) score += 5;
       }
@@ -903,6 +973,8 @@ function findBestNonCardAccount(normalized: string, accounts: LuzFinancialAccoun
       if (normalized.includes('efectivo') && accountType.includes('cash')) score += 90;
       if (normalized.includes('efectivo') && accountName.includes('agustin')) score += 30;
       if (normalized.includes('mercado pago') && accountName.includes('mercado')) score += 45;
+      if (normalized.includes('vicky') && (accountName.includes('vicky') || accountName.includes('victoria'))) score += 35;
+      if (!normalized.includes('vicky') && (accountName.includes('agustin') || accountName.includes('agustín'))) score += 8;
       if (accountType.includes('bank')) score += 8;
       if (accountName.includes('agustin')) score += 5;
 
