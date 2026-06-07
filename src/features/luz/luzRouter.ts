@@ -1,6 +1,7 @@
 import { format, subDays } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
+import type { FinanceLearningMapping } from '../finance/finance.learning';
 import type { FinanceBeneficiaryType, FinanceScope, FinanceVisibility, NeutralType, TransactionKind } from '../finance/finance.types';
 import { inferTravelContext } from '../travel/travelContext';
 import type { WishlistHorizon, WishlistItemType } from '../wishlist/wishlist.types';
@@ -47,6 +48,7 @@ export interface LuzFinanceDraft {
   beneficiaryLabel?: string;
   scope?: FinanceScope;
   visibility?: FinanceVisibility;
+  userEdited?: boolean;
   needsReview: boolean;
 }
 
@@ -164,12 +166,17 @@ const REFLECTIVE_JOURNAL_WORDS = [
   'aprendi',
 ];
 
-export function routeLuzMessage(rawMessage: string, habits: HabitRecord[] = [], accounts: LuzFinancialAccountOption[] = []): LuzRouteResult {
+export function routeLuzMessage(
+  rawMessage: string,
+  habits: HabitRecord[] = [],
+  accounts: LuzFinancialAccountOption[] = [],
+  financeMappings: FinanceLearningMapping[] = [],
+): LuzRouteResult {
   const message = rawMessage.trim();
   const normalized = normalize(message);
   const actions: LuzAction[] = [];
 
-  const financeActions = parseFinanceActions(message, normalized, accounts);
+  const financeActions = parseFinanceActions(message, normalized, accounts, financeMappings);
   actions.push(...financeActions);
 
   const wishlist = parseWishlistAction(message, normalized);
@@ -259,7 +266,12 @@ function parseWishlistAction(message: string, normalized: string): LuzAction | n
   };
 }
 
-function parseFinanceActions(message: string, normalized: string, accounts: LuzFinancialAccountOption[]): LuzAction[] {
+function parseFinanceActions(
+  message: string,
+  normalized: string,
+  accounts: LuzFinancialAccountOption[],
+  financeMappings: FinanceLearningMapping[] = [],
+): LuzAction[] {
   const moneyMentions = parseMoneyMentions(message);
   const isFuturePurchaseIntent = includesAny(normalized, WISHLIST_INTENT_WORDS) &&
     !includesAny(normalized, ['gaste', 'gasto', 'pague', 'pago', 'compre', 'costo', 'salio', 'transferi', 'cobre', 'ingreso', 'me pagaron', 'me depositaron']);
@@ -279,7 +291,7 @@ function parseFinanceActions(message: string, normalized: string, accounts: LuzF
   return moneyMentions.map((mention, index) => {
     const context = getMoneyMentionContext(message, mention.index);
     const normalizedContext = normalize(context);
-    const classification = classifyFinanceText(context || message);
+    const classification = classifyFinanceText(context || message, financeMappings);
     const travel = inferTravelContext(context || message);
     const familyContext = inferFamilyContext(normalizedContext || normalized);
     const neutralType = classification.suggestion.neutralType;
