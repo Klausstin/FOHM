@@ -1030,6 +1030,45 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const linkPendingDuplicateToExisting = async (pt: PendingTransaction) => {
+    if (!pt.duplicateOfId) return;
+
+    try {
+      const existing = finances.find(finance => finance.id === pt.duplicateOfId);
+      const linkedTags = Array.from(new Set([
+        ...(Array.isArray(existing?.tags) ? existing.tags : []),
+        'conciliado-pdf',
+        pt.importSource || 'pdf',
+      ].filter(Boolean)));
+      const existingNote = existing?.note || '';
+      const reconciliationNote = `Conciliado con ${pt.fileName || pt.importSource || 'PDF'}: ${pt.originalDescription || pt.description}`;
+
+      await updateFinancialTransaction(pt.duplicateOfId, {
+        tags: linkedTags,
+        note: existingNote.includes(reconciliationNote)
+          ? existingNote
+          : [existingNote, reconciliationNote].filter(Boolean).join('\n'),
+        merchantName: existing?.merchantName || pt.merchantName || '',
+        merchantKey: existing?.merchantKey || pt.merchantKey || '',
+        merchant: existing?.merchant || pt.merchantName || '',
+        importSource: existing?.importSource || pt.importSource || pt.fileName || '',
+        transactionFingerprint: existing?.transactionFingerprint || pt.transactionFingerprint || '',
+        statementFingerprint: existing?.statementFingerprint || pt.statementFingerprint || '',
+        originalAmount: existing?.originalAmount || pt.amount,
+        originalCurrency: existing?.originalCurrency || pt.currency || currency,
+        settlementAmount: existing?.settlementAmount || pt.amount,
+        settlementCurrency: existing?.settlementCurrency || pt.currency || currency,
+        duplicateReason: '',
+        needsReview: false,
+        isConfirmed: true,
+      } as any);
+
+      setPendingTransactions(prev => prev.filter(transaction => transaction.id !== pt.id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${pt.duplicateOfId}`);
+    }
+  };
+
   const updatePending = (id: string, updates: Partial<PendingTransaction>) => {
     setPendingTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
@@ -1057,6 +1096,15 @@ export default function FinanceTracker({ user }: { user: any }) {
   const discardPendingGroup = (group: PendingImportGroup) => {
     const ids = new Set(group.transactionIds);
     setPendingTransactions(prev => prev.filter(transaction => !ids.has(transaction.id)));
+  };
+
+  const linkPendingDuplicateGroup = async (group: PendingImportGroup) => {
+    const ids = new Set(group.transactionIds);
+    const groupTransactions = pendingTransactions.filter(transaction => ids.has(transaction.id) && transaction.duplicateOfId);
+
+    for (const transaction of groupTransactions) {
+      await linkPendingDuplicateToExisting(transaction);
+    }
   };
 
   const confirmPendingGroup = async (group: PendingImportGroup, forceDuplicates = false) => {
@@ -1975,6 +2023,7 @@ export default function FinanceTracker({ user }: { user: any }) {
               onApplyAccounts={applyAccountToPendingGroup}
               onConfirmGroup={confirmPendingGroup}
               onDiscardGroup={discardPendingGroup}
+              onLinkGroup={linkPendingDuplicateGroup}
             />
 
             <div className="grid grid-cols-1 gap-4">
@@ -2134,6 +2183,15 @@ export default function FinanceTracker({ user }: { user: any }) {
                         >
                           Es el mismo
                         </button>
+                        {pt.duplicateOfId && (
+                          <button
+                            type="button"
+                            onClick={() => linkPendingDuplicateToExisting(pt)}
+                            className="rounded-xl bg-neutral-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                          >
+                            Vincular
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => confirmTransaction({ ...pt, duplicateReason: '' })}
@@ -3186,12 +3244,14 @@ function PendingImportGroupsPanel({
   onApplyAccounts,
   onConfirmGroup,
   onDiscardGroup,
+  onLinkGroup,
 }: {
   groups: PendingImportGroup[];
   accounts: any[];
   onApplyAccounts: (group: PendingImportGroup, accountId: string, toAccountId?: string) => void;
   onConfirmGroup: (group: PendingImportGroup, forceDuplicates?: boolean) => void;
   onDiscardGroup: (group: PendingImportGroup) => void;
+  onLinkGroup: (group: PendingImportGroup) => void;
 }) {
   const [drafts, setDrafts] = useState<Record<string, { accountId: string; toAccountId: string }>>({});
   if (groups.length === 0) return null;
@@ -3255,6 +3315,15 @@ function PendingImportGroupsPanel({
                     >
                       Descartar grupo
                     </button>
+                    {group.transactionIds.length > 0 && group.sample.duplicateOfId && (
+                      <button
+                        type="button"
+                        onClick={() => onLinkGroup(group)}
+                        className="rounded-xl bg-neutral-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                      >
+                        Vincular grupo
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onConfirmGroup(group, true)}
