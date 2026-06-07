@@ -642,6 +642,70 @@ function legacyScope(finance: any) {
   return finance.scope || 'familia';
 }
 
+interface ParsedFinanceTrace {
+  originalConcept?: string;
+  transferDetail?: string;
+  counterpartyName?: string;
+  counterpartyAlias?: string;
+  counterpartyAccount?: string;
+  importedFile?: string;
+  reconciliations: string[];
+  otherLines: string[];
+}
+
+function parseFinanceTraceNote(note?: string): ParsedFinanceTrace {
+  const trace: ParsedFinanceTrace = {
+    reconciliations: [],
+    otherLines: [],
+  };
+
+  String(note || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .forEach(line => {
+      const [rawLabel, ...rest] = line.split(':');
+      const label = rawLabel.trim().toLowerCase();
+      const value = rest.join(':').trim();
+
+      if (!value) {
+        trace.otherLines.push(line);
+        return;
+      }
+
+      if (label === 'concepto original') trace.originalConcept = value;
+      else if (label === 'detalle transferencia') trace.transferDetail = value;
+      else if (label === 'destinatario') trace.counterpartyName = value;
+      else if (label === 'alias') trace.counterpartyAlias = value;
+      else if (label === 'cbu/cvu') trace.counterpartyAccount = value;
+      else if (label === 'archivo importado') trace.importedFile = value;
+      else if (label.startsWith('conciliado con')) trace.reconciliations.push(line);
+      else trace.otherLines.push(line);
+    });
+
+  return trace;
+}
+
+function hasFinanceTrace(trace: ParsedFinanceTrace, finance: any) {
+  return Boolean(
+    trace.originalConcept ||
+    trace.transferDetail ||
+    trace.counterpartyName ||
+    trace.counterpartyAlias ||
+    trace.counterpartyAccount ||
+    trace.importedFile ||
+    trace.reconciliations.length ||
+    trace.otherLines.length ||
+    finance.importSource ||
+    finance.merchantName ||
+    finance.merchant ||
+    finance.duplicateOfId ||
+    finance.duplicateReason ||
+    finance.transactionFingerprint ||
+    finance.statementFingerprint
+  );
+}
+
 interface PendingTransaction {
   id: string;
   amount: number;
@@ -2998,7 +3062,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const generator = uniqueHouseholdMembers.find(m => m.uid === f.generatedBy);
                 const assignee = f.assignedTo === 'Ambos' ? 'Ambos' : uniqueHouseholdMembers.find(m => m.uid === f.assignedTo);
                 const sourceAccount = userAccounts.find(account => account.id === (f.sourceAccountId || f.accountId));
+                const destinationAccount = userAccounts.find(account => account.id === f.toAccountId);
                 const beneficiary = f.beneficiaryLabel || legacyBeneficiaryLabel(f);
+                const trace = parseFinanceTraceNote(f.note);
+                const shouldShowTrace = hasFinanceTrace(trace, f);
+                const merchantLabel = f.merchantName || f.merchant;
 
                 return (
                   <motion.div
@@ -3194,6 +3262,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                                     Salio de {sourceAccount.name}
                                   </span>
                                 )}
+                                {destinationAccount && (
+                                  <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-100">
+                                    A {destinationAccount.name}
+                                  </span>
+                                )}
                                 {beneficiary && (
                                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
                                     Para {beneficiary}
@@ -3208,6 +3281,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                               <p className="text-xs text-neutral-400 font-medium truncate max-w-[200px]">
                                 {f.description || f.note || 'Sin descripcion'}
                               </p>
+                              {merchantLabel && (
+                                <p className="mt-0.5 text-[10px] font-black uppercase tracking-wider text-neutral-300">
+                                  Comercio: {merchantLabel}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
@@ -3253,6 +3331,47 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </div>
                           </div>
                         </div>
+                        {shouldShowTrace && (
+                          <div className="rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Rastro</span>
+                              {f.importSource && (
+                                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-neutral-600 border border-neutral-100">
+                                  {f.importSource}
+                                </span>
+                              )}
+                              {trace.importedFile && (
+                                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-neutral-600 border border-neutral-100">
+                                  {trace.importedFile}
+                                </span>
+                              )}
+                              {trace.reconciliations.length > 0 && (
+                                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 border border-emerald-100">
+                                  Conciliado
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                              <PendingMeta label="Concepto original" value={trace.originalConcept || f.originalDescription} />
+                              <PendingMeta label="Detalle" value={trace.transferDetail} />
+                              <PendingMeta label="Destinatario" value={trace.counterpartyName} />
+                              <PendingMeta label="Alias" value={trace.counterpartyAlias} />
+                              <PendingMeta label="CBU/CVU" value={trace.counterpartyAccount} />
+                              <PendingMeta label="Comercio" value={merchantLabel} />
+                              <PendingMeta label="Origen" value={sourceAccount?.name} />
+                              <PendingMeta label="Destino" value={destinationAccount?.name} />
+                            </div>
+                            {(trace.reconciliations.length > 0 || trace.otherLines.length > 0 || f.duplicateReason) && (
+                              <div className="mt-3 space-y-1 border-t border-neutral-200 pt-3">
+                                {[...trace.reconciliations, ...trace.otherLines, f.duplicateReason].filter(Boolean).slice(0, 3).map((line, index) => (
+                                  <p key={`${f.id}-trace-${index}`} className="text-xs font-semibold leading-5 text-neutral-500">
+                                    {line}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-4 pt-2 border-t border-neutral-50">
                           {(f.source || f.confidence || f.estimatedReason) && (
                             <div className="flex items-center gap-1.5">
