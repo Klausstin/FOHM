@@ -71,21 +71,40 @@ function buildPdfPageText(items: any[]) {
     .join('\n');
 }
 
+interface DuplicateMatch {
+  reason: string;
+  duplicateOfId?: string;
+}
+
 function findLikelyDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
+  return findLikelyDuplicateMatch(candidate, existingTransactions)?.reason || '';
+}
+
+function findLikelyDuplicateMatch(candidate: Partial<PendingTransaction>, existingTransactions: any[]): DuplicateMatch | null {
   if (candidate.statementFingerprint) {
     const sameStatement = existingTransactions.find(transaction => transaction.statementFingerprint === candidate.statementFingerprint);
-    if (sameStatement) return 'Este resumen parece ya importado.';
+    if (sameStatement) {
+      return {
+        reason: 'Este resumen parece ya importado.',
+        duplicateOfId: sameStatement.id,
+      };
+    }
   }
 
   if (candidate.transactionFingerprint) {
     const sameFingerprint = existingTransactions.find(transaction => transaction.transactionFingerprint === candidate.transactionFingerprint);
-    if (sameFingerprint) return 'Ya existe un movimiento identico.';
+    if (sameFingerprint) {
+      return {
+        reason: 'Ya existe un movimiento identico.',
+        duplicateOfId: sameFingerprint.id,
+      };
+    }
   }
 
   const candidateDate = toDayKey(candidate.date);
   const candidateAmount = Number(candidate.amount || 0);
   const candidateText = normalizeDuplicateText(candidate.description || '');
-  if (!candidateDate || !candidateAmount || !candidateText) return '';
+  if (!candidateDate || !candidateAmount || !candidateText) return null;
 
   const possibleDuplicate = existingTransactions.find(transaction => {
     const sameDay = toDayKey(transaction.date) === candidateDate;
@@ -94,12 +113,21 @@ function findLikelyDuplicateReason(candidate: Partial<PendingTransaction>, exist
     return sameDay && sameAmount && sameText;
   });
 
-  if (possibleDuplicate) return 'Coincide en fecha, importe y concepto con un movimiento existente.';
+  if (possibleDuplicate) {
+    return {
+      reason: 'Coincide en fecha, importe y concepto con un movimiento existente.',
+      duplicateOfId: possibleDuplicate.id,
+    };
+  }
 
-  return findSemanticDuplicateReason(candidate, existingTransactions);
+  return findSemanticDuplicateMatch(candidate, existingTransactions);
 }
 
 function findSemanticDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
+  return findSemanticDuplicateMatch(candidate, existingTransactions)?.reason || '';
+}
+
+function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction>, existingTransactions: any[]): DuplicateMatch | null {
   const candidateDate = getDateFromValue(candidate.date);
   const candidateAmount = Number(candidate.amount || 0);
   const candidateText = normalizeDuplicateText([
@@ -110,7 +138,7 @@ function findSemanticDuplicateReason(candidate: Partial<PendingTransaction>, exi
     candidate.subCategory,
   ].filter(Boolean).join(' '));
 
-  if (!candidateDate || !candidateAmount || !candidateText) return '';
+  if (!candidateDate || !candidateAmount || !candidateText) return null;
 
   const semanticDuplicate = existingTransactions.find(transaction => {
     if (transaction.status === 'ignored') return false;
@@ -129,19 +157,43 @@ function findSemanticDuplicateReason(candidate: Partial<PendingTransaction>, exi
         transaction.description,
         transaction.note,
         transaction.merchantName,
+        transaction.merchant,
+        ...(Array.isArray(transaction.tags) ? transaction.tags : []),
         transaction.category,
         transaction.subCategory,
       ].filter(Boolean).join(' ')),
     );
     const amountMatch = areAmountsCompatibleAcrossCurrencies(candidate, transaction);
+    const categoryMatch = normalizeDuplicateText(candidate.category || '') === normalizeDuplicateText(transaction.category || '') ||
+      normalizeDuplicateText(candidate.subCategory || '') === normalizeDuplicateText(transaction.subCategory || '');
     const manualCandidate = transaction.source === 'manual' || transaction.generatedBy;
+    const meaningfulTextMatch = textScore >= 0.12;
+    const highValueForeignCardMatch = amountMatch &&
+      ['USD', 'EUR'].some(currency => currency === String(candidate.currency || '').toUpperCase() || currency === String(transaction.currency || '').toUpperCase()) &&
+      Math.max(candidateAmount, Number(transaction.amount || 0), Number(transaction.originalAmount || 0)) >= 80;
 
-    return Boolean(manualCandidate && sameAccount && amountMatch && textScore >= 0.16);
+    return Boolean(manualCandidate && sameAccount && amountMatch && (meaningfulTextMatch || (categoryMatch && highValueForeignCardMatch)));
   });
 
-  if (!semanticDuplicate) return '';
+  if (!semanticDuplicate) return null;
 
-  return `Se parece a un gasto que ya cargaste con Luz: "${semanticDuplicate.description || semanticDuplicate.category || 'movimiento manual'}". Revisalo antes de duplicarlo.`;
+  return {
+    reason: buildSemanticDuplicateReason(semanticDuplicate, candidate),
+    duplicateOfId: semanticDuplicate.id,
+  };
+}
+
+function buildSemanticDuplicateReason(existing: any, candidate: Partial<PendingTransaction>) {
+  const existingDate = getDateFromValue(existing.date);
+  const existingAmount = Number(existing.originalAmount || existing.amount || 0);
+  const existingCurrency = String(existing.originalCurrency || existing.currency || '').toUpperCase();
+  const candidateAmount = Number(candidate.amount || 0);
+  const candidateCurrency = String(candidate.currency || '').toUpperCase();
+  const amountDetail = existingCurrency && candidateCurrency && existingCurrency !== candidateCurrency
+    ? ` (${existingAmount.toLocaleString()} ${existingCurrency} vs ${candidateAmount.toLocaleString()} ${candidateCurrency})`
+    : '';
+  const dateDetail = existingDate ? ` del ${format(existingDate, 'dd/MM/yyyy')}` : '';
+  return `Se parece a un gasto que ya cargaste con Luz${dateDetail}: "${existing.description || existing.category || 'movimiento manual'}"${amountDetail}. Revisalo antes de duplicarlo.`;
 }
 
 function getDateFromValue(value: any) {
@@ -166,20 +218,33 @@ function getTextOverlapScore(a: string, b: string) {
 
 function areAmountsCompatibleAcrossCurrencies(candidate: Partial<PendingTransaction>, existing: any) {
   const candidateAmount = Math.abs(Number(candidate.amount || 0));
-  const existingAmount = Math.abs(Number(existing.amount || 0));
+  const existingAmounts = [
+    Math.abs(Number(existing.amount || 0)),
+    Math.abs(Number(existing.originalAmount || 0)),
+    Math.abs(Number(existing.settlementAmount || 0)),
+  ].filter(amount => Number.isFinite(amount) && amount > 0);
+  const existingAmount = existingAmounts[0] || 0;
   if (!candidateAmount || !existingAmount) return false;
 
   const candidateCurrency = String(candidate.currency || '').toUpperCase();
-  const existingCurrency = String(existing.currency || '').toUpperCase();
+  const existingCurrencies = [
+    String(existing.currency || '').toUpperCase(),
+    String(existing.originalCurrency || '').toUpperCase(),
+    String(existing.settlementCurrency || '').toUpperCase(),
+  ].filter(Boolean);
 
-  if (candidateCurrency && existingCurrency && candidateCurrency === existingCurrency) {
-    return Math.abs(candidateAmount - existingAmount) / Math.max(candidateAmount, existingAmount) <= 0.08;
-  }
+  for (const amount of existingAmounts) {
+    for (const existingCurrency of existingCurrencies) {
+      if (candidateCurrency && existingCurrency && candidateCurrency === existingCurrency) {
+        if (Math.abs(candidateAmount - amount) / Math.max(candidateAmount, amount) <= 0.08) return true;
+      }
 
-  const foreignCardPair = new Set([candidateCurrency, existingCurrency]);
-  if (foreignCardPair.has('EUR') && foreignCardPair.has('USD')) {
-    const ratio = candidateAmount / existingAmount;
-    return ratio >= 0.65 && ratio <= 1.45;
+      const foreignCardPair = new Set([candidateCurrency, existingCurrency]);
+      if (foreignCardPair.has('EUR') && foreignCardPair.has('USD')) {
+        const ratio = candidateAmount / amount;
+        if (ratio >= 0.65 && ratio <= 1.45) return true;
+      }
+    }
   }
 
   return false;
@@ -803,16 +868,17 @@ export default function FinanceTracker({ user }: { user: any }) {
             const mapped = parsedStatement.transactions.map((transaction: any) => {
               const learnedTransaction = applyLearnedFinanceMapping(transaction, userMappings);
               const enrichedTransaction = enrichImportedTransactionWithAccounts(learnedTransaction, userAccounts);
-              const duplicateReason = duplicateStatement
-                ? 'Este resumen parece ya importado.'
-                : findLikelyDuplicateReason(enrichedTransaction, finances);
+              const duplicateMatch = duplicateStatement
+                ? { reason: 'Este resumen parece ya importado.', duplicateOfId: undefined }
+                : findLikelyDuplicateMatch(enrichedTransaction, finances);
               return {
                 ...enrichedTransaction,
                 id: Math.random().toString(36).substr(2, 9),
                 originalDescription: enrichedTransaction.description,
                 fileName: file.name,
-                duplicateReason,
-                needsReview: enrichedTransaction.needsReview || duplicateStatement || Boolean(duplicateReason),
+                duplicateReason: duplicateMatch?.reason || '',
+                duplicateOfId: duplicateMatch?.duplicateOfId || '',
+                needsReview: enrichedTransaction.needsReview || duplicateStatement || Boolean(duplicateMatch?.reason),
               };
             });
             resolve(mapped);
@@ -828,15 +894,16 @@ export default function FinanceTracker({ user }: { user: any }) {
           const mapped = transactions.map((t: any) => {
             const learnedTransaction = applyLearnedFinanceMapping(t, userMappings);
             const enrichedTransaction = enrichImportedTransactionWithAccounts(learnedTransaction, userAccounts);
-            const duplicateReason = findLikelyDuplicateReason(enrichedTransaction, finances);
+            const duplicateMatch = findLikelyDuplicateMatch(enrichedTransaction, finances);
             return {
               ...enrichedTransaction,
               id: Math.random().toString(36).substr(2, 9),
               originalDescription: enrichedTransaction.description,
               fileName: file.name,
               confidence: enrichedTransaction.confidence || 0,
-              duplicateReason,
-              needsReview: enrichedTransaction.needsReview || Boolean(duplicateReason),
+              duplicateReason: duplicateMatch?.reason || '',
+              duplicateOfId: duplicateMatch?.duplicateOfId || '',
+              needsReview: enrichedTransaction.needsReview || Boolean(duplicateMatch?.reason),
             };
           });
           resolve(mapped);
