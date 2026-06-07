@@ -662,6 +662,10 @@ interface PendingTransaction {
   needsReview: boolean;
   merchantName?: string;
   merchantKey?: string;
+  counterpartyName?: string;
+  counterpartyAccount?: string;
+  counterpartyAlias?: string;
+  transferDetail?: string;
   importSource?: string;
   transactionFingerprint?: string;
   statementFingerprint?: string;
@@ -1112,7 +1116,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         amount: pt.amount,
         currency: pt.currency || currency,
         description: pt.description,
-        note: '',
+        note: buildPendingTransactionNote(pt),
         category: pt.category,
         subCategory: pt.subCategory || '',
         subSubCategory: pt.subSubCategory || '',
@@ -1183,6 +1187,19 @@ export default function FinanceTracker({ user }: { user: any }) {
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'finances');
     }
+  };
+
+  const buildPendingTransactionNote = (pt: PendingTransaction) => {
+    const lines = [
+      pt.originalDescription ? `Concepto original: ${pt.originalDescription}` : '',
+      pt.transferDetail && pt.transferDetail !== pt.originalDescription ? `Detalle transferencia: ${pt.transferDetail}` : '',
+      pt.counterpartyName ? `Destinatario: ${pt.counterpartyName}` : '',
+      pt.counterpartyAlias ? `Alias: ${pt.counterpartyAlias}` : '',
+      pt.counterpartyAccount ? `CBU/CVU: ${pt.counterpartyAccount}` : '',
+      pt.fileName ? `Archivo importado: ${pt.fileName}` : '',
+    ].filter(Boolean);
+
+    return lines.join('\n');
   };
 
   const linkPendingDuplicateToExisting = async (pt: PendingTransaction) => {
@@ -2217,6 +2234,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                     <p className="mt-3 text-xs font-bold text-neutral-500">
                       Concepto original del PDF: <span className="text-neutral-900">{pt.originalDescription || pt.description}</span>
                     </p>
+                    {pt.type === 'transfer' && (
+                      <TransferTraceCard transaction={pt} />
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex-1 min-w-[200px] space-y-1">
@@ -3644,6 +3664,32 @@ function PendingMeta({ label, value }: { label: string; value?: string | number 
     <div className="min-w-0">
       <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
       <p className="mt-1 truncate text-xs font-black text-neutral-800">{value || '-'}</p>
+    </div>
+  );
+}
+
+function TransferTraceCard({ transaction }: { transaction: PendingTransaction }) {
+  const hasTrace = transaction.counterpartyName || transaction.counterpartyAlias || transaction.counterpartyAccount || transaction.transferDetail;
+  if (!hasTrace) {
+    return (
+      <div className="mt-3 rounded-2xl border border-neutral-200 bg-white p-3">
+        <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Rastro de transferencia</p>
+        <p className="mt-1 text-xs font-semibold leading-5 text-neutral-500">
+          El PDF no trajo destinatario, alias o CBU/CVU en una forma clara. Conservamos el concepto original para rastrearlo.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-neutral-200 bg-white p-3">
+      <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Rastro de transferencia</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <PendingMeta label="Destinatario" value={transaction.counterpartyName} />
+        <PendingMeta label="Alias" value={transaction.counterpartyAlias} />
+        <PendingMeta label="CBU/CVU" value={transaction.counterpartyAccount} />
+        <PendingMeta label="Detalle" value={transaction.transferDetail} />
+      </div>
     </div>
   );
 }

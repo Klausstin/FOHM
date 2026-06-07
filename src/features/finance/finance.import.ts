@@ -15,6 +15,10 @@ export interface ImportedFinanceTransaction {
   needsReview: boolean;
   merchantName?: string;
   merchantKey?: string;
+  counterpartyName?: string;
+  counterpartyAccount?: string;
+  counterpartyAlias?: string;
+  transferDetail?: string;
   importSource?: string;
   balanceDelta?: number;
   transactionFingerprint?: string;
@@ -283,6 +287,7 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
       const description = cleanMovementDescription(rawDescription);
       const suggestion = suggestMovementClassification(description, amount);
       const merchant = suggestMerchant(description);
+      const transferDetails = extractTransferDetails(description, suggestion.type);
 
       return {
         amount: Math.abs(amount),
@@ -296,6 +301,7 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
         needsReview: suggestion.needsReview || (suggestion.canUseMerchantCategory && merchant.confidence < 0.8),
         merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : '',
         merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : '',
+        ...transferDetails,
         importSource: 'bbva_caja_ahorro_ars',
         balanceDelta: amount,
       };
@@ -388,6 +394,51 @@ function normalizeWhitespace(text: string) {
 
 function cleanMovementDescription(description: string) {
   return description.replace(/\s+/g, ' ').trim();
+}
+
+function extractTransferDetails(description: string, type: ImportedFinanceTransaction['type']) {
+  if (type !== 'transfer') return {};
+
+  const counterpartyAccount = extractFirst(description, /\b(CBU|CVU)\s*[:\-]?\s*([0-9]{18,22})\b/i, 2);
+  const counterpartyAlias = extractFirst(description, /\bALIAS\s*[:\-]?\s*([A-Z0-9._-]{4,40})\b/i, 1);
+  const counterpartyName = extractCounterpartyName(description);
+
+  return {
+    counterpartyName,
+    counterpartyAccount,
+    counterpartyAlias,
+    transferDetail: description,
+  };
+}
+
+function extractFirst(value: string, pattern: RegExp, groupIndex = 1) {
+  const match = pattern.exec(value);
+  return match?.[groupIndex]?.trim();
+}
+
+function extractCounterpartyName(description: string) {
+  const patterns = [
+    /\b(?:DESTINATARIO|BENEFICIARIO|TITULAR|PARA)\s*[:\-]?\s+(.+?)(?:\s+\b(?:CBU|CVU|ALIAS|CUIT|CUIL)\b|$)/i,
+    /\bTRANSF(?:ERENCIA)?\s+(?:A|PARA)\s+(.+?)(?:\s+\b(?:CBU|CVU|ALIAS|CUIT|CUIL)\b|$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const rawName = extractFirst(description, pattern);
+    const name = cleanCounterpartyName(rawName || '');
+    if (name) return name;
+  }
+
+  return undefined;
+}
+
+function cleanCounterpartyName(value: string) {
+  const cleaned = value
+    .replace(/\b\d{5,}\b/g, ' ')
+    .replace(/\b(?:TRANSFERENCIA|TRANSF|CBU|CVU|ALIAS|CUIT|CUIL|NRO|NUMERO|COMPROBANTE)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned.length < 4 || cleaned.length > 80) return undefined;
+  return cleaned;
 }
 
 function stripPdfLineNoise(line: string) {
