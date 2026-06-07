@@ -464,6 +464,14 @@ function buildFinanceCategoryGroups(finances: any[]) {
         originalDescription: first.originalDescription || first.description || '',
         merchantName: first.merchantName || '',
         merchantKey: first.merchantKey || '',
+        accountId: first.accountId || '',
+        sourceAccountId: first.sourceAccountId || first.accountId || '',
+        toAccountId: first.toAccountId || '',
+        paymentType: first.paymentType || '',
+        beneficiaryType: first.beneficiaryType || '',
+        beneficiaryLabel: first.beneficiaryLabel || legacyBeneficiaryLabel(first),
+        scope: first.scope || legacyScope(first),
+        visibility: first.visibility || 'household_shared',
         transactionIds: items.map(item => item.id).filter(Boolean),
       };
     })
@@ -1785,8 +1793,32 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
-  const handleApplyCategoryToGroup = async (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => {
-    if (!draft.category || !group.transactionIds?.length) return;
+  const handleApplyCategoryToGroup = async (group: any, draft: {
+    category: string;
+    subCategory: string;
+    subSubCategory: string;
+    isFixed: boolean;
+    accountId: string;
+    toAccountId: string;
+    paymentType: string;
+    beneficiaryType: string;
+    beneficiaryLabel: string;
+    scope: string;
+    visibility: string;
+  }) => {
+    if (!group.transactionIds?.length) return;
+    const hasChanges = Boolean(
+      draft.category ||
+      draft.subCategory ||
+      draft.subSubCategory ||
+      draft.accountId ||
+      draft.toAccountId ||
+      draft.paymentType ||
+      draft.beneficiaryLabel ||
+      draft.scope ||
+      draft.isFixed,
+    );
+    if (!hasChanges) return;
 
     try {
       await upsertFinanceLearningMapping({
@@ -1794,25 +1826,47 @@ export default function FinanceTracker({ user }: { user: any }) {
         householdId: user.householdId,
         originalDescription: group.originalDescription || group.label,
         mappedDescription: group.label,
-        category: draft.category,
+        category: draft.category || group.currentCategory || '',
         subCategory: draft.subCategory || '',
         subSubCategory: draft.subSubCategory || '',
         kind: 'expense',
         isFixed: draft.isFixed,
+        accountId: draft.accountId || '',
+        sourceAccountId: draft.accountId || '',
+        toAccountId: draft.toAccountId || '',
+        paymentType: draft.paymentType || '',
+        beneficiaryType: draft.beneficiaryType || '',
+        beneficiaryLabel: draft.beneficiaryLabel || '',
+        scope: draft.scope || '',
+        visibility: draft.visibility || '',
         merchantName: group.merchantName || '',
         merchantKey: group.merchantKey || '',
       }, userMappings);
 
       await Promise.all(
-        group.transactionIds.map((transactionId: string) =>
-          updateFinancialTransaction(transactionId, {
-            category: draft.category,
-            subCategory: draft.subCategory || '',
-            subSubCategory: draft.subSubCategory || '',
-            isFixed: draft.isFixed,
+        group.transactionIds.map((transactionId: string) => {
+          const patch: any = {
             needsReview: false,
-          } as any),
-        ),
+          };
+          if (draft.category) patch.category = draft.category;
+          if (draft.subCategory || draft.category) patch.subCategory = draft.subCategory || '';
+          if (draft.subSubCategory || draft.subCategory || draft.category) patch.subSubCategory = draft.subSubCategory || '';
+          if (draft.accountId) {
+            patch.accountId = draft.accountId;
+            patch.sourceAccountId = draft.accountId;
+          }
+          if (draft.toAccountId) patch.toAccountId = draft.toAccountId;
+          if (draft.paymentType) patch.paymentType = draft.paymentType;
+          if (draft.beneficiaryLabel) {
+            patch.beneficiaryType = draft.beneficiaryType || 'household';
+            patch.beneficiaryLabel = draft.beneficiaryLabel;
+          }
+          if (draft.scope) patch.scope = draft.scope;
+          if (draft.visibility) patch.visibility = draft.visibility;
+          if (draft.isFixed) patch.isFixed = true;
+
+          return updateFinancialTransaction(transactionId, patch);
+        }),
       );
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'finances');
@@ -1907,6 +1961,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       <CategoryLearningGroupsPanel
         groups={categoryLearningGroups}
         categories={userCategories}
+        accounts={userAccounts}
         onApply={handleApplyCategoryToGroup}
       />
 
@@ -4319,11 +4374,25 @@ function ProjectionRow({ label, value }: { label: string; value: number }) {
 function CategoryLearningGroupsPanel({
   groups,
   categories,
+  accounts,
   onApply,
 }: {
   groups: any[];
   categories: any[];
-  onApply: (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => void;
+  accounts: any[];
+  onApply: (group: any, draft: {
+    category: string;
+    subCategory: string;
+    subSubCategory: string;
+    isFixed: boolean;
+    accountId: string;
+    toAccountId: string;
+    paymentType: string;
+    beneficiaryType: string;
+    beneficiaryLabel: string;
+    scope: string;
+    visibility: string;
+  }) => void;
 }) {
   if (groups.length === 0) return null;
 
@@ -4348,6 +4417,7 @@ function CategoryLearningGroupsPanel({
             key={group.key}
             group={group}
             categories={categories}
+            accounts={accounts}
             onApply={onApply}
           />
         ))}
@@ -4359,19 +4429,51 @@ function CategoryLearningGroupsPanel({
 function CategoryLearningGroupCard({
   group,
   categories,
+  accounts,
   onApply,
 }: {
   group: any;
   categories: any[];
-  onApply: (group: any, draft: { category: string; subCategory: string; subSubCategory: string; isFixed: boolean }) => void;
+  accounts: any[];
+  onApply: (group: any, draft: {
+    category: string;
+    subCategory: string;
+    subSubCategory: string;
+    isFixed: boolean;
+    accountId: string;
+    toAccountId: string;
+    paymentType: string;
+    beneficiaryType: string;
+    beneficiaryLabel: string;
+    scope: string;
+    visibility: string;
+  }) => void;
 }) {
   const [draft, setDraft] = useState({
     category: '',
     subCategory: '',
     subSubCategory: '',
     isFixed: false,
+    accountId: '',
+    toAccountId: '',
+    paymentType: '',
+    beneficiaryType: '',
+    beneficiaryLabel: '',
+    scope: '',
+    visibility: '',
   });
   const selectedCategory = categories.find(category => category.name === draft.category);
+  const canApply = Boolean(
+    draft.category ||
+    draft.subCategory ||
+    draft.subSubCategory ||
+    draft.accountId ||
+    draft.toAccountId ||
+    draft.paymentType ||
+    draft.beneficiaryLabel ||
+    draft.scope ||
+    draft.isFixed,
+  );
 
   return (
     <article className="rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-4">
@@ -4384,6 +4486,13 @@ function CategoryLearningGroupCard({
           <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
             Actual: {group.currentCategory || 'Sin categoria'}
           </p>
+          <p className="mt-1 text-[10px] font-bold text-neutral-400">
+            {[
+              group.accountId ? `Cuenta: ${accounts.find(account => account.id === group.accountId)?.name || 'asignada'}` : '',
+              group.paymentType ? `Medio: ${group.paymentType}` : '',
+              group.beneficiaryLabel ? `Para: ${group.beneficiaryLabel}` : '',
+            ].filter(Boolean).join(' · ') || 'Sin contexto operativo claro'}
+          </p>
         </div>
         <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
           similares
@@ -4393,7 +4502,7 @@ function CategoryLearningGroupCard({
       <div className="mt-4 grid gap-2 md:grid-cols-3">
         <select
           value={draft.category}
-          onChange={(event) => setDraft({ category: event.target.value, subCategory: '', subSubCategory: '', isFixed: draft.isFixed })}
+          onChange={(event) => setDraft({ ...draft, category: event.target.value, subCategory: '', subSubCategory: '' })}
           className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
         >
           <option value="">Categoria</option>
@@ -4415,6 +4524,71 @@ function CategoryLearningGroupCard({
           })}
         </select>
 
+        <select
+          value={draft.accountId}
+          onChange={(event) => setDraft({ ...draft, accountId: event.target.value })}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Cuenta usada</option>
+          {accounts.map(account => (
+            <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+          ))}
+        </select>
+
+        <select
+          value={draft.paymentType}
+          onChange={(event) => setDraft({ ...draft, paymentType: event.target.value })}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Medio de pago</option>
+          {PAYMENT_TYPES.map(paymentType => (
+            <option key={paymentType} value={paymentType}>{paymentType}</option>
+          ))}
+        </select>
+
+        <select
+          value={draft.beneficiaryLabel}
+          onChange={(event) => {
+            const option = FINANCE_BENEFICIARIES.find(item => item.label === event.target.value);
+            setDraft({
+              ...draft,
+              beneficiaryLabel: option?.label || '',
+              beneficiaryType: option?.type || '',
+              scope: option?.scope || draft.scope,
+              visibility: option ? 'household_shared' : draft.visibility,
+            });
+          }}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Para</option>
+          {FINANCE_BENEFICIARIES.map(item => (
+            <option key={`${item.type}-${item.label}`} value={item.label}>{item.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={draft.scope}
+          onChange={(event) => setDraft({ ...draft, scope: event.target.value, visibility: event.target.value ? 'household_shared' : draft.visibility })}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Scope</option>
+          <option value="personal">Personal</option>
+          <option value="pareja">Pareja</option>
+          <option value="hogar">Hogar</option>
+          <option value="familia">Familia</option>
+        </select>
+
+        <select
+          value={draft.toAccountId}
+          onChange={(event) => setDraft({ ...draft, toAccountId: event.target.value })}
+          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+        >
+          <option value="">Cuenta destino</option>
+          {accounts.map(account => (
+            <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+          ))}
+        </select>
+
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -4429,7 +4603,7 @@ function CategoryLearningGroupCard({
         </label>
         <button
           type="button"
-          disabled={!draft.category}
+          disabled={!canApply}
           onClick={() => onApply(group, draft)}
           className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
         >
