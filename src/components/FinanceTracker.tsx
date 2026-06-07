@@ -351,6 +351,88 @@ function buildFinanceCategoryGroups(finances: any[]) {
     .slice(0, 6);
 }
 
+function buildPendingImportGroups(transactions: PendingTransaction[]): PendingImportGroup[] {
+  const groups = new Map<string, PendingTransaction[]>();
+
+  for (const transaction of transactions) {
+    const key = getPendingImportGroupKey(transaction);
+    groups.set(key, [...(groups.get(key) || []), transaction]);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, items]) => {
+      const first = items[0];
+      const duplicateCount = items.filter(item => item.duplicateReason).length;
+      const missingAccountCount = items.filter(pendingTransactionNeedsAccount).length;
+      const kind: PendingImportGroup['kind'] = duplicateCount === items.length
+        ? 'duplicate'
+        : missingAccountCount > 0
+          ? 'missing_account'
+          : 'mixed_review';
+      const totalAmount = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const title = kind === 'duplicate'
+        ? 'Posibles duplicados'
+        : kind === 'missing_account'
+          ? 'Falta cuenta'
+          : 'Revisar similares';
+      const detailParts = [
+        first.category,
+        first.subCategory,
+        first.merchantName,
+        first.fileName,
+      ].filter(Boolean);
+
+      return {
+        key,
+        kind,
+        title,
+        detail: detailParts.join(' / ') || first.description || first.originalDescription || 'Movimiento importado',
+        count: items.length,
+        totalAmount,
+        currency: first.currency || 'ARS',
+        category: first.category || '',
+        subCategory: first.subCategory || '',
+        type: first.type,
+        transactionIds: items.map(item => item.id),
+        sample: first,
+        canBulkConfirm: items.every(canConfirmPendingTransaction),
+      };
+    })
+    .filter(group => group.count > 1 || group.kind !== 'mixed_review')
+    .sort((a, b) => {
+      const priority = { duplicate: 0, missing_account: 1, mixed_review: 2 };
+      return priority[a.kind] - priority[b.kind] || b.count - a.count || b.totalAmount - a.totalAmount;
+    })
+    .slice(0, 8);
+}
+
+function getPendingImportGroupKey(transaction: PendingTransaction) {
+  if (transaction.duplicateReason) {
+    const statementKey = transaction.statementFingerprint ? shortFingerprint(transaction.statementFingerprint) : '';
+    return `duplicate:${statementKey || transaction.fileName || 'pdf'}:${transaction.category}:${transaction.subCategory || ''}`;
+  }
+
+  if (pendingTransactionNeedsAccount(transaction)) {
+    return [
+      'missing-account',
+      transaction.type,
+      transaction.currency || 'ARS',
+      transaction.importSource || transaction.fileName || 'pdf',
+      transaction.category || '',
+      transaction.subCategory || '',
+    ].join(':');
+  }
+
+  return [
+    'review',
+    transaction.type,
+    transaction.currency || 'ARS',
+    transaction.category || '',
+    transaction.subCategory || '',
+    transaction.merchantKey || normalizeDuplicateText(transaction.description || transaction.originalDescription || ''),
+  ].join(':');
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -385,6 +467,22 @@ interface PendingTransaction {
   statementFingerprint?: string;
   duplicateOfId?: string;
   duplicateReason?: string;
+}
+
+interface PendingImportGroup {
+  key: string;
+  kind: 'duplicate' | 'missing_account' | 'mixed_review';
+  title: string;
+  detail: string;
+  count: number;
+  totalAmount: number;
+  currency: string;
+  category: string;
+  subCategory?: string;
+  type: string;
+  transactionIds: string[];
+  sample: PendingTransaction;
+  canBulkConfirm: boolean;
 }
 
 export default function FinanceTracker({ user }: { user: any }) {
@@ -506,6 +604,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       fixedCount,
     };
   }, [pendingTransactions]);
+  const pendingImportGroups = useMemo(() => buildPendingImportGroups(pendingTransactions), [pendingTransactions]);
 
   useEffect(() => {
     const cachedInflation = getCachedArgentinaInflationSnapshot();
@@ -871,6 +970,36 @@ export default function FinanceTracker({ user }: { user: any }) {
   const confirmReadyPendingTransactions = async () => {
     const readyTransactions = pendingTransactions.filter(canConfirmPendingTransaction);
     for (const transaction of readyTransactions) {
+      await confirmTransaction(transaction);
+    }
+  };
+
+  const applyAccountToPendingGroup = (group: PendingImportGroup, accountId: string, toAccountId?: string) => {
+    if (!accountId) return;
+    const ids = new Set(group.transactionIds);
+    setPendingTransactions(prev => prev.map(transaction => {
+      if (!ids.has(transaction.id)) return transaction;
+      return {
+        ...transaction,
+        accountId,
+        toAccountId: transaction.type === 'transfer' ? (toAccountId || transaction.toAccountId || '') : transaction.toAccountId,
+      };
+    }));
+  };
+
+  const discardPendingGroup = (group: PendingImportGroup) => {
+    const ids = new Set(group.transactionIds);
+    setPendingTransactions(prev => prev.filter(transaction => !ids.has(transaction.id)));
+  };
+
+  const confirmPendingGroup = async (group: PendingImportGroup, forceDuplicates = false) => {
+    const ids = new Set(group.transactionIds);
+    const groupTransactions = pendingTransactions
+      .filter(transaction => ids.has(transaction.id))
+      .map(transaction => forceDuplicates ? { ...transaction, duplicateReason: '' } : transaction)
+      .filter(canConfirmPendingTransaction);
+
+    for (const transaction of groupTransactions) {
       await confirmTransaction(transaction);
     }
   };
@@ -1772,6 +1901,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </p>
               )}
             </div>
+
+            <PendingImportGroupsPanel
+              groups={pendingImportGroups}
+              accounts={userAccounts}
+              onApplyAccounts={applyAccountToPendingGroup}
+              onConfirmGroup={confirmPendingGroup}
+              onDiscardGroup={discardPendingGroup}
+            />
 
             <div className="grid grid-cols-1 gap-4">
               {(pendingTransactions || []).map((pt) => (
@@ -2973,6 +3110,153 @@ function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; v
       <p className="text-2xl font-black">{value}</p>
       <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
     </div>
+  );
+}
+
+function PendingImportGroupsPanel({
+  groups,
+  accounts,
+  onApplyAccounts,
+  onConfirmGroup,
+  onDiscardGroup,
+}: {
+  groups: PendingImportGroup[];
+  accounts: any[];
+  onApplyAccounts: (group: PendingImportGroup, accountId: string, toAccountId?: string) => void;
+  onConfirmGroup: (group: PendingImportGroup, forceDuplicates?: boolean) => void;
+  onDiscardGroup: (group: PendingImportGroup) => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, { accountId: string; toAccountId: string }>>({});
+  if (groups.length === 0) return null;
+
+  const updateDraft = (groupKey: string, patch: Partial<{ accountId: string; toAccountId: string }>) => {
+    setDrafts(prev => ({
+      ...prev,
+      [groupKey]: {
+        accountId: prev[groupKey]?.accountId || '',
+        toAccountId: prev[groupKey]?.toAccountId || '',
+        ...patch,
+      },
+    }));
+  };
+
+  return (
+    <section className="rounded-2xl border border-amber-100 bg-white/80 p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">Resolver por grupos</p>
+          <h3 className="mt-1 text-lg font-black text-neutral-950">Acciones rapidas sobre movimientos parecidos</h3>
+        </div>
+        <p className="max-w-xl text-xs font-semibold leading-5 text-amber-800">
+          Usalo para descartar duplicados o asignar una misma cuenta a varios movimientos. La revision individual queda abajo como respaldo.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+        {groups.map(group => {
+          const draft = drafts[group.key] || {
+            accountId: group.sample.accountId || '',
+            toAccountId: group.sample.toAccountId || '',
+          };
+          const requiresDestination = group.sample.type === 'transfer';
+          const canApplyAccounts = Boolean(draft.accountId && (!requiresDestination || draft.toAccountId));
+          const groupTone = group.kind === 'duplicate'
+            ? 'border-red-100 bg-red-50'
+            : group.kind === 'missing_account'
+              ? 'border-amber-100 bg-amber-50'
+              : 'border-neutral-100 bg-neutral-50';
+
+          return (
+            <article key={group.key} className={`rounded-2xl border p-4 ${groupTone}`}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-neutral-950">{group.title}</p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-neutral-600">{group.detail}</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                    <span>{group.count} movimiento(s)</span>
+                    <span>{group.totalAmount.toLocaleString()} {group.currency}</span>
+                    <span>{FINANCE_TYPES.find(item => item.id === group.type)?.label || group.type}</span>
+                  </div>
+                </div>
+
+                {group.kind === 'duplicate' ? (
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onDiscardGroup(group)}
+                      className="rounded-xl bg-red-700 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-red-800"
+                    >
+                      Descartar grupo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onConfirmGroup(group, true)}
+                      disabled={pendingTransactionNeedsAccount(group.sample)}
+                      className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:text-neutral-300"
+                    >
+                      Guardar igual
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {group.kind !== 'duplicate' && (
+                <div className="mt-4 grid gap-2 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                  <label className="space-y-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</span>
+                    <select
+                      value={draft.accountId}
+                      onChange={event => updateDraft(group.key, { accountId: event.target.value })}
+                      className="w-full rounded-xl border border-white bg-white px-3 py-2 text-xs font-black text-neutral-900 outline-none"
+                    >
+                      <option value="">Elegir cuenta</option>
+                      {accounts.map(account => (
+                        <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {requiresDestination ? (
+                    <label className="space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Cuenta destino</span>
+                      <select
+                        value={draft.toAccountId}
+                        onChange={event => updateDraft(group.key, { toAccountId: event.target.value })}
+                        className="w-full rounded-xl border border-white bg-white px-3 py-2 text-xs font-black text-neutral-900 outline-none"
+                      >
+                        <option value="">Elegir destino</option>
+                        {accounts.map(account => (
+                          <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : <div />}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onApplyAccounts(group, draft.accountId, draft.toAccountId)}
+                      disabled={!canApplyAccounts}
+                      className="rounded-xl bg-neutral-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+                    >
+                      Aplicar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onConfirmGroup(group)}
+                      disabled={!group.canBulkConfirm}
+                      className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-700 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300"
+                    >
+                      Guardar grupo
+                    </button>
+                  </div>
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
