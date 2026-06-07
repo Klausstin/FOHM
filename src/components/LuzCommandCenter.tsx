@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Brain, CheckCircle2, Gift, HelpCircle, Loader2, Mic, Send, Sparkles, Wallet, X } from 'lucide-react';
 import { applyTransactionToAccountBalances, createFinancialTransaction, updateFinancialTransaction } from '../features/finance/finance.service';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types';
+import { subscribeToFinanceLearningMappings, upsertFinanceLearningMapping, type FinanceLearningMapping } from '../features/finance/finance.learning';
 import { createGoal } from '../features/goals/goal.service';
 import { createHabit, createHabitLog } from '../features/habits/habit.service';
 import type { HabitRecord } from '../features/habits/habit.types';
@@ -27,17 +28,30 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
   const [isSaving, setIsSaving] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [rejectedActionIds, setRejectedActionIds] = useState<string[]>([]);
+  const [financeMappings, setFinanceMappings] = useState<FinanceLearningMapping[]>([]);
+
+  useEffect(() => {
+    const householdId = user.householdId || `personal-${user.uid}`;
+    return subscribeToFinanceLearningMappings(
+      householdId,
+      setFinanceMappings,
+      error => {
+        console.warn('No pude cargar la memoria financiera de Luz:', error);
+        setFinanceMappings([]);
+      },
+    );
+  }, [user.uid, user.householdId]);
 
   const preview = useMemo(() => {
     if (!message.trim()) return null;
-    return routeLuzMessage(message, habits, accounts);
-  }, [message, habits, accounts]);
+    return routeLuzMessage(message, habits, accounts, financeMappings);
+  }, [message, habits, accounts, financeMappings]);
 
   const handleSubmit = (event?: React.FormEvent) => {
     event?.preventDefault();
     if (!message.trim() || isSaving) return;
 
-    const nextDraft = routeLuzMessage(message, habits, accounts);
+    const nextDraft = routeLuzMessage(message, habits, accounts, financeMappings);
     setDraft(nextDraft);
     setRejectedActionIds([]);
     setStatus(nextDraft.summary);
@@ -60,7 +74,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         ...prev,
         actions: prev.actions.map(action => {
           if (action.id !== actionId || !action.finance) return action;
-          const nextFinance = { ...action.finance, ...financeUpdates };
+          const nextFinance = { ...action.finance, ...financeUpdates, userEdited: true };
           return {
             ...action,
             finance: nextFinance,
@@ -208,6 +222,21 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
+      if (action.finance.userEdited || action.confidence === 'high') {
+        await upsertFinanceLearningMapping({
+          uid: user.uid,
+          householdId: user.householdId || `personal-${user.uid}`,
+          originalDescription: submittedMessage,
+          mappedDescription: action.finance.description || submittedMessage,
+          category: action.finance.category,
+          subCategory: action.finance.subCategory || '',
+          subSubCategory: action.finance.subSubCategory || '',
+          kind: action.finance.type === 'transfer' ? 'neutral' : action.finance.type,
+          neutralType: action.finance.neutralType,
+          merchantName: '',
+          merchantKey: '',
+        }, financeMappings);
+      }
       if (!action.finance.needsReview) {
         const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
         if (transactionRef?.id) {
