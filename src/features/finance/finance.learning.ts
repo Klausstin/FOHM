@@ -9,7 +9,7 @@ export interface FinanceLearningMapping {
   householdId: string;
   originalDescription: string;
   mappedDescription: string;
-  category: string;
+  category?: string;
   subCategory?: string;
   subSubCategory?: string;
   kind?: TransactionKind;
@@ -47,7 +47,7 @@ export function subscribeToFinanceLearningMappings(
 export async function upsertFinanceLearningMapping(input: Omit<FinanceLearningMapping, 'learningKey' | 'lastUsedAt'>, existingMappings: FinanceLearningMapping[] = []) {
   const originalDescription = input.originalDescription.trim();
   const mappedDescription = input.mappedDescription.trim();
-  if (!originalDescription || !mappedDescription || !input.category) return;
+  if (!originalDescription || !mappedDescription) return;
 
   const learningKey = buildFinanceLearningKey(originalDescription || mappedDescription);
   const existingMapping = existingMappings.find(mapping => {
