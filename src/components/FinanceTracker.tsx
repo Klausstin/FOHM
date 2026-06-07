@@ -140,7 +140,8 @@ function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction>, exis
 
   if (!candidateDate || !candidateAmount || !candidateText) return null;
 
-  const semanticDuplicate = existingTransactions.find(transaction => {
+  const semanticDuplicate = existingTransactions
+    .map(transaction => {
     if (transaction.status === 'ignored') return false;
     if (transaction.statementFingerprint && transaction.statementFingerprint === candidate.statementFingerprint) return true;
 
@@ -150,7 +151,14 @@ function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction>, exis
     const daysApart = Math.abs((candidateDate.getTime() - existingDate.getTime()) / 86400000);
     if (daysApart > 95) return false;
 
-    const sameAccount = candidate.accountId && transaction.accountId && candidate.accountId === transaction.accountId;
+    const accountCompatible = areAccountsCompatibleForReconciliation(candidate, transaction);
+    const merchantMatch = Boolean(
+      candidate.merchantKey &&
+      (
+        transaction.merchantKey === candidate.merchantKey ||
+        normalizeDuplicateText(transaction.merchant || '').includes(normalizeDuplicateText(candidate.merchantKey))
+      ),
+    );
     const textScore = getTextOverlapScore(
       candidateText,
       normalizeDuplicateText([
@@ -166,14 +174,28 @@ function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction>, exis
     const amountMatch = areAmountsCompatibleAcrossCurrencies(candidate, transaction);
     const categoryMatch = normalizeDuplicateText(candidate.category || '') === normalizeDuplicateText(transaction.category || '') ||
       normalizeDuplicateText(candidate.subCategory || '') === normalizeDuplicateText(transaction.subCategory || '');
-    const manualCandidate = transaction.source === 'manual' || transaction.generatedBy;
+    const manualCandidate = transaction.source === 'manual' || transaction.source === 'catchup_estimate' || transaction.source === 'catchup_inferred';
     const meaningfulTextMatch = textScore >= 0.12;
     const highValueForeignCardMatch = amountMatch &&
       ['USD', 'EUR'].some(currency => currency === String(candidate.currency || '').toUpperCase() || currency === String(transaction.currency || '').toUpperCase()) &&
       Math.max(candidateAmount, Number(transaction.amount || 0), Number(transaction.originalAmount || 0)) >= 80;
 
-    return Boolean(manualCandidate && sameAccount && amountMatch && (meaningfulTextMatch || (categoryMatch && highValueForeignCardMatch)));
-  });
+    if (!manualCandidate || !accountCompatible || !amountMatch) return false;
+
+    let score = 0;
+    if (daysApart <= 45) score += 1;
+    if (merchantMatch) score += 3;
+    if (meaningfulTextMatch) score += 2;
+    if (categoryMatch) score += 1;
+    if (highValueForeignCardMatch) score += 2;
+
+    return {
+      transaction,
+      score,
+    };
+  })
+    .filter((item): item is { transaction: any; score: number } => Boolean(item) && typeof item !== 'boolean' && item.score >= 3)
+    .sort((a, b) => b.score - a.score)[0]?.transaction;
 
   if (!semanticDuplicate) return null;
 
@@ -181,6 +203,31 @@ function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction>, exis
     reason: buildSemanticDuplicateReason(semanticDuplicate, candidate),
     duplicateOfId: semanticDuplicate.id,
   };
+}
+
+function areAccountsCompatibleForReconciliation(candidate: Partial<PendingTransaction>, existing: any) {
+  const candidateAccountId = candidate.sourceAccountId || candidate.accountId || '';
+  const existingAccountId = existing.sourceAccountId || existing.accountId || '';
+  if (candidateAccountId && existingAccountId && candidateAccountId === existingAccountId) return true;
+
+  const candidateText = normalizeDuplicateText([
+    candidate.accountName,
+    candidate.description,
+    candidate.originalDescription,
+    candidate.importSource,
+  ].filter(Boolean).join(' '));
+  const existingText = normalizeDuplicateText([
+    existing.accountName,
+    existing.description,
+    existing.note,
+    existing.paymentType,
+    existing.importSource,
+  ].filter(Boolean).join(' '));
+
+  const bothVisa = candidateText.includes('visa') && existingText.includes('visa');
+  const bothMastercard = (candidateText.includes('master') || candidateText.includes('mc')) && (existingText.includes('master') || existingText.includes('mc'));
+  const bothBbva = candidateText.includes('bbva') && existingText.includes('bbva');
+  return Boolean(bothBbva && (bothVisa || bothMastercard));
 }
 
 function buildSemanticDuplicateReason(existing: any, candidate: Partial<PendingTransaction>) {
@@ -193,7 +240,7 @@ function buildSemanticDuplicateReason(existing: any, candidate: Partial<PendingT
     ? ` (${existingAmount.toLocaleString()} ${existingCurrency} vs ${candidateAmount.toLocaleString()} ${candidateCurrency})`
     : '';
   const dateDetail = existingDate ? ` del ${format(existingDate, 'dd/MM/yyyy')}` : '';
-  return `Se parece a un gasto que ya cargaste con Luz${dateDetail}: "${existing.description || existing.category || 'movimiento manual'}"${amountDetail}. Revisalo antes de duplicarlo.`;
+  return `Parece el mismo gasto que ya cargaste con Luz${dateDetail}: "${existing.description || existing.category || 'movimiento manual'}"${amountDetail}. Conviene unirlo al existente si corresponde.`;
 }
 
 function getDateFromValue(value: any) {
@@ -604,6 +651,8 @@ interface PendingTransaction {
   subSubCategory?: string;
   type: string;
   accountId?: string;
+  accountName?: string;
+  sourceAccountId?: string;
   toAccountId?: string;
   date: string;
   isFixed: boolean;
