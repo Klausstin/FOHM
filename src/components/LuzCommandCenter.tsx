@@ -219,6 +219,10 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         travelCategory: action.finance.travelCategory,
         originalAmount: action.finance.originalAmount,
         originalCurrency: action.finance.originalCurrency,
+        merchantName: action.finance.merchantName || '',
+        merchantKey: action.finance.merchantKey || '',
+        merchant: action.finance.merchantName || '',
+        isFixed: action.finance.isLikelyRecurring || false,
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
@@ -233,8 +237,9 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
           subSubCategory: action.finance.subSubCategory || '',
           kind: action.finance.type === 'transfer' ? 'neutral' : action.finance.type,
           neutralType: action.finance.neutralType,
-          merchantName: '',
-          merchantKey: '',
+          isFixed: action.finance.isLikelyRecurring || false,
+          merchantName: action.finance.merchantName || '',
+          merchantKey: action.finance.merchantKey || '',
         }, financeMappings);
       }
       if (!action.finance.needsReview) {
@@ -584,6 +589,7 @@ function buildCompactActionSummary(action: LuzAction) {
     return [
       `${Number(finance.amount || 0).toLocaleString()} ${finance.currency}`,
       [finance.category, finance.subCategory].filter(Boolean).join(' / '),
+      finance.merchantName ? `Comercio: ${finance.merchantName}` : '',
       finance.beneficiaryLabel ? `Para ${finance.beneficiaryLabel}` : '',
       finance.travelTripSuggestion ? `Viaje: ${finance.travelTripSuggestion}` : '',
       finance.type === 'transfer'
@@ -610,6 +616,7 @@ function buildActionChips(action: LuzAction) {
     return [
       action.finance.travelTripSuggestion ? `Viaje: ${action.finance.travelTripSuggestion}` : '',
       action.finance.travelCategory,
+      action.finance.merchantName,
       action.finance.scope,
       action.finance.paymentMethod,
       action.finance.date,

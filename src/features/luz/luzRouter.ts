@@ -2,6 +2,7 @@ import { format, subDays } from 'date-fns';
 import type { HabitRecord } from '../habits/habit.types';
 import { classifyFinanceText } from '../finance/finance.taxonomy';
 import type { FinanceLearningMapping } from '../finance/finance.learning';
+import { suggestMerchant } from '../finance/finance.merchants';
 import type { FinanceBeneficiaryType, FinanceScope, FinanceVisibility, NeutralType, TransactionKind } from '../finance/finance.types';
 import { inferTravelContext } from '../travel/travelContext';
 import type { WishlistHorizon, WishlistItemType } from '../wishlist/wishlist.types';
@@ -40,6 +41,9 @@ export interface LuzFinanceDraft {
   travelCategory?: string;
   originalAmount?: number;
   originalCurrency?: string;
+  merchantName?: string;
+  merchantKey?: string;
+  isLikelyRecurring?: boolean;
   createdByUserId?: string;
   executedByUserId?: string;
   executedByLabel?: string;
@@ -292,6 +296,8 @@ function parseFinanceActions(
     const context = getMoneyMentionContext(message, mention.index);
     const normalizedContext = normalize(context);
     const classification = classifyFinanceText(context || message, financeMappings);
+    const merchantSuggestion = suggestMerchant(context || message);
+    const knownMerchant = merchantSuggestion.confidence >= 0.8 ? merchantSuggestion : null;
     const travel = inferTravelContext(context || message);
     const familyContext = inferFamilyContext(normalizedContext || normalized);
     const neutralType = classification.suggestion.neutralType;
@@ -299,8 +305,12 @@ function parseFinanceActions(
     const type = neutralType === 'credit_card_payment' || neutralType === 'internal_transfer'
       ? 'transfer'
       : baseType;
-    const category = travel ? 'Viajes' : classification.suggestion.category;
-    const subCategory = travel?.travelCategory || classification.suggestion.subcategory;
+    const shouldUseMerchantCategory = !travel &&
+      knownMerchant &&
+      knownMerchant.category !== 'Otros' &&
+      (classification.suggestion.category === 'Otros' || classification.suggestion.confidence < merchantSuggestion.confidence);
+    const category = travel ? 'Viajes' : shouldUseMerchantCategory ? knownMerchant.category : classification.suggestion.category;
+    const subCategory = travel?.travelCategory || (shouldUseMerchantCategory ? knownMerchant.subCategory : classification.suggestion.subcategory);
     const description = travel?.description || inferDescription(context || message, mention.amount) || category;
     const currency = mention.currency || inferCurrency(normalizedContext || normalized);
     const payment = inferPayment(normalized, accounts, currency);
@@ -349,6 +359,9 @@ function parseFinanceActions(
         travelCategory: travel?.travelCategory,
         originalAmount: mention.amount,
         originalCurrency: currency,
+        merchantName: knownMerchant?.merchantName,
+        merchantKey: knownMerchant?.merchantKey,
+        isLikelyRecurring: knownMerchant?.isLikelyRecurring,
         executedByLabel: familyContext.executedByLabel,
         beneficiaryType: familyContext.beneficiaryType,
         beneficiaryLabel: familyContext.beneficiaryLabel,
