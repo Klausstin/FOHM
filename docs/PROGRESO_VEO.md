@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 77% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
+| Finanzas | Implementando | 78% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -42,7 +42,7 @@ Siguiente: [proximo paso]
 | --- | --- | ---: | --- |
 | Modelo de cuentas y tarjetas | Implementando | 84% | Seguir puliendo saldos, deuda y conciliacion. |
 | Registro manual y desde Luz | Implementando | 80% | Validar casos reales despues de mejorar integridad de saldos. |
-| Importador BBVA / Visa / CSV | Implementando | 82% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
+| Importador BBVA / Visa / CSV | Implementando | 84% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
 | Reconciliacion de resumenes | Implementando | 72% | Usar saldos de cierre, detectar movimientos sin saldo aplicado y evitar duplicados. |
 | Categorias financieras | Implementando | 70% | Aprendizaje por correcciones, categorias minimas y subcategorias limpias. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
@@ -58,7 +58,8 @@ Siguiente: [proximo paso]
 | Exportar contexto maestro para ChatGPT | Listo | 100% | `VEO_CONTEXT_FOR_CHATGPT.md` |
 | Detectar movimientos contabilizados sin impacto en saldo | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Importar CSV como borradores revisables | Validando | 85% | `package.json`, `package-lock.json`, `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |
-| Importar historial Wallet como aprendizaje | Validando | 95% | `src/features/finance/finance.import.ts`, `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
+| Importar historial Wallet como aprendizaje | Validando | 98% | `src/features/finance/finance.import.ts`, `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
+| Separar candidatos Wallet para memoria activa | Validando | 92% | `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
 
 ## Proximos pasos
 
@@ -66,6 +67,6 @@ Siguiente: [proximo paso]
 2. Probar flujo real: crear gasto, editar monto/cuenta, borrar gasto y verificar saldo.
 3. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
 4. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
-5. Revisar el reporte interno de Wallet y decidir que aprendizajes se convierten en memoria activa.
+5. Revisar los 42 candidatos Wallet de memoria activa y los 84 candidatos que requieren revision.
 6. Mejorar dashboard financiero con lectura de caja, deuda, inversiones y patrimonio.
 7. Despues de Finanzas al 90%, volver a Tareas, Calendario, Luz IA real y UI/UX general.

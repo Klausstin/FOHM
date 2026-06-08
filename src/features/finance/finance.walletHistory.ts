@@ -23,6 +23,21 @@ export interface WalletHistoryAmountCluster {
   sampleDescriptions: string[];
 }
 
+export interface WalletHistoryActiveMemoryCandidate {
+  merchantKey: string;
+  merchantName: string;
+  category: string;
+  subCategory: string;
+  recommendation: 'activate' | 'review' | 'ignore';
+  reason: string;
+  confidence: number;
+  useCount: number;
+  monthCount: number;
+  sourceCategories: string[];
+  sampleDescriptions: string[];
+  totalByCurrency: Record<string, number>;
+}
+
 export interface WalletHistoryLearningReport {
   generatedAt: string;
   source: 'wallet_history';
@@ -39,6 +54,7 @@ export interface WalletHistoryLearningReport {
   merchantInsights: WalletHistoryMerchantInsight[];
   recurringCandidates: WalletHistoryMerchantInsight[];
   exactAmountClusters: WalletHistoryAmountCluster[];
+  activeMemoryCandidates: WalletHistoryActiveMemoryCandidate[];
   mappingSeeds: Array<{
     merchantKey: string;
     merchantName: string;
@@ -56,6 +72,7 @@ export function buildWalletHistoryLearningReport(importResult: FinanceImportResu
   const transactions = importResult.transactions.filter(isWalletHistoryTransaction);
   const sortedByDate = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const merchantInsights = buildMerchantInsights(transactions);
+  const activeMemoryCandidates = buildActiveMemoryCandidates(merchantInsights);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -75,19 +92,20 @@ export function buildWalletHistoryLearningReport(importResult: FinanceImportResu
       .filter(insight => insight.count >= 3 && insight.months.length >= 3)
       .slice(0, 80),
     exactAmountClusters: buildExactAmountClusters(transactions),
-    mappingSeeds: merchantInsights
-      .filter(insight => insight.count >= 2 && insight.confidence >= 0.72 && insight.suggestedCategory !== 'Otros')
+    activeMemoryCandidates,
+    mappingSeeds: activeMemoryCandidates
+      .filter(candidate => candidate.recommendation === 'activate')
       .slice(0, 200)
-      .map(insight => ({
-        merchantKey: insight.merchantKey,
-        merchantName: insight.merchantName,
-        originalDescription: insight.sampleDescriptions[0] || insight.merchantName,
-        mappedDescription: insight.merchantName,
-        category: insight.suggestedCategory,
-        subCategory: insight.suggestedSubCategory,
-        sourceCategories: insight.sourceCategories,
-        useCount: insight.count,
-        confidence: insight.confidence,
+      .map(candidate => ({
+        merchantKey: candidate.merchantKey,
+        merchantName: candidate.merchantName,
+        originalDescription: candidate.sampleDescriptions[0] || candidate.merchantName,
+        mappedDescription: candidate.merchantName,
+        category: candidate.category,
+        subCategory: candidate.subCategory,
+        sourceCategories: candidate.sourceCategories,
+        useCount: candidate.useCount,
+        confidence: candidate.confidence,
       })),
   };
 }
@@ -120,6 +138,24 @@ export function formatWalletHistoryLearningReportMarkdown(report: WalletHistoryL
     ...report.recurringCandidates.slice(0, 30).map(item =>
       `- ${item.merchantName}: ${item.count} movements across ${item.months.length} months -> ${item.suggestedCategory} / ${item.suggestedSubCategory}`,
     ),
+    '',
+    '## Active memory candidates',
+    '',
+    ...report.activeMemoryCandidates
+      .filter(candidate => candidate.recommendation === 'activate')
+      .slice(0, 50)
+      .map(candidate =>
+        `- ${candidate.merchantName}: ${candidate.category} / ${candidate.subCategory} (${candidate.useCount}, ${candidate.monthCount} months)`,
+      ),
+    '',
+    '## Needs review before learning',
+    '',
+    ...report.activeMemoryCandidates
+      .filter(candidate => candidate.recommendation === 'review')
+      .slice(0, 50)
+      .map(candidate =>
+        `- ${candidate.merchantName}: ${candidate.category} / ${candidate.subCategory} (${candidate.reason})`,
+      ),
     '',
     '## Exact amount clusters',
     '',
@@ -182,6 +218,82 @@ function buildMerchantInsights(transactions: ImportedFinanceTransaction[]): Wall
     })
     .sort((a, b) => b.count - a.count);
 }
+
+function buildActiveMemoryCandidates(insights: WalletHistoryMerchantInsight[]): WalletHistoryActiveMemoryCandidate[] {
+  return insights
+    .map(insight => {
+      const categoryIsUseful = !['Otros', 'Movimientos neutros'].includes(insight.suggestedCategory);
+      const subcategoryIsUseful = Boolean(insight.suggestedSubCategory && insight.suggestedSubCategory !== 'Otros');
+      const isStrongPattern = insight.count >= 3 && insight.months.length >= 2 && insight.confidence >= 0.78;
+      const isMediumPattern = insight.count >= 2 && insight.confidence >= 0.68;
+      const sourceCategorySignal = insight.sourceCategories.length > 0;
+      const isGenericLabel = looksLikeGenericWalletLabel(insight.merchantName);
+
+      let recommendation: WalletHistoryActiveMemoryCandidate['recommendation'] = 'ignore';
+      let reason = 'No tiene suficiente repeticion o categoria confiable.';
+
+      if (categoryIsUseful && subcategoryIsUseful && isStrongPattern && !isGenericLabel) {
+        recommendation = 'activate';
+        reason = 'Patron repetido con categoria y subcategoria claras.';
+      } else if (categoryIsUseful && (subcategoryIsUseful || sourceCategorySignal) && isMediumPattern) {
+        recommendation = 'review';
+        reason = isGenericLabel
+          ? 'Parece una etiqueta generica de Wallet, no un comercio concreto.'
+          : 'Puede servir, pero conviene revisarlo antes de activar memoria.';
+      }
+
+      return {
+        merchantKey: insight.merchantKey,
+        merchantName: insight.merchantName,
+        category: insight.suggestedCategory,
+        subCategory: insight.suggestedSubCategory,
+        recommendation,
+        reason,
+        confidence: insight.confidence,
+        useCount: insight.count,
+        monthCount: insight.months.length,
+        sourceCategories: insight.sourceCategories,
+        sampleDescriptions: insight.sampleDescriptions,
+        totalByCurrency: insight.totalByCurrency,
+      };
+    })
+    .sort((a, b) => {
+      const order = { activate: 0, review: 1, ignore: 2 };
+      return order[a.recommendation] - order[b.recommendation] || b.useCount - a.useCount;
+    });
+}
+
+function looksLikeGenericWalletLabel(value: string) {
+  const normalized = normalizeKey(value);
+  return GENERIC_WALLET_MEMORY_LABELS.has(normalized);
+}
+
+const GENERIC_WALLET_MEMORY_LABELS = new Set([
+  'almuerzo',
+  'cena',
+  'bar-resto',
+  'bar',
+  'resto',
+  'compras-varias',
+  'kiosco',
+  'verduleria',
+  'chino',
+  'limpieza',
+  'juntada',
+  'taxes',
+  'sueldo',
+  'alquiler',
+  'delivery-comida',
+  'refunds-tax-purchase',
+  'financial-investments',
+  'others',
+  'fuel',
+  'evento',
+  'salidas',
+  'futbol',
+  'peajes',
+  'transfer-withdraw',
+]);
 
 function buildExactAmountClusters(transactions: ImportedFinanceTransaction[]): WalletHistoryAmountCluster[] {
   const groups = new Map<string, ImportedFinanceTransaction[]>();
