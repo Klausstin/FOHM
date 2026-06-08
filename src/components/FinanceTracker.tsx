@@ -673,6 +673,23 @@ function buildAccountBalanceSummary(accounts: any[]) {
   return Array.from(byCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
+function buildAccountReconciliationQueue(accounts: any[]) {
+  return (accounts || [])
+    .map(account => ({
+      account,
+      reconciliation: getAccountReconciliationInfo(account),
+    }))
+    .filter(item => item.reconciliation.tone !== 'ok')
+    .sort((a, b) => getReconciliationWeight(b.reconciliation.tone) - getReconciliationWeight(a.reconciliation.tone));
+}
+
+function getReconciliationWeight(tone: string) {
+  if (tone === 'danger') return 4;
+  if (tone === 'warn') return 3;
+  if (tone === 'neutral') return 2;
+  return 1;
+}
+
 function getAccountTypeLabel(type?: string) {
   const normalized = String(type || '').toLowerCase();
   if (normalized === 'bank') return 'Banco';
@@ -1833,6 +1850,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const accountBalanceSummary = useMemo(() => buildAccountBalanceSummary(userAccounts), [userAccounts]);
   const primaryBalanceSummary = accountBalanceSummary.find(item => item.currency === 'ARS') || accountBalanceSummary[0];
+  const accountReconciliationQueue = useMemo(() => buildAccountReconciliationQueue(userAccounts), [userAccounts]);
 
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
@@ -2099,6 +2117,11 @@ export default function FinanceTracker({ user }: { user: any }) {
         daysSinceLastUpdate={daysSinceLastUpdate}
         hasNoMovements={finances.length === 0}
         onOpenCatchupWizard={openCatchupWizard}
+      />
+
+      <AccountReconciliationPanel
+        items={accountReconciliationQueue}
+        onEditAccount={startEditingAccount}
       />
 
       <FinancialInsightsPanel
@@ -4416,6 +4439,66 @@ function FinanceCatchupSessionPanel({
             Cargar supuesto
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function AccountReconciliationPanel({
+  items,
+  onEditAccount,
+}: {
+  items: { account: any; reconciliation: ReturnType<typeof getAccountReconciliationInfo> }[];
+  onEditAccount: (account: any) => void;
+}) {
+  if (!items.length) return null;
+
+  const topItems = items.slice(0, 4);
+
+  return (
+    <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Saldos</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Cuentas a conciliar</h3>
+        </div>
+        <p className="max-w-xl text-xs font-bold leading-5 text-neutral-500">
+          Antes de leer caja o patrimonio, conviene que estos saldos reflejen la realidad.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+        {topItems.map(({ account, reconciliation }) => (
+          <button
+            key={account.id}
+            type="button"
+            onClick={() => onEditAccount(account)}
+            className="rounded-3xl border border-neutral-100 bg-neutral-50 p-4 text-left transition hover:border-neutral-300 hover:bg-white"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-neutral-950">{account.name}</p>
+                <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                  {getAccountTypeLabel(account.type)} · {account.currency || 'ARS'}
+                </p>
+              </div>
+              <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+                reconciliation.tone === 'danger'
+                  ? 'bg-red-50 text-red-700'
+                  : reconciliation.tone === 'warn'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-neutral-100 text-neutral-500'
+              }`}>
+                {reconciliation.label}
+              </span>
+            </div>
+            <p className="mt-4 text-2xl font-black text-neutral-950">
+              {formatAccountBalance(Number(account.balance || 0), account.type)}
+              <span className="ml-1 text-xs font-bold text-neutral-400">{account.currency}</span>
+            </p>
+            <p className="mt-2 text-xs font-semibold leading-5 text-neutral-500">{reconciliation.helper}</p>
+          </button>
+        ))}
       </div>
     </section>
   );
