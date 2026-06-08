@@ -4215,6 +4215,7 @@ function FinancialInsightsPanel({
   const topRecurring = insights.recurringDetected.slice(0, 4);
   const topFixed = insights.fixedDeclared.slice(0, 3);
   const topUnusual = insights.unusualExpenses.slice(0, 3);
+  const topPriorities = insights.actionPriorities.slice(0, 4);
   const profile = insights.monthlyProfile;
   const dashboard = insights.periodDashboard;
   const fixedLike = profile.fixedDeclared + profile.recurringDetected;
@@ -4266,6 +4267,20 @@ function FinancialInsightsPanel({
           <ExpenseProfileStat label="Recurrente detectado" value={profile.recurringDetected} currency={profile.currency} />
           <ExpenseProfileStat label={`Variable (${Math.round(variableShare * 100)}%)`} value={profile.variable} currency={profile.currency} />
           <ExpenseProfileStat label="Extraordinario" value={profile.unusual} currency={profile.currency} />
+        </div>
+
+        <div className="mt-5 rounded-[1.5rem] border border-neutral-100 bg-neutral-50 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Que corregir primero</p>
+            <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-400 border border-neutral-100">
+              Priorizado
+            </span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {topPriorities.map(priority => (
+              <FinancePriorityCard key={priority.id} priority={priority} />
+            ))}
+          </div>
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -4375,6 +4390,28 @@ function PeriodCurrencyCard({ item }: { item: { currency: string; income: number
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black">
         <span className="text-neutral-400">In {item.income.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
         <span className="text-neutral-400">Out {item.expenses.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+      </div>
+    </div>
+  );
+}
+
+function FinancePriorityCard({ priority }: { priority: ReturnType<typeof buildFinancialInsights>['actionPriorities'][number] }) {
+  const priorityClass = {
+    high: 'border-rose-100 bg-rose-50 text-rose-700',
+    medium: 'border-amber-100 bg-amber-50 text-amber-700',
+    low: 'border-neutral-100 bg-white text-neutral-500',
+  }[priority.priority];
+
+  return (
+    <div className={`rounded-2xl border p-3 ${priorityClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-black text-neutral-950">{priority.title}</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-neutral-600">{priority.detail}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-white/80 px-2 py-1 text-[9px] font-black uppercase tracking-widest">
+          {priority.priority}
+        </span>
       </div>
     </div>
   );
