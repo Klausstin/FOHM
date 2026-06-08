@@ -172,49 +172,70 @@ export async function deleteFinancialTransaction(transactionId: string) {
   await deleteDoc(doc(db, 'finances', transactionId));
 }
 
-export async function applyTransactionToAccountBalances(input: CreateFinancialTransactionInput) {
-  if (!shouldApplyTransactionToAccountBalances(input)) return false;
+type BalanceAffectingTransactionInput = Partial<CreateFinancialTransactionInput> & {
+  accountBalanceApplied?: boolean;
+};
 
-  if (input.accountId) {
-    const accountRef = doc(db, 'accounts', input.accountId);
-    const accountSnap = await getDoc(accountRef);
-    if (accountSnap.exists()) {
-      const currentBalance = accountSnap.data().balance || 0;
-      const newBalance = currentBalance + getAccountBalanceDelta({
-        accountType: accountSnap.data().type,
-        transactionType: input.type,
-        amount: input.amount,
-        direction: 'source',
-      });
-      await updateDoc(accountRef, { balance: newBalance });
-    }
-  }
+function getSourceAccountId(input: BalanceAffectingTransactionInput) {
+  return input.accountId || input.sourceAccountId || '';
+}
 
-  if (input.type === 'transfer' && input.toAccountId) {
-    const toAccountRef = doc(db, 'accounts', input.toAccountId);
-    const toAccountSnap = await getDoc(toAccountRef);
-    if (toAccountSnap.exists()) {
-      const currentBalance = toAccountSnap.data().balance || 0;
-      const newBalance = currentBalance + getAccountBalanceDelta({
-        accountType: toAccountSnap.data().type,
-        transactionType: input.type,
-        amount: input.amount,
-        direction: 'destination',
-      });
-      await updateDoc(toAccountRef, { balance: newBalance });
-    }
-  }
+async function adjustAccountBalance(accountId: string, input: BalanceAffectingTransactionInput, direction: 'source' | 'destination', multiplier = 1) {
+  const accountRef = doc(db, 'accounts', accountId);
+  const accountSnap = await getDoc(accountRef);
+  if (!accountSnap.exists()) return false;
 
+  const currentBalance = Number(accountSnap.data().balance || 0);
+  const transactionType = input.type || (input.kind === 'income' ? 'income' : input.kind === 'neutral' ? 'neutral' : 'expense');
+  const delta = getAccountBalanceDelta({
+    accountType: accountSnap.data().type,
+    transactionType,
+    amount: Number(input.amount || 0),
+    direction,
+  });
+
+  await updateDoc(accountRef, { balance: currentBalance + delta * multiplier });
   return true;
 }
 
-export function shouldApplyTransactionToAccountBalances(input: CreateFinancialTransactionInput) {
+async function applyTransactionBalanceDelta(input: BalanceAffectingTransactionInput, multiplier = 1) {
+  if (!shouldApplyTransactionToAccountBalances(input)) return false;
+
+  const sourceAccountId = getSourceAccountId(input);
+  let touchedAnyAccount = false;
+
+  if (sourceAccountId) {
+    touchedAnyAccount = await adjustAccountBalance(sourceAccountId, input, 'source', multiplier) || touchedAnyAccount;
+  }
+
+  if (input.type === 'transfer' && input.toAccountId) {
+    touchedAnyAccount = await adjustAccountBalance(input.toAccountId, input, 'destination', multiplier) || touchedAnyAccount;
+  }
+
+  return touchedAnyAccount;
+}
+
+export async function applyTransactionToAccountBalances(input: BalanceAffectingTransactionInput) {
+  return applyTransactionBalanceDelta(input, 1);
+}
+
+export async function reverseTransactionFromAccountBalances(input: BalanceAffectingTransactionInput) {
+  if (!input.accountBalanceApplied) return false;
+  return applyTransactionBalanceDelta(input, -1);
+}
+
+export function shouldApplyTransactionToAccountBalances(input: BalanceAffectingTransactionInput) {
   const status = input.status || 'posted';
+  const transactionType = input.type || (input.kind === 'income' ? 'income' : input.kind === 'neutral' ? 'neutral' : 'expense');
+  const amount = Number(input.amount || 0);
+  const sourceAccountId = getSourceAccountId(input);
+
+  if (!Number.isFinite(amount) || amount === 0) return false;
   if (status === 'ignored' || status === 'pending') return false;
   if (status === 'needs_review' && input.source !== 'catchup_estimate') return false;
 
-  if (input.type === 'neutral') return false;
-  if (input.type === 'transfer') return Boolean(input.accountId && input.toAccountId);
+  if (transactionType === 'neutral') return false;
+  if (transactionType === 'transfer') return Boolean(sourceAccountId && input.toAccountId);
 
-  return Boolean(input.accountId);
+  return Boolean(sourceAccountId);
 }

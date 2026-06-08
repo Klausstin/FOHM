@@ -25,6 +25,8 @@ import {
   createFinancialAccount,
   createFinancialTransaction,
   deleteFinancialAccount,
+  deleteFinancialTransaction,
+  reverseTransactionFromAccountBalances,
   subscribeToHouseholdFinancialAccounts,
   subscribeToHouseholdFinancialTransactions,
   updateFinancialAccount,
@@ -1744,11 +1746,11 @@ export default function FinanceTracker({ user }: { user: any }) {
   const handleDelete = async (id: string) => {
     if (!confirm('Seguro que queres eliminar este movimiento?')) return;
     try {
-      await updateDoc(doc(db, 'finances', id), { isConfirmed: false }); // Or actually delete
-      // For this app, let's do actual delete since user asked for it
-      // but wait, firestore.rules allow delete
-      const { deleteDoc } = await import('firebase/firestore');
-      await deleteDoc(doc(db, 'finances', id));
+      const existingTransaction = finances.find(finance => finance.id === id);
+      if (existingTransaction?.accountBalanceApplied) {
+        await reverseTransactionFromAccountBalances(existingTransaction);
+      }
+      await deleteFinancialTransaction(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'finances');
     }
@@ -1775,8 +1777,13 @@ export default function FinanceTracker({ user }: { user: any }) {
     if (!editingId || !editForm) return;
     try {
       const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, originalAccountId, originalSourceAccountId, originalToAccountId, originalPaymentType, originalBeneficiaryLabel, originalScope, merchantName, merchantKey } = editForm;
-      
-      await updateDoc(doc(db, 'finances', editingId), {
+      const existingTransaction = finances.find(finance => finance.id === editingId);
+      if (existingTransaction?.accountBalanceApplied) {
+        await reverseTransactionFromAccountBalances(existingTransaction);
+      }
+
+      const updatedStatus = paymentStatus === 'Pendiente' ? 'pending' : paymentStatus === 'Anulado' ? 'ignored' : editForm.status || 'posted';
+      const updatedTransaction = {
         amount: parseFloat(amount),
         currency,
         description,
@@ -1802,9 +1809,20 @@ export default function FinanceTracker({ user }: { user: any }) {
         visibility: visibility || 'household_shared',
         paymentType,
         paymentStatus,
+        status: updatedStatus,
         isConfirmed: true, // Mark as confirmed when edited/saved
-        needsReview: false
-      });
+        needsReview: false,
+        accountBalanceApplied: false,
+      };
+
+      await updateFinancialTransaction(editingId, updatedTransaction as any);
+
+      const balanceApplied = await applyTransactionToAccountBalances({
+        uid: existingTransaction?.uid || user.uid,
+        householdId: existingTransaction?.householdId || user.householdId,
+        ...updatedTransaction,
+      } as CreateFinancialTransactionInput);
+      await updateFinancialTransaction(editingId, { accountBalanceApplied: balanceApplied } as any);
 
       // If it was an AI transaction and the user corrected it, update mappings
       const categoryChanged = category !== originalCategory || (subCategory || '') !== (originalSubCategory || '') || (subSubCategory || '') !== (originalSubSubCategory || '');
