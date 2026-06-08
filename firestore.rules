@@ -258,13 +258,22 @@ service cloud.firestore {
 
     function isValidAccount(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'name', 'currency']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'currency', 'balance', 'color', 'type', 'lastReconciledAt', 'createdAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'name', 'currency', 'balance', 'color', 'type', 'institution', 'accountNumberLast4', 'statementLabel', 'alias', 'closingDay', 'dueDay', 'creditLimit', 'notes', 'isArchived', 'lastReconciledAt', 'createdAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.currency is string && data.currency.size() > 0 && data.currency.size() < 10 &&
              (!('balance' in data) || data.balance is number) &&
              (!('color' in data) || (data.color is string && data.color.size() < 20)) &&
              (!('type' in data) || (data.type is string && data.type.size() < 50)) &&
+             (!('institution' in data) || data.institution == null || (data.institution is string && data.institution.size() < 100)) &&
+             (!('accountNumberLast4' in data) || data.accountNumberLast4 == null || (data.accountNumberLast4 is string && data.accountNumberLast4.size() < 20)) &&
+             (!('statementLabel' in data) || data.statementLabel == null || (data.statementLabel is string && data.statementLabel.size() < 150)) &&
+             (!('alias' in data) || data.alias == null || (data.alias is string && data.alias.size() < 100)) &&
+             (!('closingDay' in data) || data.closingDay == null || (data.closingDay is number && data.closingDay >= 1 && data.closingDay <= 31)) &&
+             (!('dueDay' in data) || data.dueDay == null || (data.dueDay is number && data.dueDay >= 1 && data.dueDay <= 31)) &&
+             (!('creditLimit' in data) || data.creditLimit == null || data.creditLimit is number) &&
+             (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() < 500)) &&
+             (!('isArchived' in data) || data.isArchived is bool) &&
              (!('lastReconciledAt' in data) || data.lastReconciledAt == null || data.lastReconciledAt is timestamp) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
