@@ -35,7 +35,7 @@ import {
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
-import { findBestAccountForImportedTransaction, formatAccountBalance, getAccountReconciliationInfo } from '../features/finance/finance.accounts.ts';
+import { findBestAccountForImportedTransaction, formatAccountBalance, getAccountBalanceDelta, getAccountReconciliationInfo } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
 import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
@@ -722,6 +722,90 @@ function getReconciliationWeight(tone: string) {
   return 1;
 }
 
+function buildAccountActivityById(accounts: any[], finances: any[], pendingTransactions: PendingTransaction[] = []) {
+  const entries = new Map<string, {
+    movementCount: number;
+    pendingCount: number;
+    netActivity: number;
+  }>();
+
+  for (const account of accounts || []) {
+    entries.set(account.id, {
+      movementCount: 0,
+      pendingCount: 0,
+      netActivity: 0,
+    });
+  }
+
+  for (const finance of finances || []) {
+    const sourceAccountId = finance.accountId || finance.sourceAccountId || '';
+    const destinationAccountId = finance.toAccountId || '';
+    const touchedAccountIds = [sourceAccountId, destinationAccountId].filter(Boolean);
+    const hasReviewFlag = finance.isConfirmed === false || finance.needsReview || finance.status === 'pending' || finance.duplicateReason;
+
+    for (const accountId of touchedAccountIds) {
+      const current = entries.get(accountId);
+      if (current && hasReviewFlag) current.pendingCount += 1;
+    }
+
+    if (!finance.accountBalanceApplied) continue;
+
+    const transactionDate = parseFinanceDateValue(finance.date);
+    for (const account of accounts || []) {
+      const reconciledAt = parseFinanceDateValue(account.lastReconciledAt);
+      if (reconciledAt && transactionDate && transactionDate <= reconciledAt) continue;
+
+      let delta = 0;
+      if (sourceAccountId === account.id) {
+        delta += getAccountBalanceDelta({
+          accountType: account.type,
+          transactionType: finance.type,
+          amount: Number(finance.amount || 0),
+          direction: 'source',
+        });
+      }
+      if (finance.type === 'transfer' && destinationAccountId === account.id) {
+        delta += getAccountBalanceDelta({
+          accountType: account.type,
+          transactionType: finance.type,
+          amount: Number(finance.amount || 0),
+          direction: 'destination',
+        });
+      }
+
+      if (delta !== 0) {
+        const current = entries.get(account.id);
+        if (current) {
+          current.netActivity += delta;
+          current.movementCount += 1;
+        }
+      }
+    }
+  }
+
+  for (const transaction of pendingTransactions || []) {
+    const accountId = transaction.accountId || transaction.sourceAccountId || '';
+    const current = accountId ? entries.get(accountId) : null;
+    if (current) current.pendingCount += 1;
+  }
+
+  return entries;
+}
+
+function parseFinanceDateValue(value: any) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatSignedMoney(value: number, currency: string) {
+  const rounded = Math.round(Number(value || 0) * 100) / 100;
+  const prefix = rounded > 0 ? '+' : '';
+  return `${prefix}${rounded.toLocaleString()} ${currency}`;
+}
+
 function getAccountTypeLabel(type?: string) {
   const normalized = String(type || '').toLowerCase();
   if (normalized === 'bank') return 'Banco';
@@ -1145,6 +1229,10 @@ export default function FinanceTracker({ user }: { user: any }) {
     };
   }, [pendingTransactions]);
   const pendingImportGroups = useMemo(() => buildPendingImportGroups(pendingTransactions), [pendingTransactions]);
+  const accountActivityById = useMemo(
+    () => buildAccountActivityById(userAccounts, finances, pendingTransactions),
+    [userAccounts, finances, pendingTransactions],
+  );
 
   useEffect(() => {
     const cachedInflation = getCachedArgentinaInflationSnapshot();
@@ -2452,6 +2540,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {(userAccounts || []).map(acc => {
           const reconciliation = getAccountReconciliationInfo(acc);
+          const accountActivity = accountActivityById.get(acc.id);
           return (
             <motion.div
               key={acc.id}
@@ -2525,6 +2614,24 @@ export default function FinanceTracker({ user }: { user: any }) {
                 <p className="text-2xl font-black text-neutral-900">
                   {formatAccountBalance(Number(acc.balance || 0), acc.type)} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
                 </p>
+                {accountActivity && (accountActivity.movementCount > 0 || accountActivity.pendingCount > 0) && (
+                  <div className="mt-4 rounded-2xl bg-neutral-50 px-3 py-2 text-xs font-bold text-neutral-500">
+                    {accountActivity.movementCount > 0 && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Desde conciliacion</span>
+                        <span className={accountActivity.netActivity < 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                          {formatSignedMoney(accountActivity.netActivity, acc.currency)}
+                        </span>
+                      </div>
+                    )}
+                    {accountActivity.pendingCount > 0 && (
+                      <div className="mt-1 flex items-center justify-between gap-2 text-amber-700">
+                        <span>Para revisar</span>
+                        <span>{accountActivity.pendingCount}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           );
