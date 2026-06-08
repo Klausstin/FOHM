@@ -331,6 +331,36 @@ function enrichImportedTransactionWithAccounts(transaction: any, accounts: any[]
   };
 }
 
+function buildStatementClosingSuggestion(
+  statement: any,
+  transactions: any[],
+  fileName: string,
+  accounts: any[],
+): StatementClosingSuggestion | null {
+  if (!statement || typeof statement.closingBalance !== 'number') return null;
+
+  const accountId = transactions.find(transaction => transaction.accountId)?.accountId;
+  if (!accountId) return null;
+
+  const account = accounts.find(item => item.id === accountId);
+  if (!account) return null;
+
+  const closingBalance = Number(statement.closingBalance || 0);
+  const targetBalance = account.type === 'credit_card' ? -Math.abs(closingBalance) : closingBalance;
+
+  return {
+    id: `${fileName}:${statement.statementFingerprint || statement.periodEnd || closingBalance}`,
+    accountId,
+    accountName: account.name,
+    currency: statement.currency || account.currency || 'ARS',
+    fileName,
+    periodEnd: statement.periodEnd,
+    closingBalance,
+    targetBalance,
+    statementLabel: statement.accountLabel,
+  };
+}
+
 function findSuggestedSourceAccount(transaction: any, accounts: any[]) {
   if (transaction.importSource === 'bbva_visa') return findVisaCreditCardAccount(accounts)?.id || '';
   if (transaction.importSource === 'bbva_caja_ahorro_ars') return findCajaAhorroAccount(accounts)?.id || '';
@@ -957,6 +987,18 @@ interface PendingTransaction {
   duplicateReason?: string;
 }
 
+interface StatementClosingSuggestion {
+  id: string;
+  accountId: string;
+  accountName: string;
+  currency: string;
+  fileName: string;
+  periodEnd?: string;
+  closingBalance: number;
+  targetBalance: number;
+  statementLabel?: string;
+}
+
 interface PendingImportGroup {
   key: string;
   kind: 'duplicate' | 'missing_account' | 'mixed_review';
@@ -1054,6 +1096,7 @@ export default function FinanceTracker({ user }: { user: any }) {
     duplicates: number;
     missingAccount: number;
     files: number;
+    statementClosings: StatementClosingSuggestion[];
   } | null>(null);
   
   // Filtering states
@@ -1229,6 +1272,57 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleReconcileStatementClosing = async (suggestion: StatementClosingSuggestion) => {
+    const account = userAccounts.find(item => item.id === suggestion.accountId);
+    if (!account) return;
+
+    const previousBalance = Number(account.balance || 0);
+    const nextBalance = Number(suggestion.targetBalance || 0);
+    const difference = nextBalance - previousBalance;
+
+    try {
+      await updateFinancialAccount(account.id, {
+        balance: nextBalance,
+        lastReconciledAt: new Date(),
+      } as any);
+
+      if (Math.abs(difference) >= 0.01) {
+        await createFinancialTransaction({
+          uid: user.uid,
+          householdId: user.householdId,
+          amount: Math.abs(difference),
+          currency: suggestion.currency,
+          description: `Ajuste de cierre - ${account.name}`,
+          note: buildBalanceAdjustmentNote(account.name, previousBalance, nextBalance, suggestion.currency),
+          category: 'Movimientos neutros',
+          subCategory: 'Ajuste de saldo',
+          type: 'neutral',
+          kind: 'neutral',
+          neutralType: 'balance_adjustment',
+          accountId: account.id,
+          sourceAccountId: account.id,
+          date: suggestion.periodEnd ? new Date(suggestion.periodEnd) : new Date(),
+          source: 'pdf',
+          status: 'posted',
+          confidence: 'exact',
+          isConfirmed: true,
+          accountBalanceApplied: true,
+          paymentStatus: 'Contabilizado',
+          importSource: suggestion.fileName,
+        });
+      }
+
+      setLastImportResult(prev => prev
+        ? {
+            ...prev,
+            statementClosings: prev.statementClosings.filter(item => item.id !== suggestion.id),
+          }
+        : prev);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `accounts/${account.id}`);
+    }
+  };
+
   const startEditingAccount = (acc: any) => {
     setEditingAccount(acc);
     setNewAccount({
@@ -1325,7 +1419,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const processPdf = async (file: File) => {
     const reader = new FileReader();
-    return new Promise<PendingTransaction[]>((resolve, reject) => {
+    return new Promise<{ transactions: PendingTransaction[]; statementClosings: StatementClosingSuggestion[] }>((resolve, reject) => {
       reader.onload = async () => {
         try {
           const typedarray = new Uint8Array(reader.result as ArrayBuffer);
@@ -1364,7 +1458,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                 needsReview: enrichedTransaction.needsReview || duplicateStatement || Boolean(duplicateMatch?.reason),
               };
             });
-            resolve(mapped);
+            resolve({
+              transactions: mapped,
+              statementClosings: [
+                buildStatementClosingSuggestion(parsedStatement.statement, mapped, file.name, userAccounts),
+              ].filter(Boolean) as StatementClosingSuggestion[],
+            });
             return;
           }
 
@@ -1389,7 +1488,7 @@ export default function FinanceTracker({ user }: { user: any }) {
               needsReview: enrichedTransaction.needsReview || Boolean(duplicateMatch?.reason),
             };
           });
-          resolve(mapped);
+          resolve({ transactions: mapped, statementClosings: [] });
         } catch (error) {
           reject(error);
         }
@@ -1405,9 +1504,11 @@ export default function FinanceTracker({ user }: { user: any }) {
     setIsProcessingPdf(true);
     try {
       const allPending: PendingTransaction[] = [];
+      const statementClosings: StatementClosingSuggestion[] = [];
       for (const file of acceptedFiles) {
-        const filePending = await processPdf(file);
-        allPending.push(...filePending);
+        const fileResult = await processPdf(file);
+        allPending.push(...fileResult.transactions);
+        statementClosings.push(...fileResult.statementClosings);
       }
       const reviewTransactions = allPending.filter(transaction => transaction.duplicateReason || pendingTransactionNeedsAccount(transaction));
       const readyTransactions = allPending.filter(transaction => !transaction.duplicateReason && !pendingTransactionNeedsAccount(transaction));
@@ -1423,6 +1524,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         duplicates: reviewTransactions.filter(transaction => transaction.duplicateReason).length,
         missingAccount: reviewTransactions.filter(pendingTransactionNeedsAccount).length,
         files: acceptedFiles.length,
+        statementClosings,
       });
     } catch (error) {
       console.error("Error processing PDFs:", error);
@@ -2650,12 +2752,39 @@ export default function FinanceTracker({ user }: { user: any }) {
                 Solo frenamos duplicados o movimientos sin cuenta clara. Las categorias se pueden corregir despues y VEO aprende de esas correcciones.
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
               <ImportReviewStat label="PDFs" value={lastImportResult.files} tone="neutral" />
               <ImportReviewStat label="Duplicados" value={lastImportResult.duplicates} tone={lastImportResult.duplicates ? 'danger' : 'neutral'} />
               <ImportReviewStat label="Sin cuenta" value={lastImportResult.missingAccount} tone={lastImportResult.missingAccount ? 'warn' : 'neutral'} />
+              <ImportReviewStat label="Cierres" value={lastImportResult.statementClosings.length} tone={lastImportResult.statementClosings.length ? 'info' : 'neutral'} />
             </div>
           </div>
+          {lastImportResult.statementClosings.length > 0 && (
+            <div className="mt-4 grid gap-2 lg:grid-cols-2">
+              {lastImportResult.statementClosings.map(suggestion => (
+                <div key={suggestion.id} className="rounded-2xl border border-emerald-100 bg-white p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Saldo de cierre detectado</p>
+                      <p className="mt-1 text-sm font-black text-neutral-950">
+                        {suggestion.accountName}: {suggestion.targetBalance.toLocaleString()} {suggestion.currency}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-neutral-500">
+                        {suggestion.fileName}{suggestion.periodEnd ? ` · ${format(new Date(suggestion.periodEnd), 'dd/MM/yyyy')}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleReconcileStatementClosing(suggestion)}
+                      className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                    >
+                      Conciliar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
