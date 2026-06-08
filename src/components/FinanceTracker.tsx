@@ -33,7 +33,7 @@ import {
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
-import { formatAccountBalance } from '../features/finance/finance.accounts.ts';
+import { findBestAccountForImportedTransaction, formatAccountBalance } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
 import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
@@ -316,7 +316,8 @@ function normalizeDuplicateText(value: string) {
 }
 
 function enrichImportedTransactionWithAccounts(transaction: any, accounts: any[]) {
-  const accountId = transaction.accountId || findSuggestedSourceAccount(transaction, accounts);
+  const sourceMatch = findBestAccountForImportedTransaction(transaction, accounts);
+  const accountId = transaction.accountId || sourceMatch.account?.id || findSuggestedSourceAccount(transaction, accounts);
   const toAccountId = transaction.toAccountId || findSuggestedDestinationAccount(transaction, accounts);
   const needsAccountReview = transaction.type === 'transfer' ? !accountId || !toAccountId : !accountId;
 
@@ -324,7 +325,9 @@ function enrichImportedTransactionWithAccounts(transaction: any, accounts: any[]
     ...transaction,
     accountId,
     toAccountId,
-    needsReview: Boolean(transaction.needsReview || needsAccountReview),
+    accountMatchConfidence: sourceMatch.confidence,
+    accountMatchReason: sourceMatch.reason,
+    needsReview: Boolean(transaction.needsReview || needsAccountReview || sourceMatch.confidence === 'low'),
   };
 }
 
@@ -918,6 +921,9 @@ interface PendingTransaction {
   counterpartyAlias?: string;
   transferDetail?: string;
   importSource?: string;
+  statementAccountLabel?: string;
+  accountMatchConfidence?: string;
+  accountMatchReason?: string;
   transactionFingerprint?: string;
   statementFingerprint?: string;
   duplicateOfId?: string;
@@ -1281,7 +1287,11 @@ export default function FinanceTracker({ user }: { user: any }) {
               ? finances.some(finance => finance.statementFingerprint === parsedStatement.statement?.statementFingerprint)
               : false;
             const mapped = parsedStatement.transactions.map((transaction: any) => {
-              const learnedTransaction = applyLearnedFinanceMapping(transaction, userMappings);
+              const statementAwareTransaction = {
+                ...transaction,
+                statementAccountLabel: parsedStatement.statement?.accountLabel || '',
+              };
+              const learnedTransaction = applyLearnedFinanceMapping(statementAwareTransaction, userMappings);
               const enrichedTransaction = enrichImportedTransactionWithAccounts(learnedTransaction, userAccounts);
               const duplicateMatch = duplicateStatement
                 ? { reason: 'Este resumen parece ya importado.', duplicateOfId: undefined }
@@ -2670,9 +2680,16 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <PendingMeta label="Confianza" value={`${Math.round(Number(pt.confidence || 0) * 100)}%`} />
                       <PendingMeta label="Comercio" value={pt.merchantName || 'No identificado'} />
                       <PendingMeta label="Fuente" value={pt.importSource || 'PDF'} />
+                      <PendingMeta label="Cuenta del resumen" value={pt.statementAccountLabel || 'No detectada'} />
+                      <PendingMeta label="Matching cuenta" value={pt.accountMatchConfidence || 'No evaluado'} />
                       <PendingMeta label="Archivo" value={pt.fileName} />
                       <PendingMeta label="Huella" value={shortFingerprint(pt.transactionFingerprint)} />
                     </div>
+                    {pt.accountMatchReason && (
+                      <p className="mt-3 text-xs font-bold text-neutral-500">
+                        Cuenta sugerida: <span className="text-neutral-900">{pt.accountMatchReason}</span>
+                      </p>
+                    )}
                     {typeof (pt as any).balanceDelta === 'number' && (
                       <p className="mt-3 text-xs font-bold text-neutral-500">
                         Impacto en saldo del resumen: {(pt as any).balanceDelta.toLocaleString()} {pt.currency || 'ARS'}
