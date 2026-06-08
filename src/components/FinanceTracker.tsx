@@ -33,7 +33,7 @@ import {
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
 import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
-import { findBestAccountForImportedTransaction, formatAccountBalance } from '../features/finance/finance.accounts.ts';
+import { findBestAccountForImportedTransaction, formatAccountBalance, getAccountReconciliationInfo } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
 import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
@@ -1146,12 +1146,19 @@ export default function FinanceTracker({ user }: { user: any }) {
     try {
       const accountPayload = buildAccountPayload(newAccount);
       if (editingAccount) {
-        await updateFinancialAccount(editingAccount.id, accountPayload);
+        const previousBalance = Number(editingAccount.balance || 0);
+        const nextBalance = Number(accountPayload.balance || 0);
+        const balanceWasReconciled = Math.abs(previousBalance - nextBalance) >= 0.01;
+        await updateFinancialAccount(editingAccount.id, {
+          ...accountPayload,
+          ...(balanceWasReconciled ? { lastReconciledAt: new Date() } : {}),
+        });
       } else {
         await createFinancialAccount({
           ...accountPayload,
           uid: user.uid,
           householdId: user.householdId,
+          lastReconciledAt: new Date(),
         });
       }
       setIsAddingAccount(false);
@@ -2266,68 +2273,85 @@ export default function FinanceTracker({ user }: { user: any }) {
 
       {/* Wallets Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {(userAccounts || []).map(acc => (
-          <motion.div
-            key={acc.id}
-            whileHover={{ y: -4 }}
-            className="bg-white p-6 rounded-3xl border border-neutral-100 shadow-sm relative overflow-hidden group cursor-pointer"
-            onClick={() => startEditingAccount(acc)}
-          >
-            <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-neutral-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div 
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
-                  style={{ backgroundColor: acc.color || '#3B82F6' }}
-                >
-                  {acc.type === 'bank' ? <Banknote size={18} /> : 
-                   acc.type === 'credit_card' ? <CreditCard size={18} /> : 
-                   acc.type === 'investment' ? <Briefcase size={18} /> : 
-                   <Wallet size={18} />}
-                </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id); }}
-                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+        {(userAccounts || []).map(acc => {
+          const reconciliation = getAccountReconciliationInfo(acc);
+          return (
+            <motion.div
+              key={acc.id}
+              whileHover={{ y: -4 }}
+              className="bg-white p-6 rounded-3xl border border-neutral-100 shadow-sm relative overflow-hidden group cursor-pointer"
+              onClick={() => startEditingAccount(acc)}
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-neutral-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
+                    style={{ backgroundColor: acc.color || '#3B82F6' }}
                   >
-                    <Trash2 size={14} />
-                  </button>
+                    {acc.type === 'bank' ? <Banknote size={18} /> : 
+                     acc.type === 'credit_card' ? <CreditCard size={18} /> : 
+                     acc.type === 'investment' ? <Briefcase size={18} /> : 
+                     <Wallet size={18} />}
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id); }}
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
+                <h4 className="font-bold text-neutral-800 mb-1">{acc.name}</h4>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">{getAccountTypeLabel(acc.type)}</p>
+                  <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+                    acc.type === 'credit_card' && Number(acc.balance || 0) < 0
+                      ? 'bg-red-50 text-red-700'
+                      : acc.type === 'investment'
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'bg-emerald-50 text-emerald-700'
+                  }`}>
+                    {getAccountHealthLabel(acc)}
+                  </span>
+                  <span
+                    title={reconciliation.helper}
+                    className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
+                      reconciliation.tone === 'danger'
+                        ? 'bg-red-50 text-red-700'
+                        : reconciliation.tone === 'warn'
+                          ? 'bg-amber-50 text-amber-700'
+                          : reconciliation.tone === 'ok'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-neutral-50 text-neutral-500'
+                    }`}
+                  >
+                    {reconciliation.label}
+                  </span>
+                </div>
+                {(acc.institution || acc.statementLabel || acc.accountNumberLast4 || acc.alias) && (
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {acc.institution && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.institution}</span>}
+                    {acc.statementLabel && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.statementLabel}</span>}
+                    {acc.accountNumberLast4 && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">****{acc.accountNumberLast4}</span>}
+                    {acc.alias && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.alias}</span>}
+                  </div>
+                )}
+                {acc.type === 'credit_card' && (acc.closingDay || acc.dueDay || acc.creditLimit) && (
+                  <div className="mb-3 flex flex-wrap gap-1.5 text-[10px] font-bold text-neutral-500">
+                    {acc.closingDay && <span>Cierre dia {acc.closingDay}</span>}
+                    {acc.dueDay && <span>Vence dia {acc.dueDay}</span>}
+                    {acc.creditLimit && <span>Limite {Number(acc.creditLimit).toLocaleString()} {acc.currency}</span>}
+                  </div>
+                )}
+                <p className="text-2xl font-black text-neutral-900">
+                  {formatAccountBalance(Number(acc.balance || 0), acc.type)} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
+                </p>
               </div>
-              <h4 className="font-bold text-neutral-800 mb-1">{acc.name}</h4>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">{getAccountTypeLabel(acc.type)}</p>
-                <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
-                  acc.type === 'credit_card' && Number(acc.balance || 0) < 0
-                    ? 'bg-red-50 text-red-700'
-                    : acc.type === 'investment'
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'bg-emerald-50 text-emerald-700'
-                }`}>
-                  {getAccountHealthLabel(acc)}
-                </span>
-              </div>
-              {(acc.institution || acc.statementLabel || acc.accountNumberLast4 || acc.alias) && (
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {acc.institution && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.institution}</span>}
-                  {acc.statementLabel && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.statementLabel}</span>}
-                  {acc.accountNumberLast4 && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">****{acc.accountNumberLast4}</span>}
-                  {acc.alias && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.alias}</span>}
-                </div>
-              )}
-              {acc.type === 'credit_card' && (acc.closingDay || acc.dueDay || acc.creditLimit) && (
-                <div className="mb-3 flex flex-wrap gap-1.5 text-[10px] font-bold text-neutral-500">
-                  {acc.closingDay && <span>Cierre dia {acc.closingDay}</span>}
-                  {acc.dueDay && <span>Vence dia {acc.dueDay}</span>}
-                  {acc.creditLimit && <span>Limite {Number(acc.creditLimit).toLocaleString()} {acc.currency}</span>}
-                </div>
-              )}
-              <p className="text-2xl font-black text-neutral-900">
-                {formatAccountBalance(Number(acc.balance || 0), acc.type)} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
-              </p>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
         <button 
           onClick={() => {
             setEditingAccount(null);

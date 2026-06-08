@@ -134,6 +134,7 @@ export interface CreateFinancialAccountInput {
   creditLimit?: number | null;
   notes?: string | null;
   isArchived?: boolean;
+  lastReconciledAt?: any;
 }
 
 export interface CreateFinancialTransactionInput {

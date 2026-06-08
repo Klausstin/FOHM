@@ -153,3 +153,49 @@ export function formatAccountBalance(balance: number, accountType?: string) {
 
   return balance.toLocaleString();
 }
+
+export function getAccountReconciliationInfo(account: any, now = new Date()) {
+  const reconciledAt = parseAccountDate(account?.lastReconciledAt);
+  if (!reconciledAt) {
+    return {
+      label: 'Sin conciliar',
+      tone: 'warn' as const,
+      days: null,
+      helper: 'Todavia no marcamos este saldo como revisado.',
+    };
+  }
+
+  const days = Math.max(0, Math.floor((now.getTime() - reconciledAt.getTime()) / 86_400_000));
+  if (days <= 7) {
+    return {
+      label: days === 0 ? 'Conciliada hoy' : `Conciliada hace ${days}d`,
+      tone: 'ok' as const,
+      days,
+      helper: 'El saldo fue revisado recientemente.',
+    };
+  }
+
+  if (days <= 21) {
+    return {
+      label: `Revisar pronto (${days}d)`,
+      tone: 'neutral' as const,
+      days,
+      helper: 'Ya paso un tiempo desde la ultima revision.',
+    };
+  }
+
+  return {
+    label: `Conciliar (${days}d)`,
+    tone: 'danger' as const,
+    days,
+    helper: 'Conviene actualizar este saldo real.',
+  };
+}
+
+function parseAccountDate(value: any) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
