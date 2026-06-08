@@ -36,6 +36,15 @@ export interface FinancialAccountRecord {
   balance: number;
   color?: string;
   type?: 'bank' | 'wallet' | 'investment' | 'credit_card' | 'cash' | string;
+  institution?: string | null;
+  accountNumberLast4?: string | null;
+  statementLabel?: string | null;
+  alias?: string | null;
+  closingDay?: number | null;
+  dueDay?: number | null;
+  creditLimit?: number | null;
+  notes?: string | null;
+  isArchived?: boolean;
   lastReconciledAt?: any;
   createdAt?: any;
 }
@@ -116,6 +125,15 @@ export interface CreateFinancialAccountInput {
   balance: number;
   color?: string;
   type?: string;
+  institution?: string | null;
+  accountNumberLast4?: string | null;
+  statementLabel?: string | null;
+  alias?: string | null;
+  closingDay?: number | null;
+  dueDay?: number | null;
+  creditLimit?: number | null;
+  notes?: string | null;
+  isArchived?: boolean;
 }
 
 export interface CreateFinancialTransactionInput {

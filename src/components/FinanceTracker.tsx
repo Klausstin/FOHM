@@ -351,7 +351,7 @@ function findCreditCardAccountByText(accounts: any[], sourceText: string) {
   const wantsMastercard = sourceText.includes('mastercard') || sourceText.includes('master') || sourceText.includes('mc');
 
   const exactMatch = accounts.find(account => {
-    const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''}`);
+    const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''} ${account.institution || ''} ${account.statementLabel || ''} ${account.accountNumberLast4 || ''} ${account.alias || ''}`);
     if (account.type !== 'credit_card') return false;
     if (wantsVisa) return text.includes('visa');
     if (wantsMastercard) return text.includes('mastercard') || text.includes('master') || text.includes('mc');
@@ -365,7 +365,7 @@ function findCreditCardAccountByText(accounts: any[], sourceText: string) {
 function findCajaAhorroAccount(accounts: any[]) {
   const assetAccounts = accounts.filter(account => account.type !== 'credit_card');
   return assetAccounts.find(account => {
-    const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''} ${account.currency || ''}`);
+    const text = normalizeDuplicateText(`${account.name || ''} ${account.type || ''} ${account.currency || ''} ${account.institution || ''} ${account.statementLabel || ''} ${account.alias || ''} ${account.accountNumberLast4 || ''}`);
     return account.currency === 'ARS' && (text.includes('caja') || text.includes('ahorro') || text.includes('cuenta sueldo') || text.includes('bbva'));
   }) || assetAccounts.find(account => account.currency === 'ARS' && account.type === 'bank');
 }
@@ -693,6 +693,62 @@ function getAccountHealthLabel(account: any) {
   return 'Disponible';
 }
 
+function createEmptyAccountDraft() {
+  return {
+    name: '',
+    currency: 'ARS',
+    balance: 0,
+    color: '#3B82F6',
+    type: 'bank',
+    institution: '',
+    accountNumberLast4: '',
+    statementLabel: '',
+    alias: '',
+    closingDay: '',
+    dueDay: '',
+    creditLimit: '',
+    notes: '',
+  };
+}
+
+function cleanOptionalText(value: unknown) {
+  const text = String(value || '').trim();
+  return text || null;
+}
+
+function cleanOptionalNumber(value: unknown) {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function cleanAccountDay(value: unknown) {
+  const parsed = cleanOptionalNumber(value);
+  if (!parsed) return null;
+  return Math.min(31, Math.max(1, Math.round(parsed)));
+}
+
+function buildAccountPayload(draft: any) {
+  const type = draft.type || 'bank';
+  const isCreditCard = type === 'credit_card';
+
+  return {
+    name: String(draft.name || '').trim(),
+    currency: draft.currency || 'ARS',
+    balance: Number(draft.balance || 0),
+    color: draft.color || '#3B82F6',
+    type,
+    institution: cleanOptionalText(draft.institution),
+    accountNumberLast4: cleanOptionalText(draft.accountNumberLast4),
+    statementLabel: cleanOptionalText(draft.statementLabel),
+    alias: cleanOptionalText(draft.alias),
+    closingDay: isCreditCard ? cleanAccountDay(draft.closingDay) : null,
+    dueDay: isCreditCard ? cleanAccountDay(draft.dueDay) : null,
+    creditLimit: isCreditCard ? cleanOptionalNumber(draft.creditLimit) : null,
+    notes: cleanOptionalText(draft.notes),
+  };
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -917,7 +973,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [userAccounts, setUserAccounts] = useState<any[]>([]);
   const [isAddingAccount, setIsAddingAccount] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any | null>(null);
-  const [newAccount, setNewAccount] = useState({ name: '', currency: 'ARS', balance: 0, color: '#3B82F6', type: 'bank' });
+  const [newAccount, setNewAccount] = useState(createEmptyAccountDraft());
   const [householdMembers, setHouseholdMembers] = useState<any[]>([]);
   const uniqueHouseholdMembers = useMemo(() => {
     const byIdentity = new Map<string, any>();
@@ -1082,18 +1138,19 @@ export default function FinanceTracker({ user }: { user: any }) {
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const accountPayload = buildAccountPayload(newAccount);
       if (editingAccount) {
-        await updateFinancialAccount(editingAccount.id, newAccount);
+        await updateFinancialAccount(editingAccount.id, accountPayload);
       } else {
         await createFinancialAccount({
-          ...newAccount,
+          ...accountPayload,
           uid: user.uid,
           householdId: user.householdId,
         });
       }
       setIsAddingAccount(false);
       setEditingAccount(null);
-      setNewAccount({ name: '', currency: 'ARS', balance: 0, color: '#3B82F6', type: 'bank' });
+      setNewAccount(createEmptyAccountDraft());
     } catch (error) {
       handleFirestoreError(error, editingAccount ? OperationType.UPDATE : OperationType.CREATE, 'accounts');
     }
@@ -1111,11 +1168,19 @@ export default function FinanceTracker({ user }: { user: any }) {
   const startEditingAccount = (acc: any) => {
     setEditingAccount(acc);
     setNewAccount({
-      name: acc.name,
-      currency: acc.currency,
-      balance: acc.balance,
+      name: acc.name || '',
+      currency: acc.currency || 'ARS',
+      balance: Number(acc.balance || 0),
       color: acc.color || '#3B82F6',
-      type: acc.type
+      type: acc.type || 'bank',
+      institution: acc.institution || '',
+      accountNumberLast4: acc.accountNumberLast4 || '',
+      statementLabel: acc.statementLabel || '',
+      alias: acc.alias || '',
+      closingDay: acc.closingDay || '',
+      dueDay: acc.dueDay || '',
+      creditLimit: acc.creditLimit || '',
+      notes: acc.notes || '',
     });
     setIsAddingAccount(true);
   };
@@ -2232,6 +2297,21 @@ export default function FinanceTracker({ user }: { user: any }) {
                   {getAccountHealthLabel(acc)}
                 </span>
               </div>
+              {(acc.institution || acc.statementLabel || acc.accountNumberLast4 || acc.alias) && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {acc.institution && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.institution}</span>}
+                  {acc.statementLabel && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.statementLabel}</span>}
+                  {acc.accountNumberLast4 && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">****{acc.accountNumberLast4}</span>}
+                  {acc.alias && <span className="rounded-full bg-neutral-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">{acc.alias}</span>}
+                </div>
+              )}
+              {acc.type === 'credit_card' && (acc.closingDay || acc.dueDay || acc.creditLimit) && (
+                <div className="mb-3 flex flex-wrap gap-1.5 text-[10px] font-bold text-neutral-500">
+                  {acc.closingDay && <span>Cierre dia {acc.closingDay}</span>}
+                  {acc.dueDay && <span>Vence dia {acc.dueDay}</span>}
+                  {acc.creditLimit && <span>Limite {Number(acc.creditLimit).toLocaleString()} {acc.currency}</span>}
+                </div>
+              )}
               <p className="text-2xl font-black text-neutral-900">
                 {formatAccountBalance(Number(acc.balance || 0), acc.type)} <span className="text-sm font-bold text-neutral-400">{acc.currency}</span>
               </p>
@@ -2241,7 +2321,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         <button 
           onClick={() => {
             setEditingAccount(null);
-            setNewAccount({ name: '', currency: 'ARS', balance: 0, color: '#3B82F6', type: 'bank' });
+            setNewAccount(createEmptyAccountDraft());
             setIsAddingAccount(true);
           }}
           className="border-2 border-dashed border-neutral-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-neutral-400 hover:border-neutral-400 hover:text-neutral-500 transition-all min-h-[160px] bg-white group"
@@ -2264,7 +2344,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl"
+              className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
             >
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-black text-neutral-900">
@@ -2332,6 +2412,101 @@ export default function FinanceTracker({ user }: { user: any }) {
                       className="w-full h-11 bg-neutral-50 border border-neutral-100 rounded-xl p-1 cursor-pointer"
                     />
                   </div>
+                </div>
+                <div className="rounded-3xl border border-neutral-100 bg-neutral-50/60 p-4">
+                  <p className="mb-3 text-xs font-black uppercase tracking-widest text-neutral-400">Datos para conciliacion</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Institucion</label>
+                      <input
+                        type="text"
+                        value={newAccount.institution}
+                        onChange={e => setNewAccount({ ...newAccount, institution: e.target.value })}
+                        className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                        placeholder="Ej: BBVA, Galicia, Mercado Pago"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Etiqueta resumen</label>
+                      <input
+                        type="text"
+                        value={newAccount.statementLabel}
+                        onChange={e => setNewAccount({ ...newAccount, statementLabel: e.target.value })}
+                        className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                        placeholder="Ej: Caja ARS, Visa, Mastercard"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Ultimos digitos</label>
+                      <input
+                        type="text"
+                        value={newAccount.accountNumberLast4}
+                        onChange={e => setNewAccount({ ...newAccount, accountNumberLast4: e.target.value })}
+                        className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                        placeholder="Ej: 1234"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Alias / CVU / CBU</label>
+                      <input
+                        type="text"
+                        value={newAccount.alias}
+                        onChange={e => setNewAccount({ ...newAccount, alias: e.target.value })}
+                        className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                        placeholder="Opcional"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {newAccount.type === 'credit_card' && (
+                  <div className="rounded-3xl border border-neutral-100 bg-neutral-50/60 p-4">
+                    <p className="mb-3 text-xs font-black uppercase tracking-widest text-neutral-400">Datos de tarjeta</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Cierre</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={newAccount.closingDay}
+                          onChange={e => setNewAccount({ ...newAccount, closingDay: e.target.value })}
+                          className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                          placeholder="Dia"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Vencimiento</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={newAccount.dueDay}
+                          onChange={e => setNewAccount({ ...newAccount, dueDay: e.target.value })}
+                          className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                          placeholder="Dia"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Limite</label>
+                        <input
+                          type="number"
+                          value={newAccount.creditLimit}
+                          onChange={e => setNewAccount({ ...newAccount, creditLimit: e.target.value })}
+                          className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                          placeholder="Opcional"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Notas internas</label>
+                  <textarea
+                    value={newAccount.notes}
+                    onChange={e => setNewAccount({ ...newAccount, notes: e.target.value })}
+                    className="min-h-[88px] w-full resize-none bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900"
+                    placeholder="Algo que ayude a reconocer esta cuenta despues."
+                  />
                 </div>
                 <button
                   type="submit"

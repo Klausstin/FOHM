@@ -40,14 +40,14 @@ export function subscribeToHouseholdFinancialAccounts(
 }
 
 export async function createFinancialAccount(input: CreateFinancialAccountInput) {
-  await addDoc(collection(db, 'accounts'), {
+  await addDoc(collection(db, 'accounts'), compactPayload({
     ...input,
     createdAt: new Date(),
-  });
+  }));
 }
 
 export async function updateFinancialAccount(accountId: string, input: Partial<CreateFinancialAccountInput>) {
-  await updateDoc(doc(db, 'accounts', accountId), input);
+  await updateDoc(doc(db, 'accounts', accountId), compactAccountUpdatePayload(input));
 }
 
 export async function deleteFinancialAccount(accountId: string) {
@@ -137,6 +137,28 @@ function compactPayload<T extends Record<string, unknown>>(payload: T) {
       return true;
     }),
   ) as Partial<T>;
+}
+
+function compactAccountUpdatePayload(input: Partial<CreateFinancialAccountInput>) {
+  const payload = compactPayload(input as Record<string, unknown>);
+  const clearableFields = [
+    'institution',
+    'accountNumberLast4',
+    'statementLabel',
+    'alias',
+    'closingDay',
+    'dueDay',
+    'creditLimit',
+    'notes',
+  ];
+
+  clearableFields.forEach(field => {
+    if (field in input && input[field as keyof CreateFinancialAccountInput] === null) {
+      payload[field] = null;
+    }
+  });
+
+  return payload;
 }
 
 export async function updateFinancialTransaction(transactionId: string, input: Partial<CreateFinancialTransactionInput>) {
