@@ -76,7 +76,7 @@ export async function upsertFinanceLearningMapping(input: Omit<FinanceLearningMa
     merchantKey: input.merchantKey || '',
     transactionFingerprint: input.transactionFingerprint || '',
     learningKey,
-    useCount: (existingMapping?.useCount || 0) + 1,
+    useCount: Math.max((existingMapping?.useCount || 0) + 1, input.useCount || 1),
     lastUsedAt: new Date(),
   });
 

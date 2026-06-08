@@ -1177,6 +1177,18 @@ interface PendingTransaction {
   duplicateReason?: string;
 }
 
+interface WalletMemoryMappingImport {
+  originalDescription: string;
+  mappedDescription: string;
+  category: string;
+  subCategory?: string;
+  kind?: string;
+  merchantName?: string;
+  merchantKey?: string;
+  useCount?: number;
+  confidence?: number;
+}
+
 interface StatementClosingSuggestion {
   id: string;
   accountId: string;
@@ -1288,6 +1300,9 @@ export default function FinanceTracker({ user }: { user: any }) {
     files: number;
     statementClosings: StatementClosingSuggestion[];
   } | null>(null);
+  const [walletMemoryPreview, setWalletMemoryPreview] = useState<WalletMemoryMappingImport[]>([]);
+  const [walletMemoryStatus, setWalletMemoryStatus] = useState('');
+  const [isApplyingWalletMemory, setIsApplyingWalletMemory] = useState(false);
   
   // Filtering states
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, day, month, quarter, year, custom
@@ -1883,6 +1898,76 @@ export default function FinanceTracker({ user }: { user: any }) {
 
     return lines.join('\n');
   };
+
+  const handleWalletMemoryPreviewFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text());
+      const candidates = Array.isArray(parsed)
+        ? parsed.filter(isValidWalletMemoryCandidate).slice(0, 200)
+        : [];
+
+      if (candidates.length === 0) {
+        setWalletMemoryPreview([]);
+        setWalletMemoryStatus('No encontre candidatos validos en ese archivo.');
+        return;
+      }
+
+      setWalletMemoryPreview(candidates);
+      setWalletMemoryStatus(`Listos para activar: ${candidates.length} aprendizaje(s).`);
+    } catch {
+      setWalletMemoryPreview([]);
+      setWalletMemoryStatus('No pude leer el JSON de candidatos Wallet.');
+    }
+  };
+
+  const activateWalletMemoryPreview = async () => {
+    if (walletMemoryPreview.length === 0 || isApplyingWalletMemory) return;
+
+    setIsApplyingWalletMemory(true);
+    setWalletMemoryStatus('Activando memoria Wallet...');
+
+    try {
+      for (const candidate of walletMemoryPreview) {
+        await upsertFinanceLearningMapping({
+          uid: user.uid,
+          householdId: user.householdId,
+          originalDescription: candidate.originalDescription,
+          mappedDescription: candidate.mappedDescription,
+          category: candidate.category,
+          subCategory: candidate.subCategory || '',
+          kind: 'expense',
+          isFixed: Number(candidate.useCount || 0) >= 3,
+          merchantName: candidate.merchantName || candidate.mappedDescription,
+          merchantKey: candidate.merchantKey || '',
+          scope: 'familia',
+          visibility: 'household_shared',
+          useCount: Number(candidate.useCount || 1),
+        }, userMappings);
+      }
+
+      setWalletMemoryStatus(`Memoria Wallet activada: ${walletMemoryPreview.length} aprendizaje(s).`);
+      setWalletMemoryPreview([]);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'mappings');
+      setWalletMemoryStatus('No pude activar la memoria Wallet. Revisemos permisos o conexion.');
+    } finally {
+      setIsApplyingWalletMemory(false);
+    }
+  };
+
+  const isValidWalletMemoryCandidate = (candidate: any): candidate is WalletMemoryMappingImport => (
+    candidate &&
+    typeof candidate.originalDescription === 'string' &&
+    typeof candidate.mappedDescription === 'string' &&
+    typeof candidate.category === 'string' &&
+    candidate.originalDescription.trim().length > 0 &&
+    candidate.mappedDescription.trim().length > 0 &&
+    candidate.category.trim().length > 0
+  );
 
   const linkPendingDuplicateToExisting = async (pt: PendingTransaction) => {
     if (!pt.duplicateOfId) return;
@@ -3076,6 +3161,55 @@ export default function FinanceTracker({ user }: { user: any }) {
           </div>
         </motion.div>
       )}
+
+      <div className="rounded-[2rem] border border-neutral-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Memoria financiera</p>
+            <h3 className="mt-1 text-xl font-black text-neutral-950">Aprendizajes Wallet</h3>
+            <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-neutral-500">
+              Activa patrones confiables del historial viejo para mejorar la clasificacion futura. No crea gastos ni cambia saldos.
+            </p>
+            {walletMemoryStatus && (
+              <p className="mt-2 text-xs font-bold text-neutral-700">{walletMemoryStatus}</p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-900 transition hover:bg-neutral-50">
+              <Upload size={15} />
+              Elegir JSON
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleWalletMemoryPreviewFile}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={activateWalletMemoryPreview}
+              disabled={walletMemoryPreview.length === 0 || isApplyingWalletMemory}
+              className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+            >
+              {isApplyingWalletMemory ? 'Activando...' : `Activar (${walletMemoryPreview.length})`}
+            </button>
+          </div>
+        </div>
+        {walletMemoryPreview.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {walletMemoryPreview.slice(0, 8).map(candidate => (
+              <span key={`${candidate.merchantKey || candidate.mappedDescription}-${candidate.category}`} className="rounded-full bg-neutral-100 px-3 py-2 text-xs font-bold text-neutral-700">
+                {candidate.mappedDescription} {'->'} {candidate.category}{candidate.subCategory ? ` / ${candidate.subCategory}` : ''}
+              </span>
+            ))}
+            {walletMemoryPreview.length > 8 && (
+              <span className="rounded-full bg-neutral-950 px-3 py-2 text-xs font-bold text-white">
+                +{walletMemoryPreview.length - 8}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       {lastImportResult && (
         <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-5">
