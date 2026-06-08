@@ -226,12 +226,12 @@ function parseWalletCsvRows(rows: Record<string, string>[], fileName: string, wa
 }
 
 function parseWalletTransactionRow(row: Record<string, string>, index: number, fileName: string) {
-  const walletAccount = String(row.account || '').trim();
-  const walletCategory = String(row.category || '').trim();
-  const note = String(row.note || '').trim();
-  const payee = String(row.payee || '').trim();
-  const labels = String(row.labels || '').trim();
-  const paymentType = String(row.payment_type || row.paymentType || '').trim();
+  const walletAccount = repairImportedText(String(row.account || '').trim());
+  const walletCategory = repairImportedText(String(row.category || '').trim());
+  const note = repairImportedText(String(row.note || '').trim());
+  const payee = repairImportedText(String(row.payee || '').trim());
+  const labels = repairImportedText(String(row.labels || '').trim());
+  const paymentType = repairImportedText(String(row.payment_type || row.paymentType || '').trim());
   const walletType = normalizeText(String(row.type || 'Expense'));
   const amount = Math.abs(Number(row.amount || 0));
   if (!amount) return null;
@@ -735,6 +735,16 @@ function splitWalletLabels(value: string) {
 function buildWalletMerchantKey(value: string) {
   const normalized = normalizeFingerprintText(value || '');
   return normalized ? normalized.replace(/\s+/g, '-') : undefined;
+}
+
+function repairImportedText(value: string) {
+  if (!/[ÃÂ]/.test(value)) return value;
+  try {
+    const bytes = Uint8Array.from([...value].map(char => char.charCodeAt(0) & 0xff));
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch {
+    return value;
+  }
 }
 
 function extractTransferDetails(description: string, type: ImportedFinanceTransaction['type']) {
