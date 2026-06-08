@@ -1,3 +1,4 @@
+import Papa from 'papaparse';
 import { suggestMerchant } from './finance.merchants.ts';
 import { classifyFinanceText } from './finance.taxonomy.ts';
 
@@ -26,7 +27,7 @@ export interface ImportedFinanceTransaction {
 }
 
 export interface FinanceImportResult {
-  source: 'bbva_caja_ahorro_ars' | 'bbva_visa' | 'unknown';
+  source: 'bbva_caja_ahorro_ars' | 'bbva_visa' | 'generic_csv' | 'unknown';
   transactions: ImportedFinanceTransaction[];
   statement?: ImportedFinanceStatement;
   warnings?: string[];
@@ -84,6 +85,84 @@ export function parseFinanceStatementText(text: string, fileName = ''): FinanceI
   return {
     source: 'bbva_caja_ahorro_ars',
     ...parseBbvaCajaAhorroArs(normalizedText, fileName),
+  };
+}
+
+export function parseFinanceCsvText(text: string, fileName = ''): FinanceImportResult {
+  const parsed = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    transformHeader: header => header.trim(),
+  });
+  const warnings: string[] = [];
+
+  if (parsed.errors.length > 0) {
+    warnings.push(...parsed.errors.slice(0, 5).map(error => error.message));
+  }
+
+  const rows = (parsed.data || []).filter(row =>
+    Object.values(row || {}).some(value => String(value || '').trim()),
+  );
+
+  if (rows.length === 0) {
+    return {
+      source: 'generic_csv',
+      transactions: [],
+      warnings: ['No encontre filas legibles en el CSV.'],
+    };
+  }
+
+  const columns = Object.keys(rows[0] || {});
+  const dateColumn = findCsvColumn(columns, ['fecha', 'date', 'fecha movimiento', 'fecha operacion', 'fecha de operacion', 'fecha pago']);
+  const descriptionColumn = findCsvColumn(columns, ['descripcion', 'descripción', 'concepto', 'detalle', 'movimiento', 'comercio', 'referencia']);
+  const amountColumn = findCsvColumn(columns, ['importe', 'monto', 'total', 'amount', 'valor']);
+  const debitColumn = findCsvColumn(columns, ['debito', 'débito', 'debe', 'egreso', 'cargo', 'cargos', 'consumo', 'consumos']);
+  const creditColumn = findCsvColumn(columns, ['credito', 'crédito', 'haber', 'ingreso', 'abono', 'acredita', 'acreditacion']);
+  const currencyColumn = findCsvColumn(columns, ['moneda', 'currency', 'divisa']);
+
+  if (!dateColumn) warnings.push('No detecte una columna clara de fecha.');
+  if (!descriptionColumn) warnings.push('No detecte una columna clara de descripcion/concepto.');
+  if (!amountColumn && !debitColumn && !creditColumn) warnings.push('No detecte columnas claras de importe/debito/credito.');
+
+  const transactions = rows
+    .map((row, index) => parseCsvTransactionRow({
+      row,
+      index,
+      fileName,
+      dateColumn,
+      descriptionColumn,
+      amountColumn,
+      debitColumn,
+      creditColumn,
+      currencyColumn,
+    }))
+    .filter(Boolean) as ImportedFinanceTransaction[];
+
+  const statementFingerprint = buildStatementFingerprint('generic_csv', {
+    accountLabel: fileName || 'CSV',
+    periodEnd: transactions[0]?.date,
+    previousBalance: 0,
+    closingBalance: 0,
+    totalDebits: transactions.filter(transaction => transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
+    totalCredits: transactions.filter(transaction => transaction.type === 'income').reduce((sum, transaction) => sum + transaction.amount, 0),
+    transactionCount: transactions.length,
+  });
+
+  transactions.forEach(transaction => {
+    transaction.statementFingerprint = statementFingerprint;
+    transaction.transactionFingerprint = buildTransactionFingerprint(transaction);
+  });
+
+  return {
+    source: 'generic_csv',
+    transactions,
+    statement: {
+      accountLabel: fileName || 'CSV',
+      currency: transactions[0]?.currency || 'ARS',
+      transactionCount: transactions.length,
+      statementFingerprint,
+    },
+    warnings,
   };
 }
 
@@ -394,6 +473,151 @@ function normalizeWhitespace(text: string) {
 
 function cleanMovementDescription(description: string) {
   return description.replace(/\s+/g, ' ').trim();
+}
+
+function findCsvColumn(columns: string[], candidates: string[]) {
+  const normalizedCandidates = candidates.map(normalizeCsvColumnName);
+  return columns.find(column => normalizedCandidates.includes(normalizeCsvColumnName(column))) ||
+    columns.find(column => {
+      const normalizedColumn = normalizeCsvColumnName(column);
+      return normalizedCandidates.some(candidate => normalizedColumn.includes(candidate) || candidate.includes(normalizedColumn));
+    });
+}
+
+function parseCsvTransactionRow(input: {
+  row: Record<string, string>;
+  index: number;
+  fileName: string;
+  dateColumn?: string;
+  descriptionColumn?: string;
+  amountColumn?: string;
+  debitColumn?: string;
+  creditColumn?: string;
+  currencyColumn?: string;
+}) {
+  const rawDescription = getCsvValue(input.row, input.descriptionColumn) || `Movimiento CSV ${input.index + 1}`;
+  const description = cleanMovementDescription(rawDescription);
+  const rawDate = getCsvValue(input.row, input.dateColumn);
+  const date = parseCsvDate(rawDate) || new Date();
+  const rawCurrency = getCsvValue(input.row, input.currencyColumn);
+  const currency = normalizeCsvCurrency(rawCurrency, description);
+  const amountInfo = parseCsvAmount(input.row, input.amountColumn, input.debitColumn, input.creditColumn);
+
+  if (!amountInfo || !Number.isFinite(amountInfo.amount) || amountInfo.amount === 0) return null;
+
+  const merchant = suggestMerchant(description);
+  const classification = classifyFinanceText(description);
+  const type = amountInfo.signedAmount > 0 ? 'income' as const : 'expense' as const;
+  const category = type === 'income' ? 'Ingresos' : (merchant.confidence >= 0.8 ? merchant.category : classification.suggestion.category);
+  const subCategory = type === 'income' ? '' : (merchant.confidence >= 0.8 ? merchant.subCategory : classification.suggestion.subcategory);
+  const confidence = type === 'income' ? 0.75 : Math.max(merchant.confidence, classification.suggestion.confidence);
+
+  return {
+    amount: Math.abs(amountInfo.amount),
+    currency,
+    description,
+    category,
+    subCategory,
+    type,
+    date: date.toISOString(),
+    isFixed: merchant.isLikelyRecurring,
+    confidence,
+    needsReview: confidence < 0.75 || !input.dateColumn || !input.descriptionColumn,
+    merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : undefined,
+    merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : undefined,
+    importSource: 'generic_csv',
+    balanceDelta: amountInfo.signedAmount,
+  } satisfies ImportedFinanceTransaction;
+}
+
+function getCsvValue(row: Record<string, string>, column?: string) {
+  if (!column) return '';
+  return String(row[column] || '').trim();
+}
+
+function parseCsvAmount(
+  row: Record<string, string>,
+  amountColumn?: string,
+  debitColumn?: string,
+  creditColumn?: string,
+) {
+  const debit = parseCsvMoney(getCsvValue(row, debitColumn));
+  const credit = parseCsvMoney(getCsvValue(row, creditColumn));
+  if (typeof debit === 'number' && debit !== 0) {
+    return { amount: Math.abs(debit), signedAmount: -Math.abs(debit) };
+  }
+  if (typeof credit === 'number' && credit !== 0) {
+    return { amount: Math.abs(credit), signedAmount: Math.abs(credit) };
+  }
+
+  const amount = parseCsvMoney(getCsvValue(row, amountColumn));
+  if (typeof amount !== 'number') return null;
+  return { amount: Math.abs(amount), signedAmount: amount };
+}
+
+function parseCsvMoney(value: string) {
+  const cleaned = String(value || '')
+    .replace(/\s/g, '')
+    .replace(/\$/g, '')
+    .replace(/ARS|USD|EUR|US\$|U\$S/gi, '');
+  if (!cleaned) return undefined;
+
+  const isNegative = cleaned.startsWith('-') || /^\(.+\)$/.test(cleaned);
+  const numeric = cleaned.replace(/[()]/g, '').replace(/^-/, '');
+  const decimalSeparator = inferDecimalSeparator(numeric);
+  const normalized = decimalSeparator === ','
+    ? numeric.replace(/\./g, '').replace(',', '.')
+    : numeric.replace(/,/g, '');
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return undefined;
+  return isNegative ? -parsed : parsed;
+}
+
+function inferDecimalSeparator(value: string) {
+  const commaIndex = value.lastIndexOf(',');
+  const dotIndex = value.lastIndexOf('.');
+  if (commaIndex > dotIndex) return ',';
+  if (dotIndex > commaIndex) return '.';
+  return ',';
+}
+
+function parseCsvDate(value: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const iso = new Date(raw);
+  if (!Number.isNaN(iso.getTime())) return normalizeDateAtNoon(iso);
+
+  const match = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/.exec(raw);
+  if (match) {
+    const [, day, month, yearText] = match;
+    const year = yearText.length === 2 ? resolveTwoDigitYear(yearText, new Date().getFullYear()) : Number(yearText);
+    const parsed = new Date(year, Number(month) - 1, Number(day), 12);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
+
+function normalizeDateAtNoon(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+}
+
+function normalizeCsvCurrency(value: string, description: string) {
+  const text = normalizeText(`${value || ''} ${description || ''}`).toUpperCase();
+  if (text.includes('USD') || text.includes('U$S') || text.includes('US$')) return 'USD';
+  if (text.includes('EUR')) return 'EUR';
+  if (text.includes('BRL')) return 'BRL';
+  if (text.includes('CLP')) return 'CLP';
+  if (text.includes('UYU')) return 'UYU';
+  return 'ARS';
+}
+
+function normalizeCsvColumnName(value: string) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function extractTransferDetails(description: string, type: ImportedFinanceTransaction['type']) {

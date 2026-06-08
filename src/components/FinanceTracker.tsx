@@ -35,7 +35,7 @@ import {
 } from '../features/finance/finance.service.ts';
 import { buildCatchupEstimatedTransaction, estimateFinanceCatchupMinutes, getDaysSinceLastFinanceUpdate, shouldSuggestFinanceCatchup } from '../features/finance/finance.helpers.ts';
 import { buildFinancialInsights } from '../features/finance/finance.insights.ts';
-import { parseFinanceStatementText } from '../features/finance/finance.import.ts';
+import { parseFinanceCsvText, parseFinanceStatementText } from '../features/finance/finance.import.ts';
 import { findBestAccountForImportedTransaction, formatAccountBalance, getAccountBalanceDelta, getAccountReconciliationInfo } from '../features/finance/finance.accounts.ts';
 import { fetchArgentinaInflationSnapshot, getCachedArgentinaInflationSnapshot, getLatestMonthlyInflationRate } from '../features/finance/argentinaInflation.ts';
 import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts';
@@ -425,6 +425,14 @@ function getPendingCategoryType(category: string) {
 function formatPendingDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-AR');
+}
+
+function isCsvFile(file: File) {
+  return file.name.toLowerCase().endsWith('.csv') || file.type === 'text/csv';
+}
+
+function isCsvPendingTransaction(transaction: Partial<PendingTransaction>) {
+  return transaction.importSource === 'generic_csv' || transaction.fileName?.toLowerCase().endsWith('.csv');
 }
 
 function shortFingerprint(value?: string) {
@@ -1288,7 +1296,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const pendingImportSummary = useMemo(() => {
     const byFile = pendingTransactions.reduce<Record<string, number>>((acc, transaction) => {
-      const fileName = transaction.fileName || 'PDF';
+      const fileName = transaction.fileName || 'Archivo';
       acc[fileName] = (acc[fileName] || 0) + 1;
       return acc;
     }, {});
@@ -1670,6 +1678,41 @@ export default function FinanceTracker({ user }: { user: any }) {
     });
   };
 
+  const processCsv = async (file: File) => {
+    const text = await file.text();
+    const parsedStatement = parseFinanceCsvText(text, file.name);
+    const duplicateStatement = parsedStatement.statement?.statementFingerprint
+      ? finances.some(finance => finance.statementFingerprint === parsedStatement.statement?.statementFingerprint)
+      : false;
+
+    const mapped = parsedStatement.transactions.map((transaction: any) => {
+      const statementAwareTransaction = {
+        ...transaction,
+        statementAccountLabel: parsedStatement.statement?.accountLabel || file.name,
+      };
+      const learnedTransaction = applyLearnedFinanceMapping(statementAwareTransaction, userMappings);
+      const enrichedTransaction = enrichImportedTransactionWithAccounts(learnedTransaction, userAccounts);
+      const duplicateMatch = duplicateStatement
+        ? { reason: 'Este CSV parece ya importado.', duplicateOfId: undefined }
+        : findLikelyDuplicateMatch(enrichedTransaction, finances);
+      return {
+        ...enrichedTransaction,
+        id: Math.random().toString(36).substr(2, 9),
+        originalDescription: enrichedTransaction.description,
+        fileName: file.name,
+        confidence: enrichedTransaction.confidence || 0,
+        duplicateReason: duplicateMatch?.reason || '',
+        duplicateOfId: duplicateMatch?.duplicateOfId || '',
+        needsReview: true,
+      };
+    });
+
+    return {
+      transactions: mapped,
+      statementClosings: [] as StatementClosingSuggestion[],
+    };
+  };
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
@@ -1678,12 +1721,20 @@ export default function FinanceTracker({ user }: { user: any }) {
       const allPending: PendingTransaction[] = [];
       const statementClosings: StatementClosingSuggestion[] = [];
       for (const file of acceptedFiles) {
-        const fileResult = await processPdf(file);
+        const fileResult = isCsvFile(file) ? await processCsv(file) : await processPdf(file);
         allPending.push(...fileResult.transactions);
         statementClosings.push(...fileResult.statementClosings);
       }
-      const reviewTransactions = allPending.filter(transaction => transaction.duplicateReason || pendingTransactionNeedsAccount(transaction));
-      const readyTransactions = allPending.filter(transaction => !transaction.duplicateReason && !pendingTransactionNeedsAccount(transaction));
+      const reviewTransactions = allPending.filter(transaction =>
+        isCsvPendingTransaction(transaction) ||
+        transaction.duplicateReason ||
+        pendingTransactionNeedsAccount(transaction)
+      );
+      const readyTransactions = allPending.filter(transaction =>
+        !isCsvPendingTransaction(transaction) &&
+        !transaction.duplicateReason &&
+        !pendingTransactionNeedsAccount(transaction)
+      );
 
       for (const transaction of readyTransactions) {
         await confirmTransaction(transaction);
@@ -1699,8 +1750,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         statementClosings,
       });
     } catch (error) {
-      console.error("Error processing PDFs:", error);
-      alert("No pude procesar algunos PDFs. Probemos de nuevo o revisemos el formato.");
+      console.error("Error processing finance imports:", error);
+      alert("No pude procesar algunos archivos. Probemos de nuevo o revisemos el formato.");
     } finally {
       setIsProcessingPdf(false);
     }
@@ -1708,7 +1759,11 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop, 
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'text/csv': ['.csv'],
+      'application/vnd.ms-excel': ['.csv'],
+    },
     multiple: true
   });
 
@@ -1728,10 +1783,10 @@ export default function FinanceTracker({ user }: { user: any }) {
         accountId: pt.accountId || '',
         sourceAccountId: pt.accountId || '',
         toAccountId: pt.toAccountId || '',
-        tags: ['pdf', ...(pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' ? ['pago-tarjeta'] : [])],
+        tags: [isCsvPendingTransaction(pt) ? 'csv' : 'pdf', ...(pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' ? ['pago-tarjeta'] : [])],
         isFixed: pt.isFixed,
         date: new Date(pt.date),
-        source: 'pdf',
+        source: isCsvPendingTransaction(pt) ? 'csv' : 'pdf',
         isConfirmed: true,
         generatedBy: user.uid,
         assignedTo: user.uid,
@@ -3009,7 +3064,7 @@ export default function FinanceTracker({ user }: { user: any }) {
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-              <ImportReviewStat label="PDFs" value={lastImportResult.files} tone="neutral" />
+              <ImportReviewStat label="Archivos" value={lastImportResult.files} tone="neutral" />
               <ImportReviewStat label="Duplicados" value={lastImportResult.duplicates} tone={lastImportResult.duplicates ? 'danger' : 'neutral'} />
               <ImportReviewStat label="Sin cuenta" value={lastImportResult.missingAccount} tone={lastImportResult.missingAccount ? 'warn' : 'neutral'} />
               <ImportReviewStat label="Cierres" value={lastImportResult.statementClosings.length} tone={lastImportResult.statementClosings.length ? 'info' : 'neutral'} />
@@ -3765,9 +3820,9 @@ export default function FinanceTracker({ user }: { user: any }) {
             </div>
             <div>
               <p className="text-sm font-bold text-neutral-900">
-                {isProcessingPdf ? 'Procesando PDFs...' : 'Subir resumenes bancarios'}
+                {isProcessingPdf ? 'Procesando archivos...' : 'Subir resumenes bancarios'}
               </p>
-              <p className="text-xs text-neutral-400 font-medium">Arrastra o selecciona uno o varios PDFs</p>
+              <p className="text-xs text-neutral-400 font-medium">Arrastra o selecciona PDFs o CSVs</p>
             </div>
             {isProcessingPdf && (
               <div className="w-full bg-neutral-100 h-1 rounded-full overflow-hidden">
