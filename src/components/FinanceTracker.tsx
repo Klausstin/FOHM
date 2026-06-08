@@ -407,6 +407,7 @@ function findCajaAhorroAccount(accounts: any[]) {
 }
 
 function pendingTransactionNeedsAccount(pt: Partial<PendingTransaction>) {
+  if (isWalletHistoryPendingTransaction(pt)) return false;
   if (pt.type === 'transfer') return !pt.accountId || !pt.toAccountId;
   return !pt.accountId;
 }
@@ -435,6 +436,10 @@ function isCsvPendingTransaction(transaction: Partial<PendingTransaction>) {
   return transaction.importSource === 'generic_csv' || transaction.fileName?.toLowerCase().endsWith('.csv');
 }
 
+function isWalletHistoryPendingTransaction(transaction: Partial<PendingTransaction>) {
+  return transaction.importSource === 'wallet_history' || transaction.importMode === 'historical_learning';
+}
+
 function shortFingerprint(value?: string) {
   if (!value) return '';
   return value.length > 18 ? `${value.slice(0, 18)}...` : value;
@@ -445,7 +450,11 @@ function getPendingImportNextStep(summary: {
   duplicateCount: number;
   missingAccountCount: number;
   cardPaymentCount: number;
+  walletHistoryCount?: number;
 }) {
+  if (summary.walletHistoryCount && summary.walletHistoryCount > 0) {
+    return 'Detecte historial de Wallet. Sirve para aprendizaje y analisis historico: al guardarlo conserva el rastro original, pero no toca saldos reales.';
+  }
   if (summary.duplicateCount > 0) {
     return 'Primero resolvemos duplicados: vinculalos si son el mismo gasto que ya cargaste, descartalos si el resumen ya estaba importado, o guardalos igual solo si fueron compras realmente separadas.';
   }
@@ -1154,7 +1163,12 @@ interface PendingTransaction {
   counterpartyAlias?: string;
   transferDetail?: string;
   importSource?: string;
+  importMode?: string;
+  sourceAccountLabel?: string;
+  sourceCategoryLabel?: string;
   statementAccountLabel?: string;
+  tags?: string[];
+  paymentType?: string;
   accountMatchConfidence?: string;
   accountMatchReason?: string;
   transactionFingerprint?: string;
@@ -1307,6 +1321,7 @@ export default function FinanceTracker({ user }: { user: any }) {
     const cardPaymentCount = pendingTransactions.filter(transaction => transaction.type === 'transfer' && transaction.subCategory === 'Pago de tarjeta').length;
     const usdCount = pendingTransactions.filter(transaction => transaction.currency === 'USD').length;
     const fixedCount = pendingTransactions.filter(transaction => transaction.isFixed).length;
+    const walletHistoryCount = pendingTransactions.filter(isWalletHistoryPendingTransaction).length;
 
     return {
       byFile,
@@ -1316,6 +1331,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       cardPaymentCount,
       usdCount,
       fixedCount,
+      walletHistoryCount,
     };
   }, [pendingTransactions]);
   const pendingImportGroups = useMemo(() => buildPendingImportGroups(pendingTransactions), [pendingTransactions]);
@@ -1700,6 +1716,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         id: Math.random().toString(36).substr(2, 9),
         originalDescription: enrichedTransaction.description,
         fileName: file.name,
+        statementAccountLabel: enrichedTransaction.sourceAccountLabel || parsedStatement.statement?.accountLabel || file.name,
         confidence: enrichedTransaction.confidence || 0,
         duplicateReason: duplicateMatch?.reason || '',
         duplicateOfId: duplicateMatch?.duplicateOfId || '',
@@ -1783,7 +1800,11 @@ export default function FinanceTracker({ user }: { user: any }) {
         accountId: pt.accountId || '',
         sourceAccountId: pt.accountId || '',
         toAccountId: pt.toAccountId || '',
-        tags: [isCsvPendingTransaction(pt) ? 'csv' : 'pdf', ...(pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' ? ['pago-tarjeta'] : [])],
+        tags: [
+          isWalletHistoryPendingTransaction(pt) ? 'wallet-history' : isCsvPendingTransaction(pt) ? 'csv' : 'pdf',
+          ...(Array.isArray(pt.tags) ? pt.tags : []),
+          ...(pt.type === 'transfer' && pt.subCategory === 'Pago de tarjeta' ? ['pago-tarjeta'] : []),
+        ].filter(Boolean),
         isFixed: pt.isFixed,
         date: new Date(pt.date),
         source: isCsvPendingTransaction(pt) ? 'csv' : 'pdf',
@@ -1800,7 +1821,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         needsReview: false,
         estimatedReason: null,
         reconciliationBatchId: null,
-        paymentStatus: 'Contabilizado',
+        paymentStatus: isWalletHistoryPendingTransaction(pt) ? 'Historico' : 'Contabilizado',
         merchantName: pt.merchantName || '',
         merchantKey: pt.merchantKey || '',
         importSource: pt.importSource || pt.fileName,
@@ -1811,7 +1832,9 @@ export default function FinanceTracker({ user }: { user: any }) {
       };
 
       const transactionRef = await createFinancialTransaction(transactionInput);
-      const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
+      const balanceApplied = isWalletHistoryPendingTransaction(pt)
+        ? false
+        : await applyTransactionToAccountBalances(transactionInput);
       if (transactionRef?.id) {
         await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
       }
@@ -1848,6 +1871,9 @@ export default function FinanceTracker({ user }: { user: any }) {
   const buildPendingTransactionNote = (pt: PendingTransaction) => {
     const lines = [
       pt.originalDescription ? `Concepto original: ${pt.originalDescription}` : '',
+      pt.importMode === 'historical_learning' ? 'Modo importacion: historial para aprendizaje' : '',
+      pt.sourceAccountLabel ? `Cuenta original: ${pt.sourceAccountLabel}` : '',
+      pt.sourceCategoryLabel ? `Categoria original: ${pt.sourceCategoryLabel}` : '',
       pt.transferDetail && pt.transferDetail !== pt.originalDescription ? `Detalle transferencia: ${pt.transferDetail}` : '',
       pt.counterpartyName ? `Destinatario: ${pt.counterpartyName}` : '',
       pt.counterpartyAlias ? `Alias: ${pt.counterpartyAlias}` : '',
@@ -3154,6 +3180,7 @@ export default function FinanceTracker({ user }: { user: any }) {
               <ImportReviewStat label="Pagos tarjeta" value={pendingImportSummary.cardPaymentCount} tone="info" />
               <ImportReviewStat label="USD" value={pendingImportSummary.usdCount} tone="info" />
               <ImportReviewStat label="Fijos" value={pendingImportSummary.fixedCount} tone="neutral" />
+              <ImportReviewStat label="Wallet" value={pendingImportSummary.walletHistoryCount} tone="info" />
             </div>
 
             <div className="rounded-2xl border border-amber-100 bg-white/70 p-4">
@@ -3168,6 +3195,11 @@ export default function FinanceTracker({ user }: { user: any }) {
               {(pendingImportSummary.duplicateCount > 0 || pendingImportSummary.missingAccountCount > 0) && (
                 <p className="mt-3 text-xs font-semibold leading-5 text-amber-800">
                   Los duplicados y movimientos sin cuenta quedan frenados para revision. Si un pago de tarjeta fue detectado, se guarda como transferencia entre cuentas.
+                </p>
+              )}
+              {pendingImportSummary.walletHistoryCount > 0 && (
+                <p className="mt-3 text-xs font-semibold leading-5 text-amber-800">
+                  Este historial de Wallet queda tratado como aprendizaje: conserva cuenta/categoria original y no toca saldos al guardarse.
                 </p>
               )}
             </div>
