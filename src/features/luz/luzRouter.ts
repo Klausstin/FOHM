@@ -510,7 +510,8 @@ function shouldCreateJournal(normalized: string, hasFinance: boolean, hasHabit: 
     ? REFLECTIVE_JOURNAL_WORDS.filter(term => !['quiero', 'necesito', 'deberia'].includes(term))
     : REFLECTIVE_JOURNAL_WORDS;
   const hasReflection = includesAny(normalized, reflectionTerms);
-  const hasPersonalContext = includesAny(normalized, ['pareja', 'trabajo', 'vicky', 'familia', 'cine', 'pelicula', 'marca', 'experiencia', 'turista']);
+  const hasPersonalContext = includesAny(normalized, ['pareja', 'trabajo', 'vicky', 'cine', 'pelicula', 'marca', 'experiencia', 'turista']) ||
+    mentionsFamilyAsBeneficiary(normalized);
   const isLongNarrative = normalized.length >= 180;
   return hasReflection || hasPersonalContext || isLongNarrative;
 }
@@ -799,7 +800,8 @@ function inferFamilyContext(normalized: string): {
   const mentionsMaximo = includesAny(normalized, ['maximo', 'máximo', 'maxi', 'hijo', 'bebe', 'beba', 'panal', 'panales', 'pañal', 'pañales', 'pediatra']);
   const mentionsVicky = includesAny(normalized, ['vicky', 'victoria']);
   const mentionsCouple = includesAny(normalized, ['pareja', 'nosotros', 'salida con vicky', 'con vicky', 'cena con vicky']);
-  const mentionsHome = includesAny(normalized, ['hogar', 'casa', 'departamento', 'depto', 'living', 'familia']);
+  const mentionsHome = includesAny(normalized, ['hogar', 'casa', 'departamento', 'depto', 'living']) ||
+    mentionsFamilyAsBeneficiary(normalized);
 
   if (mentionsMaximo) {
     return {
@@ -833,11 +835,24 @@ function inferFamilyContext(normalized: string): {
 
   return {
     executedByLabel: mentionsVicky && includesAny(normalized, ['vicky pago', 'vicky pagó', 'vicky compro', 'vicky compró']) ? 'Vicky' : undefined,
-    beneficiaryType: 'household',
-    beneficiaryLabel: 'Familia',
-    scope: 'familia',
+    beneficiaryType: 'user',
+    beneficiaryLabel: 'Agustin',
+    scope: 'personal',
     visibility: 'household_shared',
   };
+}
+
+function mentionsFamilyAsBeneficiary(normalized: string) {
+  if (includesAny(normalized, ['en la familia', 'en las familia', 'en las familias', 'las familias'])) return false;
+  return includesAny(normalized, [
+    'para la familia',
+    'para familia',
+    'gasto familiar',
+    'familiar',
+    'con mi familia',
+    'con la familia',
+    'de la familia',
+  ]);
 }
 
 function inferTransferAccounts(
