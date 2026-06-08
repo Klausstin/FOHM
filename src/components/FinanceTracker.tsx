@@ -27,6 +27,7 @@ import {
   deleteFinancialAccount,
   deleteFinancialTransaction,
   reverseTransactionFromAccountBalances,
+  shouldApplyTransactionToAccountBalances,
   subscribeToHouseholdFinancialAccounts,
   subscribeToHouseholdFinancialTransactions,
   updateFinancialAccount,
@@ -790,6 +791,87 @@ function buildAccountActivityById(accounts: any[], finances: any[], pendingTrans
   }
 
   return entries;
+}
+
+type BalanceIntegrityIssueType =
+  | 'missing_balance_application'
+  | 'missing_account'
+  | 'missing_transfer_destination'
+  | 'applied_without_effect';
+
+interface BalanceIntegrityIssue {
+  id: string;
+  type: BalanceIntegrityIssueType;
+  finance: any;
+  title: string;
+  helper: string;
+  canApplyBalance: boolean;
+}
+
+function buildBalanceIntegrityIssues(finances: any[]) {
+  return (finances || [])
+    .map(finance => {
+      const status = finance.status || 'posted';
+      if (status === 'ignored') return null;
+
+      const sourceAccountId = finance.sourceAccountId || finance.accountId || '';
+      const toAccountId = finance.toAccountId || '';
+      const type = finance.type || (finance.kind === 'income' ? 'income' : finance.kind === 'neutral' ? 'neutral' : 'expense');
+      const shouldAffectBalance = shouldApplyTransactionToAccountBalances({
+        ...finance,
+        accountId: sourceAccountId,
+        sourceAccountId,
+        toAccountId,
+        date: parseFinanceDateValue(finance.date) || new Date(),
+      });
+
+      if ((type === 'expense' || type === 'income') && !sourceAccountId && Number(finance.amount || 0) > 0) {
+        return {
+          id: `${finance.id}-missing-account`,
+          type: 'missing_account' as const,
+          finance,
+          title: 'Movimiento sin cuenta usada',
+          helper: 'Tiene monto y tipo financiero, pero no sabemos de que cuenta salio o entro.',
+          canApplyBalance: false,
+        };
+      }
+
+      if (type === 'transfer' && sourceAccountId && !toAccountId) {
+        return {
+          id: `${finance.id}-missing-transfer-destination`,
+          type: 'missing_transfer_destination' as const,
+          finance,
+          title: 'Transferencia sin destino',
+          helper: 'Para mover saldo entre cuentas, VEO necesita cuenta origen y cuenta destino.',
+          canApplyBalance: false,
+        };
+      }
+
+      if (shouldAffectBalance && !finance.accountBalanceApplied) {
+        return {
+          id: `${finance.id}-missing-balance-application`,
+          type: 'missing_balance_application' as const,
+          finance,
+          title: 'No impacto el saldo',
+          helper: 'El movimiento esta contabilizado, pero todavia no ajusto el saldo de la cuenta.',
+          canApplyBalance: true,
+        };
+      }
+
+      if (!shouldAffectBalance && finance.accountBalanceApplied) {
+        return {
+          id: `${finance.id}-applied-without-effect`,
+          type: 'applied_without_effect' as const,
+          finance,
+          title: 'Saldo aplicado con regla dudosa',
+          helper: 'El movimiento figura como aplicado, pero por sus datos actuales no deberia mover saldo.',
+          canApplyBalance: false,
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean) as BalanceIntegrityIssue[];
 }
 
 function parseFinanceDateValue(value: any) {
@@ -2093,6 +2175,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const accountBalanceSummary = useMemo(() => buildAccountBalanceSummary(userAccounts), [userAccounts]);
   const primaryBalanceSummary = accountBalanceSummary.find(item => item.currency === 'ARS') || accountBalanceSummary[0];
   const accountReconciliationQueue = useMemo(() => buildAccountReconciliationQueue(userAccounts), [userAccounts]);
+  const balanceIntegrityIssues = useMemo(() => buildBalanceIntegrityIssues(finances), [finances]);
 
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
@@ -2101,6 +2184,57 @@ export default function FinanceTracker({ user }: { user: any }) {
   const categoryClarityStats = useMemo(() => getFinanceCategoryClarityStats(finances), [finances]);
   const categoryLearningGroups = useMemo(() => buildFinanceCategoryGroups(finances), [finances]);
   const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
+
+  const openFinanceEdit = (finance: any, tab: 'all' | 'reviews' = 'reviews') => {
+    const financeDate = parseFinanceDateValue(finance.date) || new Date();
+    setEditingId(finance.id);
+    setEditForm({
+      ...finance,
+      originalCategory: finance.category,
+      originalSubCategory: finance.subCategory || '',
+      originalSubSubCategory: finance.subSubCategory || '',
+      originalAccountId: finance.accountId || '',
+      originalSourceAccountId: finance.sourceAccountId || '',
+      originalToAccountId: finance.toAccountId || '',
+      originalPaymentType: finance.paymentType || '',
+      originalBeneficiaryLabel: finance.beneficiaryLabel || legacyBeneficiaryLabel(finance),
+      originalScope: finance.scope || legacyScope(finance),
+      date: format(financeDate, "yyyy-MM-dd'T'HH:mm"),
+    });
+    setActiveListTab(tab);
+  };
+
+  const handleApplyMissingBalance = async (finance: any) => {
+    try {
+      const balanceApplied = await applyTransactionToAccountBalances({
+        uid: finance.uid || user.uid,
+        householdId: finance.householdId || user.householdId,
+        amount: Number(finance.amount || 0),
+        currency: finance.currency || 'ARS',
+        description: finance.description || '',
+        category: finance.category || 'Sin categoria',
+        subCategory: finance.subCategory || '',
+        subSubCategory: finance.subSubCategory || '',
+        type: finance.type || 'expense',
+        kind: finance.kind,
+        neutralType: finance.neutralType,
+        accountId: finance.sourceAccountId || finance.accountId || '',
+        sourceAccountId: finance.sourceAccountId || finance.accountId || '',
+        toAccountId: finance.toAccountId || '',
+        date: parseFinanceDateValue(finance.date) || new Date(),
+        status: finance.status || 'posted',
+        source: finance.source || 'manual',
+      } as any);
+
+      await updateFinancialTransaction(finance.id, {
+        accountBalanceApplied: balanceApplied,
+        needsReview: balanceApplied ? false : finance.needsReview,
+        paymentStatus: balanceApplied ? 'Contabilizado' : finance.paymentStatus,
+      } as any);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+    }
+  };
 
   const handleConfirmReviewedFinance = async (finance: any) => {
     try {
@@ -2338,17 +2472,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         reviewFinances={reviewFinances}
         accounts={userAccounts}
         onConfirm={handleResolveReviewedFinance}
-        onEdit={(finance) => {
-          setEditingId(finance.id);
-          setEditForm({
-            ...finance,
-            originalCategory: finance.category,
-            originalSubCategory: finance.subCategory || '',
-            originalSubSubCategory: finance.subSubCategory || '',
-            date: format(finance.date.toDate(), "yyyy-MM-dd'T'HH:mm"),
-          });
-          setActiveListTab('reviews');
-        }}
+        onEdit={(finance) => openFinanceEdit(finance, 'reviews')}
         onIgnore={handleIgnoreReviewedFinance}
         onViewAll={() => setActiveListTab('reviews')}
       />
@@ -2364,6 +2488,13 @@ export default function FinanceTracker({ user }: { user: any }) {
       <AccountReconciliationPanel
         items={accountReconciliationQueue}
         onEditAccount={startEditingAccount}
+      />
+
+      <BalanceIntegrityPanel
+        issues={balanceIntegrityIssues}
+        accounts={userAccounts}
+        onApplyBalance={handleApplyMissingBalance}
+        onEdit={(finance) => openFinanceEdit(finance, 'all')}
       />
 
       <FinancialInsightsPanel
@@ -4788,6 +4919,97 @@ function AccountReconciliationPanel({
           </button>
         ))}
       </div>
+    </section>
+  );
+}
+
+function BalanceIntegrityPanel({
+  issues,
+  accounts,
+  onApplyBalance,
+  onEdit,
+}: {
+  issues: BalanceIntegrityIssue[];
+  accounts: any[];
+  onApplyBalance: (finance: any) => void;
+  onEdit: (finance: any) => void;
+}) {
+  if (!issues.length) return null;
+
+  const topIssues = issues.slice(0, 5);
+
+  return (
+    <section className="rounded-[2rem] border border-amber-200 bg-amber-50/60 p-5 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-700">Auditoria</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Movimientos a revisar</h3>
+        </div>
+        <p className="max-w-xl text-xs font-bold leading-5 text-amber-800">
+          VEO encontro movimientos que pueden afectar la confianza del saldo. Conviene resolverlos antes de leer caja o patrimonio.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {topIssues.map(issue => {
+          const finance = issue.finance;
+          const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
+          const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
+          const date = parseFinanceDateValue(finance.date);
+
+          return (
+            <div key={issue.id} className="rounded-3xl border border-amber-100 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-neutral-950">{issue.title}</p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-neutral-500">{issue.helper}</p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-amber-800">
+                  Revisar
+                </span>
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-neutral-50 p-3">
+                <p className="text-lg font-black text-neutral-950">
+                  {Number(finance.amount || 0).toLocaleString()} <span className="text-xs font-bold text-neutral-400">{finance.currency || 'ARS'}</span>
+                </p>
+                <p className="mt-1 text-sm font-bold text-neutral-700">{finance.description || 'Sin descripcion'}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <PendingMeta label="Fecha" value={date ? date.toLocaleDateString('es-AR') : 'Sin fecha'} />
+                  <PendingMeta label="Tipo" value={finance.type || finance.kind || 'expense'} />
+                  <PendingMeta label="Origen" value={sourceAccount?.name || 'Sin cuenta'} />
+                  <PendingMeta label="Destino" value={destinationAccount?.name} />
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => onEdit(finance)}
+                  className="rounded-2xl border border-neutral-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400"
+                >
+                  Editar
+                </button>
+                {issue.canApplyBalance && (
+                  <button
+                    type="button"
+                    onClick={() => onApplyBalance(finance)}
+                    className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                  >
+                    Aplicar saldo
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {issues.length > topIssues.length && (
+        <p className="mt-3 text-xs font-bold text-amber-800">
+          Hay {issues.length - topIssues.length} movimiento(s) mas con revision pendiente.
+        </p>
+      )}
     </section>
   );
 }
