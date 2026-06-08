@@ -769,6 +769,16 @@ function buildAccountPayload(draft: any) {
   };
 }
 
+function buildBalanceAdjustmentNote(accountName: string, previousBalance: number, nextBalance: number, currency: string) {
+  const difference = nextBalance - previousBalance;
+  return [
+    `Conciliacion manual de ${accountName}.`,
+    `Saldo anterior: ${previousBalance.toLocaleString()} ${currency}.`,
+    `Saldo real: ${nextBalance.toLocaleString()} ${currency}.`,
+    `Diferencia ajustada: ${difference.toLocaleString()} ${currency}.`,
+  ].join(' ');
+}
+
 const FINANCE_TYPES = [
   { id: 'expense', label: 'Gasto', icon: <TrendingDown size={14} />, color: 'text-red-600', bg: 'bg-red-50', activeClass: 'bg-red-500 text-white border-red-500 shadow-md' },
   { id: 'income', label: 'Ingreso', icon: <TrendingUp size={14} />, color: 'text-green-600', bg: 'bg-green-50', activeClass: 'bg-green-500 text-white border-green-500 shadow-md' },
@@ -1170,6 +1180,30 @@ export default function FinanceTracker({ user }: { user: any }) {
           ...accountPayload,
           ...(balanceWasReconciled ? { lastReconciledAt: new Date() } : {}),
         });
+        if (balanceWasReconciled) {
+          await createFinancialTransaction({
+            uid: user.uid,
+            householdId: user.householdId,
+            amount: Math.abs(nextBalance - previousBalance),
+            currency: accountPayload.currency,
+            description: `Ajuste de saldo - ${accountPayload.name}`,
+            note: buildBalanceAdjustmentNote(accountPayload.name, previousBalance, nextBalance, accountPayload.currency),
+            category: 'Movimientos neutros',
+            subCategory: 'Ajuste de saldo',
+            type: 'neutral',
+            kind: 'neutral',
+            neutralType: 'balance_adjustment',
+            accountId: editingAccount.id,
+            sourceAccountId: editingAccount.id,
+            date: new Date(),
+            source: 'manual',
+            status: 'posted',
+            confidence: 'exact',
+            isConfirmed: true,
+            accountBalanceApplied: true,
+            paymentStatus: 'Contabilizado',
+          });
+        }
       } else {
         await createFinancialAccount({
           ...accountPayload,
