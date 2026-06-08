@@ -21,13 +21,18 @@ export interface ImportedFinanceTransaction {
   counterpartyAlias?: string;
   transferDetail?: string;
   importSource?: string;
+  importMode?: 'statement' | 'historical_learning';
+  sourceAccountLabel?: string;
+  sourceCategoryLabel?: string;
+  paymentType?: string;
+  tags?: string[];
   balanceDelta?: number;
   transactionFingerprint?: string;
   statementFingerprint?: string;
 }
 
 export interface FinanceImportResult {
-  source: 'bbva_caja_ahorro_ars' | 'bbva_visa' | 'generic_csv' | 'unknown';
+  source: 'bbva_caja_ahorro_ars' | 'bbva_visa' | 'generic_csv' | 'wallet_history' | 'unknown';
   transactions: ImportedFinanceTransaction[];
   statement?: ImportedFinanceStatement;
   warnings?: string[];
@@ -113,6 +118,10 @@ export function parseFinanceCsvText(text: string, fileName = ''): FinanceImportR
   }
 
   const columns = Object.keys(rows[0] || {});
+  if (isWalletCsv(columns)) {
+    return parseWalletCsvRows(rows, fileName, warnings);
+  }
+
   const dateColumn = findCsvColumn(columns, ['fecha', 'date', 'fecha movimiento', 'fecha operacion', 'fecha de operacion', 'fecha pago']);
   const descriptionColumn = findCsvColumn(columns, ['descripcion', 'descripción', 'concepto', 'detalle', 'movimiento', 'comercio', 'referencia']);
   const amountColumn = findCsvColumn(columns, ['importe', 'monto', 'total', 'amount', 'valor']);
@@ -164,6 +173,101 @@ export function parseFinanceCsvText(text: string, fileName = ''): FinanceImportR
     },
     warnings,
   };
+}
+
+function isWalletCsv(columns: string[]) {
+  const normalized = columns.map(normalizeCsvColumnName);
+  return [
+    'account',
+    'category',
+    'currency',
+    'amount',
+    'type',
+    'payment type',
+    'note',
+    'date',
+    'transfer',
+    'payee',
+    'labels',
+  ].filter(column => normalized.includes(column)).length >= 7;
+}
+
+function parseWalletCsvRows(rows: Record<string, string>[], fileName: string, warnings: string[]): FinanceImportResult {
+  const transactions = rows
+    .map((row, index) => parseWalletTransactionRow(row, index, fileName))
+    .filter(Boolean) as ImportedFinanceTransaction[];
+
+  const statementFingerprint = buildStatementFingerprint('wallet_history', {
+    accountLabel: fileName || 'Wallet history',
+    periodEnd: transactions[0]?.date,
+    previousBalance: 0,
+    closingBalance: 0,
+    totalDebits: transactions.filter(transaction => transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
+    totalCredits: transactions.filter(transaction => transaction.type === 'income').reduce((sum, transaction) => sum + transaction.amount, 0),
+    transactionCount: transactions.length,
+  });
+
+  transactions.forEach(transaction => {
+    transaction.statementFingerprint = statementFingerprint;
+    transaction.transactionFingerprint = buildTransactionFingerprint(transaction);
+  });
+
+  return {
+    source: 'wallet_history',
+    transactions,
+    statement: {
+      accountLabel: 'Wallet history',
+      currency: transactions[0]?.currency || 'ARS',
+      transactionCount: transactions.length,
+      statementFingerprint,
+    },
+    warnings,
+  };
+}
+
+function parseWalletTransactionRow(row: Record<string, string>, index: number, fileName: string) {
+  const walletAccount = String(row.account || '').trim();
+  const walletCategory = String(row.category || '').trim();
+  const note = String(row.note || '').trim();
+  const payee = String(row.payee || '').trim();
+  const labels = String(row.labels || '').trim();
+  const paymentType = String(row.payment_type || row.paymentType || '').trim();
+  const walletType = normalizeText(String(row.type || 'Expense'));
+  const amount = Math.abs(Number(row.amount || 0));
+  if (!amount) return null;
+
+  const type = walletType.includes('income') ? 'income' as const : 'expense' as const;
+  const currency = normalizeCsvCurrency(String(row.currency || ''), `${note} ${payee}`);
+  const date = parseCsvDate(String(row.date || '')) || new Date();
+  const description = cleanMovementDescription(note || payee || walletCategory || `Wallet ${index + 1}`);
+  const classificationText = [description, payee, walletCategory, labels].filter(Boolean).join(' ');
+  const merchant = suggestMerchant([payee, description].filter(Boolean).join(' '));
+  const classification = classifyFinanceText(classificationText);
+  const category = type === 'income' ? 'Ingresos' : (merchant.confidence >= 0.8 ? merchant.category : classification.suggestion.category);
+  const subCategory = type === 'income' ? '' : (merchant.confidence >= 0.8 ? merchant.subCategory : classification.suggestion.subcategory);
+  const confidence = Math.max(0.72, merchant.confidence, classification.suggestion.confidence);
+
+  return {
+    amount,
+    currency,
+    description,
+    category,
+    subCategory,
+    type,
+    date: date.toISOString(),
+    isFixed: merchant.isLikelyRecurring,
+    confidence,
+    needsReview: true,
+    merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : (payee || undefined),
+    merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : buildWalletMerchantKey(payee || description),
+    importSource: 'wallet_history',
+    importMode: 'historical_learning',
+    sourceAccountLabel: walletAccount,
+    sourceCategoryLabel: walletCategory,
+    paymentType,
+    tags: ['wallet-history', ...splitWalletLabels(labels), walletCategory ? `wallet:${walletCategory}` : ''].filter(Boolean),
+    balanceDelta: type === 'income' ? amount : -amount,
+  } satisfies ImportedFinanceTransaction;
 }
 
 function parseBbvaVisa(text: string, fileName: string): Omit<FinanceImportResult, 'source'> {
@@ -618,6 +722,19 @@ function normalizeCsvColumnName(value: string) {
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function splitWalletLabels(value: string) {
+  return String(value || '')
+    .split(/[;,|]/)
+    .map(label => label.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function buildWalletMerchantKey(value: string) {
+  const normalized = normalizeFingerprintText(value || '');
+  return normalized ? normalized.replace(/\s+/g, '-') : undefined;
 }
 
 function extractTransferDetails(description: string, type: ImportedFinanceTransaction['type']) {
