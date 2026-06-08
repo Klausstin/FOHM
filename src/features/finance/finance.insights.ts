@@ -96,8 +96,17 @@ export interface FinancialInsights {
   monthlyProfile: MonthlyExpenseProfile;
   projection: FinancialProjection;
   periodDashboard: PeriodFinanceDashboard;
+  actionPriorities: FinanceActionPriority[];
   summaryBullets: string[];
   luzRead: string;
+}
+
+export interface FinanceActionPriority {
+  id: string;
+  title: string;
+  detail: string;
+  priority: 'high' | 'medium' | 'low';
+  type: 'quality' | 'recurring' | 'cashflow' | 'inflation' | 'unusual';
 }
 
 export function buildFinancialInsights(transactions: FinancialTransactionRecord[], inflationMonthlyRate?: number | null): FinancialInsights {
@@ -114,6 +123,7 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
   const monthlyProfile = buildMonthlyExpenseProfile(expenses, recurring, unusualExpenses, primaryCurrency);
   const projection = buildProjection(primaryMonthly, primaryCurrency, inflationMonthlyRate);
   const periodDashboard = buildPeriodDashboard(monthly, expenses, projection, primaryCurrency);
+  const actionPriorities = buildActionPriorities(monthlyProfile, recurringDetected, unusualExpenses, projection);
   const luzRead = buildLuzFinancialRead(monthlyProfile, recurringDetected, unusualExpenses, projection);
 
   const summaryBullets = [
@@ -138,9 +148,87 @@ export function buildFinancialInsights(transactions: FinancialTransactionRecord[
     monthlyProfile,
     projection,
     periodDashboard,
+    actionPriorities,
     summaryBullets,
     luzRead,
   };
+}
+
+function buildActionPriorities(
+  monthlyProfile: MonthlyExpenseProfile,
+  recurringDetected: RecurringExpenseInsight[],
+  unusualExpenses: UnusualExpenseInsight[],
+  projection: FinancialProjection,
+): FinanceActionPriority[] {
+  const priorities: FinanceActionPriority[] = [];
+
+  if (projection.monthlyNetAverage < 0) {
+    priorities.push({
+      id: 'cashflow-negative',
+      title: 'Revisar caja',
+      detail: `El promedio mensual proyecta ${formatMoney(projection.monthlyNetAverage)} ${projection.currency}. Antes de optimizar detalles, conviene entender que rubros estan empujando la salida.`,
+      priority: 'high',
+      type: 'cashflow',
+    });
+  }
+
+  if (recurringDetected.length > 0) {
+    const top = recurringDetected[0];
+    priorities.push({
+      id: 'recurring-detected',
+      title: 'Marcar gastos habituales',
+      detail: `${recurringDetected.length} gasto(s) parecen recurrentes. El mas claro es ${top.label} (${formatMoney(top.averageAmount)} ${top.currency}).`,
+      priority: recurringDetected.length >= 3 ? 'high' : 'medium',
+      type: 'recurring',
+    });
+  }
+
+  if (unusualExpenses.length > 0) {
+    const top = unusualExpenses[0];
+    priorities.push({
+      id: 'unusual-expenses',
+      title: 'Mirar gastos fuera de patron',
+      detail: `${top.label} sobresale en ${top.category}: ${formatMoney(top.amount)} ${top.currency}.`,
+      priority: unusualExpenses.length >= 3 ? 'high' : 'medium',
+      type: 'unusual',
+    });
+  }
+
+  if (projection.expenseChangeRealVsPreviousMonth?.interpretation === 'real_increase') {
+    priorities.push({
+      id: 'real-expense-increase',
+      title: 'Separar inflacion de gasto real',
+      detail: projection.expenseChangeRealVsPreviousMonth.read,
+      priority: 'medium',
+      type: 'inflation',
+    });
+  }
+
+  if (monthlyProfile.totalExpenses > 0) {
+    const fixedLike = monthlyProfile.fixedDeclared + monthlyProfile.recurringDetected;
+    const fixedShare = fixedLike / monthlyProfile.totalExpenses;
+    if (fixedShare >= 0.65) {
+      priorities.push({
+        id: 'fixed-share-high',
+        title: 'Entender gastos rigidos',
+        detail: `${Math.round(fixedShare * 100)}% del gasto del mes parece fijo o recurrente. Esto define tu margen real de decision.`,
+        priority: 'medium',
+        type: 'quality',
+      });
+    }
+  }
+
+  if (priorities.length === 0) {
+    priorities.push({
+      id: 'keep-loading',
+      title: 'Seguir cargando data',
+      detail: 'No hay una tension fuerte todavia. El proximo valor viene de completar mas resumenes y sostener la calidad de categorias.',
+      priority: 'low',
+      type: 'quality',
+    });
+  }
+
+  return priorities.slice(0, 4);
 }
 
 function buildMonthlyExpenseProfile(
