@@ -5151,42 +5151,54 @@ function PendingMeta({ label, value }: { label: string; value?: string | number 
 function FinanceDiagnosticPanel({ items }: { items: FinanceDiagnosticItem[] }) {
   const priorityItem = items.find(item => item.actionable && (item.tone === 'danger' || item.tone === 'warn'));
   const okCount = items.filter(item => item.tone === 'ok').length;
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Diagnostico</p>
-          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Estado financiero</h3>
-        </div>
-        <div className="rounded-2xl bg-neutral-950 px-4 py-3 text-white">
-          <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Prioridad</p>
-          <p className="mt-1 text-sm font-black">
-            {priorityItem ? priorityItem.title : 'Sin bloqueos grandes'}
+          <h3 className="mt-1 text-xl font-black tracking-tight text-neutral-950">
+            {priorityItem ? `Revisar ${priorityItem.title.toLowerCase()}` : 'Sin bloqueos grandes'}
+          </h3>
+          <p className="mt-1 text-xs font-bold text-neutral-500">
+            {okCount} de {items.length} senales sanas. Abrilo solo si queres revisar calidad de datos.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsExpanded(prev => !prev)}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-700 transition hover:border-neutral-400"
+        >
+          {isExpanded ? 'Ocultar' : 'Ver diagnostico'}
+          <ChevronDown size={16} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {items.map(item => (
-          <div key={item.id} className={`rounded-3xl border p-4 ${getFinanceDiagnosticToneClasses(item.tone)}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{item.title}</p>
-                <p className="mt-2 text-3xl font-black tracking-tight">{item.value}</p>
+      {isExpanded && (
+        <>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {items.map(item => (
+              <div key={item.id} className={`rounded-3xl border p-4 ${getFinanceDiagnosticToneClasses(item.tone)}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{item.title}</p>
+                    <p className="mt-2 text-3xl font-black tracking-tight">{item.value}</p>
+                  </div>
+                  <span className="rounded-full bg-white/80 p-2 text-neutral-900 shadow-sm">
+                    {item.tone === 'ok' ? <Check size={16} /> : item.tone === 'danger' ? <AlertCircle size={16} /> : <Sparkles size={16} />}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs font-bold leading-5 opacity-75">{item.detail}</p>
               </div>
-              <span className="rounded-full bg-white/80 p-2 text-neutral-900 shadow-sm">
-                {item.tone === 'ok' ? <Check size={16} /> : item.tone === 'danger' ? <AlertCircle size={16} /> : <Sparkles size={16} />}
-              </span>
-            </div>
-            <p className="mt-3 text-xs font-bold leading-5 opacity-75">{item.detail}</p>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <p className="mt-3 text-xs font-bold text-neutral-500">
-        {okCount} de {items.length} senales estan sanas. Lo demas queda como cola de revision, no como trabajo manual innecesario.
-      </p>
+          <p className="mt-3 text-xs font-bold text-neutral-500">
+            Lo que no esta sano queda como cola de revision, no como trabajo manual innecesario.
+          </p>
+        </>
+      )}
     </section>
   );
 }
