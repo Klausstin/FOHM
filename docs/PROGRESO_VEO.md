@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 83% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
+| Finanzas | Implementando | 84% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -47,7 +47,7 @@ Siguiente: [proximo paso]
 | Categorias financieras | Implementando | 74% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias y memoria Wallet activable. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
-| Reportes y dashboard financiero | Implementando | 52% | Mejorar lectura practica diaria y mensual con resumen de periodo, variacion real, cambios por rubro y diagnostico compacto. |
+| Reportes y dashboard financiero | Implementando | 55% | Mejorar lectura practica diaria y mensual con resumen de periodo, cuenta usada, variacion real, cambios por rubro y diagnostico compacto. |
 
 ## Tarea actual
 
@@ -66,6 +66,7 @@ Siguiente: [proximo paso]
 | Agregar resumen mensual practico | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar variacion real contra mes anterior | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Mostrar mayor cambio mensual por categoria | Validando | 80% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx` |
+| Mostrar cuenta mas usada del mes | Validando | 80% | `src/components/FinanceTracker.tsx` |
 
 ## Proximos pasos
 

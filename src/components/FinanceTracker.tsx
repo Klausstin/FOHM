@@ -837,6 +837,15 @@ interface FinanceDiagnosticItem {
   actionable: boolean;
 }
 
+interface MonthlyAccountUsage {
+  accountId: string;
+  accountName: string;
+  accountType?: string;
+  amount: number;
+  currency: string;
+  share: number;
+}
+
 function buildBalanceIntegrityIssues(finances: any[]) {
   return (finances || [])
     .map(finance => {
@@ -1007,6 +1016,44 @@ function buildFinanceDiagnosticItems({
   ];
 
   return items.sort((a, b) => b.priority - a.priority);
+}
+
+function buildMonthlyAccountUsage(finances: any[], accounts: any[], month?: string, currency = 'ARS'): MonthlyAccountUsage | null {
+  if (!month) return null;
+
+  const accountById = new Map((accounts || []).map(account => [account.id, account]));
+  const totals = new Map<string, number>();
+  let total = 0;
+
+  for (const finance of finances || []) {
+    if (finance.status === 'ignored' || finance.type !== 'expense') continue;
+    if ((finance.currency || 'ARS') !== currency) continue;
+
+    const date = parseFinanceDateValue(finance.date);
+    if (!date || format(date, 'yyyy-MM') !== month) continue;
+
+    const accountId = finance.sourceAccountId || finance.accountId || '';
+    if (!accountId) continue;
+
+    const amount = Number(finance.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+
+    totals.set(accountId, (totals.get(accountId) || 0) + amount);
+    total += amount;
+  }
+
+  const [accountId, amount] = Array.from(totals.entries()).sort(([, a], [, b]) => b - a)[0] || [];
+  if (!accountId || !amount) return null;
+
+  const account = accountById.get(accountId);
+  return {
+    accountId,
+    accountName: account?.name || 'Cuenta sin nombre',
+    accountType: account?.type,
+    amount,
+    currency,
+    share: total > 0 ? amount / total : 0,
+  };
 }
 
 function parseFinanceDateValue(value: any) {
@@ -2465,6 +2512,10 @@ export default function FinanceTracker({ user }: { user: any }) {
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
   const estimatedReviewFinances = reviewFinances.filter(f => f.source === 'catchup_estimate' || f.confidence === 'estimated' || f.confidence === 'inferred');
   const financialInsights = useMemo(() => buildFinancialInsights(finances, inflationMonthlyRate), [finances, inflationMonthlyRate]);
+  const monthlyAccountUsage = useMemo(
+    () => buildMonthlyAccountUsage(finances, userAccounts, financialInsights.periodDashboard.month, financialInsights.periodDashboard.currency),
+    [finances, userAccounts, financialInsights.periodDashboard.month, financialInsights.periodDashboard.currency],
+  );
   const categoryClarityStats = useMemo(() => getFinanceCategoryClarityStats(finances), [finances]);
   const categoryLearningGroups = useMemo(() => buildFinanceCategoryGroups(finances), [finances]);
   const financeDiagnosticItems = useMemo(() => buildFinanceDiagnosticItems({
@@ -2788,7 +2839,12 @@ export default function FinanceTracker({ user }: { user: any }) {
         onOpenCatchupWizard={openCatchupWizard}
       />
 
-      <MonthlyFinanceSnapshot insights={financialInsights} clarityStats={categoryClarityStats} reviewCount={reviewCount} />
+      <MonthlyFinanceSnapshot
+        insights={financialInsights}
+        clarityStats={categoryClarityStats}
+        reviewCount={reviewCount}
+        accountUsage={monthlyAccountUsage}
+      />
 
       <FinanceDiagnosticPanel items={financeDiagnosticItems} />
 
@@ -5139,10 +5195,12 @@ function MonthlyFinanceSnapshot({
   insights,
   clarityStats,
   reviewCount,
+  accountUsage,
 }: {
   insights: ReturnType<typeof buildFinancialInsights>;
   clarityStats: ReturnType<typeof getFinanceCategoryClarityStats>;
   reviewCount: number;
+  accountUsage: MonthlyAccountUsage | null;
 }) {
   const dashboard = insights.periodDashboard;
   const profile = insights.monthlyProfile;
@@ -5215,6 +5273,11 @@ function MonthlyFinanceSnapshot({
             detail={topCategory ? `${topCategory.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${topCategory.currency} · ${Math.round(topCategory.share * 100)}%` : 'Falta mas data del mes.'}
           />
           <MonthlySnapshotMiniCard
+            label="Cuenta usada"
+            value={accountUsage ? accountUsage.accountName : 'Sin cuenta dominante'}
+            detail={accountUsage ? formatAccountUsageDetail(accountUsage) : 'Cuando haya gastos con cuenta, VEO muestra por donde salio mas plata.'}
+          />
+          <MonthlySnapshotMiniCard
             label="Mayor cambio"
             value={topCategoryDelta ? topCategoryDelta.category : 'Sin comparacion'}
             detail={topCategoryDelta ? formatCategoryDeltaDetail(topCategoryDelta) : 'Con dos meses comparables, VEO muestra que rubro cambio mas.'}
@@ -5262,6 +5325,13 @@ function formatCategoryDeltaDetail(delta: ReturnType<typeof buildFinancialInsigh
   const amount = Math.abs(delta.delta).toLocaleString(undefined, { maximumFractionDigits: 0 });
   const rate = delta.deltaRate == null ? '' : ` (${delta.deltaRate > 0 ? '+' : ''}${Math.round(delta.deltaRate * 100)}%)`;
   return `${direction} ${amount} ${delta.currency}${rate} contra el mes anterior.`;
+}
+
+function formatAccountUsageDetail(accountUsage: MonthlyAccountUsage) {
+  const amount = accountUsage.amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const share = Math.round(accountUsage.share * 100);
+  const type = getAccountTypeLabel(accountUsage.accountType).toLowerCase();
+  return `${amount} ${accountUsage.currency} · ${share}% del gasto del mes · ${type}.`;
 }
 
 function MonthlySnapshotStat({
