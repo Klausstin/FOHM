@@ -63,6 +63,16 @@ export interface CategorySpendInsight {
   share: number;
 }
 
+export interface CategoryDeltaInsight {
+  category: string;
+  currentAmount: number;
+  previousAmount: number;
+  delta: number;
+  deltaRate: number | null;
+  currency: string;
+  direction: 'up' | 'down' | 'stable';
+}
+
 export interface BeneficiarySpendInsight {
   label: string;
   beneficiaryType: string;
@@ -83,6 +93,7 @@ export interface PeriodFinanceDashboard {
   currency: string;
   byCurrency: PeriodCurrencyTotal[];
   topCategories: CategorySpendInsight[];
+  categoryDeltas: CategoryDeltaInsight[];
   byBeneficiary: BeneficiarySpendInsight[];
   byScope: ScopeSpendInsight[];
   realExpenseRead?: string;
@@ -303,6 +314,9 @@ function buildPeriodDashboard(
     : [];
 
   const topCategories = buildTopCategoriesForMonth(expenses, latestMonth, primaryCurrency);
+  const primaryMonthly = monthly.filter(item => item.currency === primaryCurrency).sort((a, b) => a.month.localeCompare(b.month));
+  const previousMonth = primaryMonthly.at(-2)?.month;
+  const categoryDeltas = buildCategoryDeltasForMonth(expenses, latestMonth, previousMonth, primaryCurrency);
   const byBeneficiary = buildBeneficiaryBreakdownForMonth(expenses, latestMonth, primaryCurrency);
   const byScope = buildScopeBreakdownForMonth(expenses, latestMonth, primaryCurrency);
 
@@ -311,6 +325,7 @@ function buildPeriodDashboard(
     currency: primaryCurrency,
     byCurrency,
     topCategories,
+    categoryDeltas,
     byBeneficiary,
     byScope,
     realExpenseRead: projection.expenseChangeRealVsPreviousMonth?.read,
@@ -341,6 +356,53 @@ function buildTopCategoriesForMonth(expenses: FinancialTransactionRecord[], mont
       currency,
       share: total > 0 ? amount / total : 0,
     }));
+}
+
+function buildCategoryDeltasForMonth(expenses: FinancialTransactionRecord[], currentMonth?: string, previousMonth?: string, currency = 'ARS') {
+  if (!currentMonth || !previousMonth) return [];
+
+  const currentTotals = buildCategoryTotalsForMonth(expenses, currentMonth, currency);
+  const previousTotals = buildCategoryTotalsForMonth(expenses, previousMonth, currency);
+  const categories = new Set([...currentTotals.keys(), ...previousTotals.keys()]);
+
+  return Array.from(categories)
+    .map(category => {
+      const currentAmount = currentTotals.get(category) || 0;
+      const previousAmount = previousTotals.get(category) || 0;
+      const delta = currentAmount - previousAmount;
+      const deltaRate = previousAmount > 0 ? delta / previousAmount : currentAmount > 0 ? 1 : null;
+      const direction: CategoryDeltaInsight['direction'] = Math.abs(delta) < 1
+        ? 'stable'
+        : delta > 0
+          ? 'up'
+          : 'down';
+
+      return {
+        category,
+        currentAmount,
+        previousAmount,
+        delta,
+        deltaRate,
+        currency,
+        direction,
+      };
+    })
+    .filter(item => Math.abs(item.delta) > 0)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 5);
+}
+
+function buildCategoryTotalsForMonth(expenses: FinancialTransactionRecord[], month: string, currency = 'ARS') {
+  const totals = new Map<string, number>();
+
+  for (const expense of expenses) {
+    const date = toDate(expense.date);
+    if (monthKey(date) !== month || normalizeCurrency(expense.currency) !== currency) continue;
+    const category = expense.category || 'Sin categoria';
+    totals.set(category, (totals.get(category) || 0) + Number(expense.amount || 0));
+  }
+
+  return totals;
 }
 
 function buildBeneficiaryBreakdownForMonth(expenses: FinancialTransactionRecord[], month?: string, currency = 'ARS') {
