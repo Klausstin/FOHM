@@ -3457,6 +3457,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         )}
       </div>
 
+      <FinanceLearningMemoryPanel mappings={userMappings} accounts={userAccounts} />
+
       {lastImportResult && (
         <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -5023,6 +5025,80 @@ function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; v
       <p className="text-2xl font-black">{value}</p>
       <p className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
     </div>
+  );
+}
+
+function FinanceLearningMemoryPanel({ mappings, accounts }: { mappings: any[]; accounts: any[] }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const sortedMappings = [...(mappings || [])]
+    .sort((a, b) => {
+      const usedDiff = Number(b.useCount || 0) - Number(a.useCount || 0);
+      if (usedDiff !== 0) return usedDiff;
+      const bDate = parseFinanceDateValue(b.lastUsedAt)?.getTime() || 0;
+      const aDate = parseFinanceDateValue(a.lastUsedAt)?.getTime() || 0;
+      return bDate - aDate;
+    });
+  const visibleMappings = (isExpanded ? sortedMappings : sortedMappings.slice(0, 6));
+
+  return (
+    <section className="rounded-[2rem] border border-neutral-100 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Memoria activa</p>
+          <h3 className="mt-1 text-xl font-black tracking-tight text-neutral-950">
+            {mappings.length} aprendizaje(s)
+          </h3>
+          <p className="mt-1 max-w-2xl text-xs font-bold leading-5 text-neutral-500">
+            Estos patrones ayudan a que VEO clasifique mejor gastos parecidos sin pedirte aprobaciones innecesarias.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsExpanded(prev => !prev)}
+          disabled={sortedMappings.length <= 6}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-700 transition hover:border-neutral-400 disabled:cursor-not-allowed disabled:text-neutral-300"
+        >
+          {isExpanded ? 'Ver menos' : 'Ver memoria'}
+          <ChevronDown size={16} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {visibleMappings.length > 0 ? (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {visibleMappings.map(mapping => {
+            const account = accounts.find(item => item.id === (mapping.sourceAccountId || mapping.accountId));
+            const learnedAt = parseFinanceDateValue(mapping.lastUsedAt);
+            return (
+              <div key={mapping.id || mapping.learningKey || mapping.originalDescription} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-neutral-950">
+                      {mapping.merchantName || mapping.mappedDescription || mapping.originalDescription || 'Aprendizaje'}
+                    </p>
+                    <p className="mt-1 truncate text-xs font-bold text-neutral-500">
+                      {mapping.category || 'Sin categoria'}{mapping.subCategory ? ` / ${mapping.subCategory}` : ''}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">
+                    x{mapping.useCount || 1}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                  {account && <span className="rounded-full bg-white px-2 py-1">{account.name}</span>}
+                  {mapping.paymentType && <span className="rounded-full bg-white px-2 py-1">{mapping.paymentType}</span>}
+                  {mapping.beneficiaryLabel && <span className="rounded-full bg-white px-2 py-1">Para {mapping.beneficiaryLabel}</span>}
+                  {learnedAt && <span className="rounded-full bg-white px-2 py-1">{learnedAt.toLocaleDateString('es-AR')}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 p-4 text-sm font-bold leading-6 text-neutral-500">
+          Todavia no hay aprendizajes activos. Cuando corrijas categorias o actives memoria Wallet, van a aparecer aca.
+        </div>
+      )}
+    </section>
   );
 }
 
