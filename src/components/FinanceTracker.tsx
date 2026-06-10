@@ -846,6 +846,12 @@ interface MonthlyAccountUsage {
   share: number;
 }
 
+interface ReviewResolutionDraft {
+  finance: any;
+  accountId?: string;
+  toAccountId?: string;
+}
+
 function buildBalanceIntegrityIssues(finances: any[]) {
   return (finances || [])
     .map(finance => {
@@ -2656,6 +2662,47 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleBulkResolveReviewedFinances = async (drafts: ReviewResolutionDraft[]) => {
+    const readyDrafts = drafts.filter(({ finance, accountId, toAccountId }) => {
+      const resolvedAccountId = accountId ?? finance.accountId ?? '';
+      const resolvedToAccountId = toAccountId ?? finance.toAccountId ?? '';
+      return Boolean(resolvedAccountId && (finance.type !== 'transfer' || resolvedToAccountId) && !finance.duplicateReason);
+    });
+    if (readyDrafts.length === 0) return;
+
+    try {
+      await Promise.all(
+        readyDrafts.map(({ finance, accountId, toAccountId }) =>
+          handleResolveReviewedFinance(finance, accountId, toAccountId),
+        ),
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'finances');
+    }
+  };
+
+  const handleBulkIgnoreReviewedFinances = async (reviewIds: string[]) => {
+    const ids = reviewIds.filter(Boolean);
+    if (ids.length === 0) return;
+    const confirmed = window.confirm(`Ignorar ${ids.length} movimiento(s) duplicado(s)? No se borran, pero dejan de contar como pendientes.`);
+    if (!confirmed) return;
+
+    try {
+      await Promise.all(
+        ids.map(id =>
+          updateFinancialTransaction(id, {
+            status: 'ignored',
+            needsReview: false,
+            isConfirmed: false,
+            paymentStatus: 'Anulado',
+          }),
+        ),
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'finances');
+    }
+  };
+
   const handleIgnoreReviewedFinance = async (finance: any) => {
     const confirmed = window.confirm('Ignorar este movimiento supuesto? No se borra, pero deja de contar como pendiente.');
     if (!confirmed) return;
@@ -2826,6 +2873,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         reviewFinances={reviewFinances}
         accounts={userAccounts}
         onConfirm={handleResolveReviewedFinance}
+        onBulkConfirm={handleBulkResolveReviewedFinances}
+        onBulkIgnoreDuplicates={handleBulkIgnoreReviewedFinances}
         onEdit={(finance) => openFinanceEdit(finance, 'reviews')}
         onIgnore={handleIgnoreReviewedFinance}
         onViewAll={() => setActiveListTab('reviews')}
@@ -4741,22 +4790,57 @@ function FinanceReviewCenter({
   reviewFinances,
   accounts,
   onConfirm,
+  onBulkConfirm,
+  onBulkIgnoreDuplicates,
   onEdit,
   onIgnore,
   onViewAll,
 }: {
   reviewFinances: any[];
   accounts: any[];
-  onConfirm: (finance: any, accountId?: string, toAccountId?: string) => void;
+  onConfirm: (finance: any, accountId?: string, toAccountId?: string) => void | Promise<void>;
+  onBulkConfirm: (drafts: ReviewResolutionDraft[]) => void | Promise<void>;
+  onBulkIgnoreDuplicates: (reviewIds: string[]) => void | Promise<void>;
   onEdit: (finance: any) => void;
   onIgnore: (finance: any) => void;
   onViewAll: () => void;
 }) {
   const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
   const [selectedDestinationAccounts, setSelectedDestinationAccounts] = useState<Record<string, string>>({});
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
   const visibleReviews = reviewFinances.slice(0, 3);
   const luzReviews = reviewFinances.filter(finance => finance.source === 'manual' && finance.needsReview);
   const estimatedReviews = reviewFinances.filter(finance => finance.source === 'catchup_estimate' || finance.confidence === 'estimated' || finance.confidence === 'inferred');
+  const duplicateReviews = reviewFinances.filter(finance => finance.duplicateReason);
+  const readyReviews = reviewFinances.filter(finance => {
+    const selectedAccount = selectedAccounts[finance.id] ?? finance.accountId ?? '';
+    const selectedDestinationAccount = selectedDestinationAccounts[finance.id] ?? finance.toAccountId ?? '';
+    return Boolean(selectedAccount && (finance.type !== 'transfer' || selectedDestinationAccount) && !finance.duplicateReason);
+  });
+
+  const handleBulkConfirmReady = async () => {
+    if (readyReviews.length === 0) return;
+    setIsBulkSaving(true);
+    try {
+      await onBulkConfirm(readyReviews.map(finance => ({
+        finance,
+        accountId: selectedAccounts[finance.id] ?? finance.accountId ?? '',
+        toAccountId: selectedDestinationAccounts[finance.id] ?? finance.toAccountId ?? '',
+      })));
+    } finally {
+      setIsBulkSaving(false);
+    }
+  };
+
+  const handleBulkIgnoreDuplicates = async () => {
+    if (duplicateReviews.length === 0) return;
+    setIsBulkSaving(true);
+    try {
+      await onBulkIgnoreDuplicates(duplicateReviews.map(finance => finance.id));
+    } finally {
+      setIsBulkSaving(false);
+    }
+  };
 
   if (reviewFinances.length === 0) {
     return (
@@ -4786,6 +4870,28 @@ function FinanceReviewCenter({
           <ReviewMiniStat label="Supuestos" value={estimatedReviews.length} />
           <ReviewMiniStat label="Sin cuenta" value={reviewFinances.filter(finance => !finance.accountId).length} />
         </div>
+      </div>
+
+      <div className="mb-4 grid gap-2 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+        <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800">
+          {readyReviews.length} movimiento(s) listos para confirmar y {duplicateReviews.length} posible(s) duplicado(s).
+        </p>
+        <button
+          type="button"
+          onClick={handleBulkConfirmReady}
+          disabled={readyReviews.length === 0 || isBulkSaving}
+          className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
+        >
+          Confirmar listos
+        </button>
+        <button
+          type="button"
+          onClick={handleBulkIgnoreDuplicates}
+          disabled={duplicateReviews.length === 0 || isBulkSaving}
+          className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-neutral-100 disabled:bg-neutral-100 disabled:text-neutral-300"
+        >
+          Ignorar duplicados
+        </button>
       </div>
 
       <div className="grid gap-3 xl:grid-cols-3">

@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 84% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
+| Finanzas | Implementando | 85% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -43,7 +43,7 @@ Siguiente: [proximo paso]
 | Modelo de cuentas y tarjetas | Implementando | 84% | Seguir puliendo saldos, deuda y conciliacion. |
 | Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
 | Importador BBVA / Visa / CSV | Implementando | 84% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
-| Reconciliacion de resumenes | Implementando | 72% | Usar saldos de cierre, detectar movimientos sin saldo aplicado y evitar duplicados. |
+| Reconciliacion de resumenes | Implementando | 76% | Usar saldos de cierre, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
 | Categorias financieras | Implementando | 74% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias y memoria Wallet activable. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
@@ -69,6 +69,7 @@ Siguiente: [proximo paso]
 | Mostrar cuenta mas usada del mes | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Estimar cierre de mes por ritmo actual | Validando | 80% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx` |
 | Compactar diagnostico financiero | Validando | 85% | `src/components/FinanceTracker.tsx` |
+| Agregar acciones masivas de revision financiera | Validando | 85% | `src/components/FinanceTracker.tsx` |
 
 ## Proximos pasos
 
@@ -78,4 +79,4 @@ Siguiente: [proximo paso]
 4. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
 5. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
 6. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-7. Despues de Finanzas al 90%, volver a Tareas, Calendario, Luz IA real y UI/UX general.
+7. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
