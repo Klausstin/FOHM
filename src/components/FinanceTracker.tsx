@@ -5149,6 +5149,8 @@ function MonthlyFinanceSnapshot({
   const primaryCurrency = dashboard.byCurrency[0] || null;
   const topCategory = dashboard.topCategories[0] || null;
   const topPriority = insights.actionPriorities[0] || null;
+  const expenseChange = insights.projection.expenseChangeRealVsPreviousMonth;
+  const incomeChange = insights.projection.incomeChangeRealVsPreviousMonth;
   const fixedLike = profile.fixedDeclared + profile.recurringDetected;
   const fixedShare = profile.totalExpenses > 0 ? Math.round((fixedLike / profile.totalExpenses) * 100) : 0;
   const hasData = Boolean(primaryCurrency || profile.totalExpenses || dashboard.topCategories.length);
@@ -5205,7 +5207,7 @@ function MonthlyFinanceSnapshot({
       </div>
 
       <div className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <MonthlySnapshotMiniCard
             label="Mayor rubro"
             value={topCategory ? topCategory.category : 'Sin categoria dominante'}
@@ -5215,6 +5217,16 @@ function MonthlyFinanceSnapshot({
             label="Proxima accion"
             value={topPriority ? topPriority.title : 'Seguir cargando'}
             detail={topPriority ? topPriority.detail : 'La prioridad aparece cuando VEO detecta una tension concreta.'}
+          />
+          <MonthlySnapshotMiniCard
+            label="Gasto real"
+            value={formatRealChangeValue(expenseChange)}
+            detail={expenseChange?.read || 'Con mas historial e IPC, VEO compara gasto nominal contra gasto real.'}
+          />
+          <MonthlySnapshotMiniCard
+            label="Ingreso real"
+            value={formatRealChangeValue(incomeChange)}
+            detail={incomeChange?.read || 'Sirve para ver si tus ingresos suben de verdad o solo nominalmente.'}
           />
           <MonthlySnapshotMiniCard
             label="Calidad"
@@ -5230,6 +5242,13 @@ function MonthlyFinanceSnapshot({
       </div>
     </section>
   );
+}
+
+function formatRealChangeValue(change?: ReturnType<typeof buildFinancialInsights>['projection']['expenseChangeRealVsPreviousMonth']) {
+  if (!change || change.interpretation === 'insufficient_data' || change.realChangeRate == null) return 'Sin data';
+  if (change.interpretation === 'stable') return 'Casi igual';
+  const percent = Math.round(change.realChangeRate * 100);
+  return `${percent > 0 ? '+' : ''}${percent}% real`;
 }
 
 function MonthlySnapshotStat({
