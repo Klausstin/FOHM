@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 81% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
+| Finanzas | Implementando | 82% | Prioridad actual. No pasar a otros modulos grandes hasta dejarlo cerca de 90%. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -47,7 +47,7 @@ Siguiente: [proximo paso]
 | Categorias financieras | Implementando | 74% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias y memoria Wallet activable. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
-| Reportes y dashboard financiero | Planificando | 30% | Mejorar lectura practica diaria y mensual. |
+| Reportes y dashboard financiero | Implementando | 35% | Mejorar lectura practica diaria y mensual con diagnostico compacto de salud financiera. |
 
 ## Tarea actual
 
@@ -62,6 +62,7 @@ Siguiente: [proximo paso]
 | Separar candidatos Wallet para memoria activa | Validando | 92% | `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
 | Preparar activacion segura de memoria Wallet | Validando | 95% | `scripts/finance-wallet-memory.ts`, `src/components/FinanceTracker.tsx`, `src/features/finance/finance.learning.ts` |
 | Evitar falsos beneficiarios por nombres de comercios | Validando | 95% | `src/features/luz/luzRouter.ts` |
+| Agregar diagnostico financiero compacto | Validando | 85% | `src/components/FinanceTracker.tsx` |
 
 ## Proximos pasos
 
@@ -70,5 +71,5 @@ Siguiente: [proximo paso]
 3. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
 4. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
 5. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
-6. Mejorar dashboard financiero con lectura de caja, deuda, inversiones y patrimonio.
+6. Probar el nuevo diagnostico financiero con datos reales y ajustar prioridades si sobran alertas.
 7. Despues de Finanzas al 90%, volver a Tareas, Calendario, Luz IA real y UI/UX general.
