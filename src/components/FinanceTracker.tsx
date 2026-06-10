@@ -825,6 +825,18 @@ interface BalanceIntegrityIssue {
   canApplyBalance: boolean;
 }
 
+type FinanceDiagnosticTone = 'ok' | 'warn' | 'danger' | 'neutral';
+
+interface FinanceDiagnosticItem {
+  id: string;
+  title: string;
+  value: string;
+  detail: string;
+  tone: FinanceDiagnosticTone;
+  priority: number;
+  actionable: boolean;
+}
+
 function buildBalanceIntegrityIssues(finances: any[]) {
   return (finances || [])
     .map(finance => {
@@ -889,6 +901,112 @@ function buildBalanceIntegrityIssues(finances: any[]) {
       return null;
     })
     .filter(Boolean) as BalanceIntegrityIssue[];
+}
+
+function buildFinanceDiagnosticItems({
+  balanceIntegrityIssues,
+  pendingTransactions,
+  categoryClarityStats,
+  categoryLearningGroups,
+  accountReconciliationQueue,
+  userMappings,
+  finances,
+  userAccounts,
+}: {
+  balanceIntegrityIssues: BalanceIntegrityIssue[];
+  pendingTransactions: PendingTransaction[];
+  categoryClarityStats: ReturnType<typeof getFinanceCategoryClarityStats>;
+  categoryLearningGroups: any[];
+  accountReconciliationQueue: any[];
+  userMappings: any[];
+  finances: any[];
+  userAccounts: any[];
+}): FinanceDiagnosticItem[] {
+  const missingAccountIssues = balanceIntegrityIssues.filter(issue => issue.type === 'missing_account' || issue.type === 'missing_transfer_destination').length;
+  const unappliedBalanceIssues = balanceIntegrityIssues.filter(issue => issue.type === 'missing_balance_application').length;
+  const pendingReadyCount = pendingTransactions.filter(canConfirmPendingTransaction).length;
+  const unclearShare = Math.round((categoryClarityStats.share || 0) * 100);
+  const activeMovements = finances.filter(finance => finance.status !== 'ignored').length;
+
+  const items: FinanceDiagnosticItem[] = [
+    {
+      id: 'balance-integrity',
+      title: 'Saldos',
+      value: String(balanceIntegrityIssues.length),
+      detail: balanceIntegrityIssues.length
+        ? `${unappliedBalanceIssues} sin impacto y ${missingAccountIssues} sin cuenta/destino.`
+        : 'Sin alertas de saldo detectadas.',
+      tone: missingAccountIssues > 0 ? 'danger' : balanceIntegrityIssues.length > 0 ? 'warn' : 'ok',
+      priority: missingAccountIssues > 0 ? 100 : balanceIntegrityIssues.length > 0 ? 90 : 10,
+      actionable: balanceIntegrityIssues.length > 0,
+    },
+    {
+      id: 'pending-imports',
+      title: 'Importaciones',
+      value: String(pendingTransactions.length),
+      detail: pendingTransactions.length
+        ? `${pendingReadyCount} listos para guardar; el resto necesita revision.`
+        : 'No hay borradores de resumen esperando.',
+      tone: pendingTransactions.length > 0 ? 'warn' : 'ok',
+      priority: pendingTransactions.length > 0 ? 80 : 10,
+      actionable: pendingTransactions.length > 0,
+    },
+    {
+      id: 'category-clarity',
+      title: 'Categorias',
+      value: `${categoryClarityStats.count}`,
+      detail: categoryClarityStats.count
+        ? `${unclearShare}% de gastos quedaron flojos o inferidos.`
+        : 'Los gastos cargados tienen categoria clara.',
+      tone: categoryClarityStats.count > 0 ? 'warn' : 'ok',
+      priority: categoryClarityStats.count > 0 ? 70 : 10,
+      actionable: categoryClarityStats.count > 0,
+    },
+    {
+      id: 'category-learning',
+      title: 'Patrones',
+      value: String(categoryLearningGroups.length),
+      detail: categoryLearningGroups.length
+        ? 'Hay grupos similares que conviene resolver juntos.'
+        : 'No hay grupos repetidos en Otros por ahora.',
+      tone: categoryLearningGroups.length > 0 ? 'warn' : 'ok',
+      priority: categoryLearningGroups.length > 0 ? 65 : 10,
+      actionable: categoryLearningGroups.length > 0,
+    },
+    {
+      id: 'accounts',
+      title: 'Cuentas',
+      value: String(accountReconciliationQueue.length),
+      detail: accountReconciliationQueue.length
+        ? `${accountReconciliationQueue.length} cuenta(s) piden conciliacion.`
+        : `${userAccounts.length} cuenta(s) sin alertas de conciliacion.`,
+      tone: accountReconciliationQueue.length > 0 ? 'warn' : 'ok',
+      priority: accountReconciliationQueue.length > 0 ? 60 : 10,
+      actionable: accountReconciliationQueue.length > 0,
+    },
+    {
+      id: 'memory',
+      title: 'Memoria',
+      value: String(userMappings.length),
+      detail: userMappings.length
+        ? 'Aprendizajes activos para clasificar mejor.'
+        : 'Todavia hay poca memoria aprendida.',
+      tone: userMappings.length > 0 ? 'ok' : 'neutral',
+      priority: userMappings.length > 0 ? 20 : 30,
+      actionable: false,
+    },
+    {
+      id: 'coverage',
+      title: 'Datos',
+      value: String(activeMovements),
+      detail: activeMovements ? 'Movimientos utiles para analisis.' : 'Faltan movimientos reales para leer patrones.',
+      tone: activeMovements > 0 ? 'ok' : 'neutral',
+      priority: activeMovements > 0 ? 10 : 40,
+      actionable: false,
+    },
+  ];
+
+  return items.sort((a, b) => b.priority - a.priority);
 }
 
 function parseFinanceDateValue(value: any) {
@@ -2349,6 +2467,25 @@ export default function FinanceTracker({ user }: { user: any }) {
   const financialInsights = useMemo(() => buildFinancialInsights(finances, inflationMonthlyRate), [finances, inflationMonthlyRate]);
   const categoryClarityStats = useMemo(() => getFinanceCategoryClarityStats(finances), [finances]);
   const categoryLearningGroups = useMemo(() => buildFinanceCategoryGroups(finances), [finances]);
+  const financeDiagnosticItems = useMemo(() => buildFinanceDiagnosticItems({
+    balanceIntegrityIssues,
+    pendingTransactions,
+    categoryClarityStats,
+    categoryLearningGroups,
+    accountReconciliationQueue,
+    userMappings,
+    finances,
+    userAccounts,
+  }), [
+    balanceIntegrityIssues,
+    pendingTransactions,
+    categoryClarityStats,
+    categoryLearningGroups,
+    accountReconciliationQueue,
+    userMappings,
+    finances,
+    userAccounts,
+  ]);
   const daysSinceLastUpdate = getDaysSinceLastFinanceUpdate(finances);
 
   const openFinanceEdit = (finance: any, tab: 'all' | 'reviews' = 'reviews') => {
@@ -2650,6 +2787,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         hasNoMovements={finances.length === 0}
         onOpenCatchupWizard={openCatchupWizard}
       />
+
+      <FinanceDiagnosticPanel items={financeDiagnosticItems} />
 
       <AccountReconciliationPanel
         items={accountReconciliationQueue}
@@ -4949,6 +5088,56 @@ function PendingMeta({ label, value }: { label: string; value?: string | number 
       <p className="mt-1 truncate text-xs font-black text-neutral-800">{value || '-'}</p>
     </div>
   );
+}
+
+function FinanceDiagnosticPanel({ items }: { items: FinanceDiagnosticItem[] }) {
+  const priorityItem = items.find(item => item.actionable && (item.tone === 'danger' || item.tone === 'warn'));
+  const okCount = items.filter(item => item.tone === 'ok').length;
+
+  return (
+    <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Diagnostico</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Estado financiero</h3>
+        </div>
+        <div className="rounded-2xl bg-neutral-950 px-4 py-3 text-white">
+          <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Prioridad</p>
+          <p className="mt-1 text-sm font-black">
+            {priorityItem ? priorityItem.title : 'Sin bloqueos grandes'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {items.map(item => (
+          <div key={item.id} className={`rounded-3xl border p-4 ${getFinanceDiagnosticToneClasses(item.tone)}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{item.title}</p>
+                <p className="mt-2 text-3xl font-black tracking-tight">{item.value}</p>
+              </div>
+              <span className="rounded-full bg-white/80 p-2 text-neutral-900 shadow-sm">
+                {item.tone === 'ok' ? <Check size={16} /> : item.tone === 'danger' ? <AlertCircle size={16} /> : <Sparkles size={16} />}
+              </span>
+            </div>
+            <p className="mt-3 text-xs font-bold leading-5 opacity-75">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-xs font-bold text-neutral-500">
+        {okCount} de {items.length} senales estan sanas. Lo demas queda como cola de revision, no como trabajo manual innecesario.
+      </p>
+    </section>
+  );
+}
+
+function getFinanceDiagnosticToneClasses(tone: FinanceDiagnosticTone) {
+  if (tone === 'danger') return 'border-red-200 bg-red-50 text-red-900';
+  if (tone === 'warn') return 'border-amber-200 bg-amber-50 text-amber-900';
+  if (tone === 'ok') return 'border-emerald-100 bg-emerald-50 text-emerald-900';
+  return 'border-neutral-200 bg-neutral-50 text-neutral-900';
 }
 
 function TransferTraceCard({ transaction }: { transaction: PendingTransaction }) {
