@@ -47,7 +47,7 @@ Siguiente: [proximo paso]
 | Categorias financieras | Implementando | 74% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias y memoria Wallet activable. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
-| Reportes y dashboard financiero | Implementando | 58% | Mejorar lectura practica diaria y mensual con resumen de periodo, proyeccion de cierre, cuenta usada, variacion real, cambios por rubro y diagnostico compacto. |
+| Reportes y dashboard financiero | Implementando | 60% | Mejorar lectura practica diaria y mensual con resumen de periodo, proyeccion de cierre, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
 
 ## Tarea actual
 
@@ -68,6 +68,7 @@ Siguiente: [proximo paso]
 | Mostrar mayor cambio mensual por categoria | Validando | 80% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx` |
 | Mostrar cuenta mas usada del mes | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Estimar cierre de mes por ritmo actual | Validando | 80% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx` |
+| Compactar diagnostico financiero | Validando | 85% | `src/components/FinanceTracker.tsx` |
 
 ## Proximos pasos
 
