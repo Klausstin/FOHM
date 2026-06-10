@@ -5210,6 +5210,7 @@ function MonthlyFinanceSnapshot({
   const topPriority = insights.actionPriorities[0] || null;
   const expenseChange = insights.projection.expenseChangeRealVsPreviousMonth;
   const incomeChange = insights.projection.incomeChangeRealVsPreviousMonth;
+  const monthPace = dashboard.monthPace;
   const fixedLike = profile.fixedDeclared + profile.recurringDetected;
   const fixedShare = profile.totalExpenses > 0 ? Math.round((fixedLike / profile.totalExpenses) * 100) : 0;
   const hasData = Boolean(primaryCurrency || profile.totalExpenses || dashboard.topCategories.length);
@@ -5286,6 +5287,11 @@ function MonthlyFinanceSnapshot({
             label="Proxima accion"
             value={topPriority ? topPriority.title : 'Seguir cargando'}
             detail={topPriority ? topPriority.detail : 'La prioridad aparece cuando VEO detecta una tension concreta.'}
+          />
+          <MonthlySnapshotMiniCard
+            label="Cierre proyectado"
+            value={monthPace ? `${monthPace.projectedExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${monthPace.currency}` : 'Sin proyeccion'}
+            detail={monthPace ? monthPace.read : 'Con movimientos del mes, VEO estima como cerraria si mantenes el ritmo.'}
           />
           <MonthlySnapshotMiniCard
             label="Gasto real"

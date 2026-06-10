@@ -88,6 +88,17 @@ export interface ScopeSpendInsight {
   share: number;
 }
 
+export interface MonthPaceInsight {
+  currency: string;
+  elapsedDay: number;
+  daysInMonth: number;
+  expenseSoFar: number;
+  projectedExpense: number;
+  projectedNet: number;
+  paceRatio: number | null;
+  read: string;
+}
+
 export interface PeriodFinanceDashboard {
   month?: string;
   currency: string;
@@ -96,6 +107,7 @@ export interface PeriodFinanceDashboard {
   categoryDeltas: CategoryDeltaInsight[];
   byBeneficiary: BeneficiarySpendInsight[];
   byScope: ScopeSpendInsight[];
+  monthPace?: MonthPaceInsight;
   realExpenseRead?: string;
   realIncomeRead?: string;
 }
@@ -319,6 +331,7 @@ function buildPeriodDashboard(
   const categoryDeltas = buildCategoryDeltasForMonth(expenses, latestMonth, previousMonth, primaryCurrency);
   const byBeneficiary = buildBeneficiaryBreakdownForMonth(expenses, latestMonth, primaryCurrency);
   const byScope = buildScopeBreakdownForMonth(expenses, latestMonth, primaryCurrency);
+  const monthPace = buildMonthPaceInsight(byCurrency.find(item => item.currency === primaryCurrency), latestMonth, projection.monthlyExpenseAverage);
 
   return {
     month: latestMonth,
@@ -328,9 +341,59 @@ function buildPeriodDashboard(
     categoryDeltas,
     byBeneficiary,
     byScope,
+    monthPace,
     realExpenseRead: projection.expenseChangeRealVsPreviousMonth?.read,
     realIncomeRead: projection.incomeChangeRealVsPreviousMonth?.read,
   };
+}
+
+function buildMonthPaceInsight(
+  current?: PeriodCurrencyTotal,
+  month?: string,
+  monthlyExpenseAverage = 0,
+): MonthPaceInsight | undefined {
+  if (!current || !month) return undefined;
+
+  const [year, monthNumber] = month.split('-').map(Number);
+  if (!year || !monthNumber) return undefined;
+
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === monthNumber;
+  const daysInMonth = new Date(year, monthNumber, 0).getDate();
+  const elapsedDay = isCurrentMonth ? Math.max(1, now.getDate()) : daysInMonth;
+  const projectedExpense = elapsedDay > 0 ? current.expenses / elapsedDay * daysInMonth : current.expenses;
+  const projectedIncome = elapsedDay > 0 ? current.income / elapsedDay * daysInMonth : current.income;
+  const projectedNet = projectedIncome - projectedExpense;
+  const paceRatio = monthlyExpenseAverage > 0 ? projectedExpense / monthlyExpenseAverage : null;
+
+  return {
+    currency: current.currency,
+    elapsedDay,
+    daysInMonth,
+    expenseSoFar: current.expenses,
+    projectedExpense,
+    projectedNet,
+    paceRatio,
+    read: buildMonthPaceRead(projectedExpense, projectedNet, current.currency, paceRatio),
+  };
+}
+
+function buildMonthPaceRead(projectedExpense: number, projectedNet: number, currency: string, paceRatio: number | null) {
+  const projectedExpenseText = formatMoney(projectedExpense);
+  if (paceRatio == null) {
+    return `Si el ritmo sigue igual, el mes cerraria cerca de ${projectedExpenseText} ${currency} de gasto.`;
+  }
+
+  if (paceRatio >= 1.15) {
+    return `El ritmo viene alto: podria cerrar en ${projectedExpenseText} ${currency} de gasto.`;
+  }
+
+  if (paceRatio <= 0.85) {
+    return `El ritmo viene mas liviano que el promedio: proyecta ${projectedExpenseText} ${currency} de gasto.`;
+  }
+
+  const netText = formatMoney(projectedNet);
+  return `El ritmo viene parecido al promedio. Proyeccion de cierre: gasto ${projectedExpenseText} ${currency}, flujo ${netText} ${currency}.`;
 }
 
 function buildTopCategoriesForMonth(expenses: FinancialTransactionRecord[], month?: string, currency = 'ARS') {
