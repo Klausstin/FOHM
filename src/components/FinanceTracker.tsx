@@ -5148,6 +5148,7 @@ function MonthlyFinanceSnapshot({
   const profile = insights.monthlyProfile;
   const primaryCurrency = dashboard.byCurrency[0] || null;
   const topCategory = dashboard.topCategories[0] || null;
+  const topCategoryDelta = dashboard.categoryDeltas[0] || null;
   const topPriority = insights.actionPriorities[0] || null;
   const expenseChange = insights.projection.expenseChangeRealVsPreviousMonth;
   const incomeChange = insights.projection.incomeChangeRealVsPreviousMonth;
@@ -5214,6 +5215,11 @@ function MonthlyFinanceSnapshot({
             detail={topCategory ? `${topCategory.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${topCategory.currency} · ${Math.round(topCategory.share * 100)}%` : 'Falta mas data del mes.'}
           />
           <MonthlySnapshotMiniCard
+            label="Mayor cambio"
+            value={topCategoryDelta ? topCategoryDelta.category : 'Sin comparacion'}
+            detail={topCategoryDelta ? formatCategoryDeltaDetail(topCategoryDelta) : 'Con dos meses comparables, VEO muestra que rubro cambio mas.'}
+          />
+          <MonthlySnapshotMiniCard
             label="Proxima accion"
             value={topPriority ? topPriority.title : 'Seguir cargando'}
             detail={topPriority ? topPriority.detail : 'La prioridad aparece cuando VEO detecta una tension concreta.'}
@@ -5249,6 +5255,13 @@ function formatRealChangeValue(change?: ReturnType<typeof buildFinancialInsights
   if (change.interpretation === 'stable') return 'Casi igual';
   const percent = Math.round(change.realChangeRate * 100);
   return `${percent > 0 ? '+' : ''}${percent}% real`;
+}
+
+function formatCategoryDeltaDetail(delta: ReturnType<typeof buildFinancialInsights>['periodDashboard']['categoryDeltas'][number]) {
+  const direction = delta.direction === 'up' ? 'subio' : delta.direction === 'down' ? 'bajo' : 'quedo igual';
+  const amount = Math.abs(delta.delta).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const rate = delta.deltaRate == null ? '' : ` (${delta.deltaRate > 0 ? '+' : ''}${Math.round(delta.deltaRate * 100)}%)`;
+  return `${direction} ${amount} ${delta.currency}${rate} contra el mes anterior.`;
 }
 
 function MonthlySnapshotStat({
