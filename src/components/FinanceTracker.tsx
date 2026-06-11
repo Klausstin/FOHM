@@ -5782,6 +5782,11 @@ function MonthlyFinanceSnapshot({
             detail={monthPace ? monthPace.read : 'Con movimientos del mes, VEO estima como cerraria si mantenes el ritmo.'}
           />
           <MonthlySnapshotMiniCard
+            label="Promedio diario"
+            value={monthPace ? `${monthPace.dailyExpenseAverage.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${monthPace.currency}` : 'Sin ritmo'}
+            detail={monthPace ? `Dia ${monthPace.elapsedDay} de ${monthPace.daysInMonth}. Quedan ${monthPace.remainingDays} dia(s) para cerrar el mes.` : 'Con gastos del mes, VEO calcula el ritmo diario real.'}
+          />
+          <MonthlySnapshotMiniCard
             label="Gasto real"
             value={formatRealChangeValue(expenseChange)}
             detail={expenseChange?.read || 'Con mas historial e IPC, VEO compara gasto nominal contra gasto real.'}

@@ -47,7 +47,7 @@ Siguiente: [proximo paso]
 | Categorias financieras | Implementando | 85% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible, aprendizajes desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
-| Reportes y dashboard financiero | Implementando | 63% | Mejorar lectura practica diaria y mensual con resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
+| Reportes y dashboard financiero | Implementando | 67% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
 | Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
 
 ## Tarea actual
@@ -84,6 +84,7 @@ Siguiente: [proximo paso]
 | Evitar falsas alertas en ajustes de saldo | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Hacer mas segura la reversa de saldo al editar o borrar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Filtrar movimientos desde una cuenta a auditar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Mostrar ritmo diario de gasto mensual | Validando | 90% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 

@@ -93,6 +93,8 @@ export interface MonthPaceInsight {
   elapsedDay: number;
   daysInMonth: number;
   expenseSoFar: number;
+  dailyExpenseAverage: number;
+  remainingDays: number;
   projectedExpense: number;
   projectedNet: number;
   paceRatio: number | null;
@@ -361,6 +363,8 @@ function buildMonthPaceInsight(
   const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === monthNumber;
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
   const elapsedDay = isCurrentMonth ? Math.max(1, now.getDate()) : daysInMonth;
+  const remainingDays = Math.max(0, daysInMonth - elapsedDay);
+  const dailyExpenseAverage = elapsedDay > 0 ? current.expenses / elapsedDay : current.expenses;
   const projectedExpense = elapsedDay > 0 ? current.expenses / elapsedDay * daysInMonth : current.expenses;
   const projectedIncome = elapsedDay > 0 ? current.income / elapsedDay * daysInMonth : current.income;
   const projectedNet = projectedIncome - projectedExpense;
@@ -371,6 +375,8 @@ function buildMonthPaceInsight(
     elapsedDay,
     daysInMonth,
     expenseSoFar: current.expenses,
+    dailyExpenseAverage,
+    remainingDays,
     projectedExpense,
     projectedNet,
     paceRatio,
