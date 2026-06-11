@@ -9,13 +9,13 @@ La app puede seguir usando nombres historicos en codigo o repo durante la transi
 ## Frase Conceptual
 
 ```text
-VEO es un sistema operativo personal para entender quien sos, definir objetivos autenticos y tomar mejores decisiones sin desordenar la vida que queres vivir.
+VEO es un sistema personal de claridad para entenderte mejor, decidir mejor y vivir mas alineado.
 ```
 
 ## Bajada
 
 ```text
-Entendete mejor. Elegi mejor. Vivi mas alineado.
+Entendete mejor. Decidi mejor. Vivi mas alineado.
 ```
 
 ## Proposito
@@ -130,3 +130,20 @@ Pendiente:
 - Completar permisos por visibilidad en todos los modulos.
 - Mejorar modelos financieros y conciliacion.
 - Consolidar Google Calendar read-only.
+
+## Foco Actual
+
+La prioridad vigente es cerrar Finanzas como MVP usable al 100% para Agustin y Vicky antes de abrir modulos grandes nuevos.
+
+Finanzas debe poder usarse con datos reales mediante:
+
+- carga desde Luz;
+- carga manual;
+- importacion PDF/CSV;
+- saldos confiables;
+- conciliacion;
+- categorias aprendibles;
+- memoria financiera;
+- backup y exportacion.
+
+Las APIs automaticas de bancos, billeteras y agregadores son post-MVP. No bloquean el 100% de Finanzas.
