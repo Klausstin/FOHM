@@ -423,9 +423,9 @@ function getPendingCategoryType(category: string) {
   return 'expense';
 }
 
-function formatPendingDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-AR');
+function formatPendingDate(value: any) {
+  const date = parseFinanceDateValue(value);
+  return !date || Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-AR');
 }
 
 function isCsvFile(file: File) {
@@ -553,7 +553,7 @@ function buildFinanceCategoryGroups(finances: any[]) {
   });
 
   for (const finance of candidates) {
-    const key = finance.merchantKey || normalizeDuplicateText(finance.originalDescription || finance.description || '');
+    const key = getFinanceCategoryGroupKey(finance);
     if (!key) continue;
     groups.set(key, [...(groups.get(key) || []), finance]);
   }
@@ -614,9 +614,53 @@ function buildFinanceCategoryGroups(finances: any[]) {
     .slice(0, 6);
 }
 
+function getFinanceCategoryGroupKey(finance: any) {
+  const trace = parseFinanceTraceNote(finance.note);
+  const merchantText = normalizeDuplicateText(`${finance.merchantName || ''} ${finance.merchant || ''} ${finance.merchantKey || ''}`);
+  if (finance.merchantKey && !isGenericBankMovementText(merchantText)) {
+    return `merchant:${finance.merchantKey}`;
+  }
+
+  const counterpartyText = normalizeDuplicateText([
+    trace.counterpartyAlias,
+    trace.counterpartyAccount,
+    trace.counterpartyName,
+  ].filter(Boolean).join(' '));
+  if (counterpartyText) return `counterparty:${counterpartyText}`;
+
+  const rawDescription = trace.originalConcept || finance.originalDescription || finance.description || '';
+  const descriptionText = normalizeDuplicateText(rawDescription);
+  if (!descriptionText) return '';
+
+  if (isGenericBankMovementText(descriptionText)) {
+    const amount = Math.round(Number(finance.amount || 0) * 100);
+    const currency = finance.currency || 'ARS';
+    return amount ? `generic-bank-label:${descriptionText}:${currency}:${amount}` : '';
+  }
+
+  return `description:${descriptionText}`;
+}
+
+function isGenericBankMovementText(value: string) {
+  const normalized = normalizeDuplicateText(value || '');
+  return [
+    'pago con visa debito',
+    'debito directo',
+    'operacion en efectivo tarje',
+    'operacion en efectivo tarjeta',
+    'compra con tarjeta',
+    'pago con tarjeta',
+    'consumo tarjeta',
+    'visa debito',
+    'mastercard debito',
+  ].some(label => normalized === label || normalized.includes(label));
+}
+
 function getFinanceCategoryGroupReason(finance: any) {
   const category = normalizeDuplicateText(finance.category || '');
   const subCategory = normalizeDuplicateText(finance.subCategory || '');
+  const rawDescription = normalizeDuplicateText(finance.originalDescription || finance.description || '');
+  if (isGenericBankMovementText(rawDescription)) return 'Etiqueta bancaria generica';
   if (!category || category === 'sin categorizar' || category === 'sin categoria') return 'Sin categoria clara';
   if (category === 'otros' || subCategory === 'otros') return 'Cayo en Otros';
   if (finance.confidence === 'inferred') return 'Clasificacion inferida';
