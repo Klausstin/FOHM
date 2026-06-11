@@ -1392,6 +1392,12 @@ const FINANCE_BENEFICIARIES = [
   { type: 'user', label: 'Vicky', scope: 'personal' },
   { type: 'other', label: 'Otro', scope: 'familia' },
 ];
+const FINANCE_SCOPE_OPTIONS = [
+  { value: 'personal', label: 'Personal' },
+  { value: 'pareja', label: 'Pareja' },
+  { value: 'hogar', label: 'Hogar' },
+  { value: 'familia', label: 'Familia' },
+];
 
 function legacyBeneficiaryLabel(finance: any) {
   if (finance.assignedTo === 'Ambos') return 'Pareja';
@@ -2736,6 +2742,15 @@ export default function FinanceTracker({ user }: { user: any }) {
   const primaryBalanceSummary = accountBalanceSummary.find(item => item.currency === 'ARS') || accountBalanceSummary[0];
   const accountReconciliationQueue = useMemo(() => buildAccountReconciliationQueue(userAccounts), [userAccounts]);
   const balanceIntegrityIssues = useMemo(() => buildBalanceIntegrityIssues(finances), [finances]);
+  const beneficiaryFilterOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+    FINANCE_BENEFICIARIES.forEach(item => labels.set(item.label, item.label));
+    finances.forEach(finance => {
+      const label = finance.beneficiaryLabel || legacyBeneficiaryLabel(finance);
+      if (label) labels.set(label, label);
+    });
+    return Array.from(labels.values()).sort((a, b) => a.localeCompare(b));
+  }, [finances]);
 
   const reviewCount = finances.filter(f => f.isConfirmed === false || f.needsReview).length;
   const reviewFinances = finances.filter(f => f.isConfirmed === false || f.needsReview);
@@ -4434,7 +4449,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Scope</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Ambito</label>
                       <select
                         value={scope}
                         onChange={(e) => setScope(e.target.value)}
@@ -4614,29 +4629,28 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para quien</label>
                 <select 
                   value={filterBeneficiary}
                   onChange={(e) => setFilterBeneficiary(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
                   <option value="all">Todos</option>
-                  {FINANCE_BENEFICIARIES.map(item => <option key={item.label} value={item.label}>{item.label}</option>)}
+                  {beneficiaryFilterOptions.map(label => <option key={label} value={label}>{label}</option>)}
                 </select>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Scope</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Ambito</label>
                 <select 
                   value={filterScope}
                   onChange={(e) => setFilterScope(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
                 >
                   <option value="all">Todos</option>
-                  <option value="personal">Personal</option>
-                  <option value="pareja">Pareja</option>
-                  <option value="hogar">Hogar</option>
-                  <option value="familia">Familia</option>
+                  {FINANCE_SCOPE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -4828,10 +4842,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                               onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
-                              <option value="personal">Personal</option>
-                              <option value="pareja">Pareja</option>
-                              <option value="hogar">Hogar</option>
-                              <option value="familia">Familia</option>
+                              {FINANCE_SCOPE_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
                             </select>
                           </div>
                           <div className="flex gap-2">
@@ -5005,8 +5018,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Scope</span>
-                            <span className="text-[10px] font-bold text-neutral-500">{f.scope || legacyScope(f)}</span>
+                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Ambito</span>
+                            <span className="text-[10px] font-bold text-neutral-500">{formatFinanceScope(f.scope || legacyScope(f))}</span>
                           </div>
                           {f.estimatedReason && (
                             <div className="flex-1 min-w-0">
@@ -6456,8 +6469,8 @@ function FinancialInsightsPanel({
             }))}
           />
           <InsightList
-            title="Scope familiar"
-            empty="Sin scope claro"
+            title="Ambito familiar"
+            empty="Sin ambito claro"
             items={dashboard.byScope.map(item => ({
               title: formatFinanceScope(item.scope),
               detail: `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${item.currency} - ${Math.round(item.share * 100)}% del gasto`,
@@ -6946,11 +6959,10 @@ function CategoryLearningGroupCard({
           onChange={(event) => setDraft({ ...draft, scope: event.target.value, visibility: event.target.value ? 'household_shared' : draft.visibility })}
           className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
         >
-          <option value="">Scope</option>
-          <option value="personal">Personal</option>
-          <option value="pareja">Pareja</option>
-          <option value="hogar">Hogar</option>
-          <option value="familia">Familia</option>
+          <option value="">Ambito</option>
+          {FINANCE_SCOPE_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </select>
 
         <select
