@@ -48,7 +48,7 @@ Siguiente: [proximo paso]
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 63% | Mejorar lectura practica diaria y mensual con resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
-| Integraciones financieras automaticas | Planificando | 20% | Mantener PDF/CSV como base robusta y preparar Mercado Pago API como primera conexion realista. |
+| Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
 
 ## Tarea actual
 
@@ -78,7 +78,8 @@ Siguiente: [proximo paso]
 | Agregar acciones masivas de revision financiera | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar memoria financiera activa | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Desactivar aprendizajes financieros incorrectos | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.learning.ts`, `firestore.rules` |
-| Definir estrategia de automatizacion financiera | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md` |
+| Definir estrategia de automatizacion financiera post-MVP | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md` |
+| Separar APIs del alcance MVP Finanzas | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
@@ -88,5 +89,5 @@ Siguiente: [proximo paso]
 4. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
 5. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
 6. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-7. Preparar capa interna de proveedores financieros para que Mercado Pago API, BBVA API o agregadores entren sin rehacer Finanzas.
-8. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+7. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+8. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
