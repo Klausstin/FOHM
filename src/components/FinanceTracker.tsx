@@ -1070,6 +1070,7 @@ function buildBalanceIntegrityIssues(finances: any[]) {
       const sourceAccountId = finance.sourceAccountId || finance.accountId || '';
       const toAccountId = finance.toAccountId || '';
       const type = finance.type || (finance.kind === 'income' ? 'income' : finance.kind === 'neutral' ? 'neutral' : 'expense');
+      const isBalanceAdjustment = isBalanceAdjustmentTransaction(finance);
       const shouldAffectBalance = shouldApplyTransactionToAccountBalances({
         ...finance,
         accountId: sourceAccountId,
@@ -1111,7 +1112,7 @@ function buildBalanceIntegrityIssues(finances: any[]) {
         };
       }
 
-      if (!shouldAffectBalance && finance.accountBalanceApplied) {
+      if (!shouldAffectBalance && finance.accountBalanceApplied && !isBalanceAdjustment) {
         return {
           id: `${finance.id}-applied-without-effect`,
           type: 'applied_without_effect' as const,
@@ -1125,6 +1126,12 @@ function buildBalanceIntegrityIssues(finances: any[]) {
       return null;
     })
     .filter(Boolean) as BalanceIntegrityIssue[];
+}
+
+function isBalanceAdjustmentTransaction(finance: any) {
+  const neutralType = String(finance.neutralType || '').toLowerCase();
+  const categoryText = normalizeDuplicateText(`${finance.category || ''} ${finance.subCategory || ''} ${finance.description || ''}`);
+  return neutralType === 'balance_adjustment' || categoryText.includes('ajuste saldo');
 }
 
 function buildFinanceDiagnosticItems({
