@@ -3166,6 +3166,12 @@ export default function FinanceTracker({ user }: { user: any }) {
         accounts={userAccounts}
         accountActivityById={accountActivityById}
         onEditAccount={startEditingAccount}
+        onViewAccountActivity={(accountId) => {
+          setActiveListTab('all');
+          setFilterAccount(accountId);
+          setFilterDateRange('all');
+          setSearchQuery('');
+        }}
       />
 
       <AccountReconciliationPanel
@@ -6095,10 +6101,12 @@ function AccountReconciliationOverview({
   accounts,
   accountActivityById,
   onEditAccount,
+  onViewAccountActivity,
 }: {
   accounts: any[];
   accountActivityById: Map<string, AccountActivitySummary>;
   onEditAccount: (account: any) => void;
+  onViewAccountActivity: (accountId: string) => void;
 }) {
   if (!accounts.length) return null;
 
@@ -6176,13 +6184,22 @@ function AccountReconciliationOverview({
                     <span className="ml-1 text-xs font-bold text-neutral-400">{account.currency || 'ARS'}</span>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onEditAccount(account)}
-                  className="rounded-2xl bg-neutral-950 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
-                >
-                  Conciliar
-                </button>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onEditAccount(account)}
+                    className="rounded-2xl bg-neutral-950 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                  >
+                    Conciliar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onViewAccountActivity(account.id)}
+                    className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50"
+                  >
+                    Ver movimientos
+                  </button>
+                </div>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold">
