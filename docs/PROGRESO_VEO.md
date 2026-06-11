@@ -34,6 +34,7 @@ Siguiente: [proximo paso]
 | Calendario | Pendiente | 10% | Integracion real con Google Calendar queda para despues de Finanzas. |
 | Tareas | Planificando | 5% | Concepto definido, todavia no implementar hasta cerrar Finanzas. |
 | Ajustes | Base | 30% | Perfil, household y permisos iniciales. |
+| Documentacion troncal | Implementando | 65% | README actualizado como mapa central de vision, foco Finanzas, decisiones MVP y comandos. |
 | Investigacion tecnica | Listo | 20% | Primer mapa de librerias, APIs y proyectos open source creado en `docs/OPEN_SOURCE_RESEARCH.md`. |
 
 ## Bloque actual: Finanzas
@@ -90,6 +91,7 @@ Siguiente: [proximo paso]
 | Mostrar confirmacion de backup descargado | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Exportar movimientos financieros en CSV | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar prueba local de integridad de saldos | Validando | 90% | `src/features/finance/finance.balance.ts`, `scripts/finance-balance-smoke.ts`, `package.json`, `docs/PROGRESO_VEO.md` |
+| Actualizar README como documento troncal | Validando | 90% | `README.md`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
