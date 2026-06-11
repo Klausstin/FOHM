@@ -43,7 +43,7 @@ Siguiente: [proximo paso]
 | Modelo de cuentas y tarjetas | Implementando | 86% | Seguir puliendo saldos, deuda y conciliacion. |
 | Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
 | Importador BBVA / Visa / CSV | Implementando | 86% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
-| Reconciliacion de resumenes | Implementando | 78% | Usar saldos de cierre, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
+| Reconciliacion de resumenes | Implementando | 81% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
 | Categorias financieras | Implementando | 85% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible, aprendizajes desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
@@ -81,6 +81,7 @@ Siguiente: [proximo paso]
 | Definir estrategia de automatizacion financiera post-MVP | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md` |
 | Separar APIs del alcance MVP Finanzas | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md`, `docs/PROGRESO_VEO.md` |
 | Mejorar lenguaje y filtros de economia familiar | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Evitar falsas alertas en ajustes de saldo | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
