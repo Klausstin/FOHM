@@ -59,7 +59,7 @@ Siguiente: [proximo paso]
 | Mostrar cuotas detectadas como compromisos futuros | Validando | 88% | `src/components/FinanceTracker.tsx` |
 | Evitar grupos falsos por etiquetas bancarias genericas | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Agregar panel de conciliacion por cuenta | Validando | 85% | `src/components/FinanceTracker.tsx` |
-| Mostrar actividad por cuenta desde la ultima conciliacion | Validando | 80% | `src/components/FinanceTracker.tsx` |
+| Mostrar actividad por cuenta desde la ultima conciliacion | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Investigar open source y APIs para acelerar VEO | Listo | 95% | `docs/OPEN_SOURCE_RESEARCH.md` |
 | Exportar contexto maestro para ChatGPT | Listo | 100% | `VEO_CONTEXT_FOR_CHATGPT.md` |
 | Detectar movimientos contabilizados sin impacto en saldo | Validando | 90% | `src/components/FinanceTracker.tsx` |
@@ -83,11 +83,12 @@ Siguiente: [proximo paso]
 | Mejorar lenguaje y filtros de economia familiar | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Evitar falsas alertas en ajustes de saldo | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Hacer mas segura la reversa de saldo al editar o borrar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Filtrar movimientos desde una cuenta a auditar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
-1. Cerrar el bloque de actividad/auditoria por cuenta.
-2. Probar flujo real: crear gasto, editar monto/cuenta, borrar gasto y verificar saldo.
+1. Probar flujo real: crear gasto, editar monto/cuenta, borrar gasto y verificar saldo.
+2. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
 3. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
 4. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
 5. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
