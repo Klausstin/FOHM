@@ -48,7 +48,7 @@ Siguiente: [proximo paso]
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 67% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
-| Backup y seguridad de datos | Implementando | 70% | Permitir exportar cuentas, movimientos, categorias y memoria antes de cargar datos reales en serio. |
+| Backup y seguridad de datos | Implementando | 80% | Export manual listo con confirmacion visible; falta probar descarga real antes de carga masiva y definir restauracion futura. |
 | Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
 
 ## Tarea actual
@@ -87,6 +87,7 @@ Siguiente: [proximo paso]
 | Filtrar movimientos desde una cuenta a auditar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Mostrar ritmo diario de gasto mensual | Validando | 90% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar export manual de backup financiero | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Mostrar confirmacion de backup descargado | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
