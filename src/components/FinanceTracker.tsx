@@ -605,6 +605,7 @@ function buildFinanceCategoryGroups(finances: any[]) {
             counterpartyAlias: trace.counterpartyAlias || '',
             counterpartyAccount: trace.counterpartyAccount || '',
             transactionFingerprint: item.transactionFingerprint || '',
+            statementFingerprint: item.statementFingerprint || '',
           };
         }),
       };
@@ -5583,11 +5584,14 @@ function PendingImportGroupsPanel({
   );
 }
 
-function PendingMeta({ label, value }: { label: string; value?: string | number }) {
+function PendingMeta({ label, value, wrap = false }: { label: string; value?: string | number; wrap?: boolean }) {
+  const displayValue = value === 0 || value ? value : '-';
   return (
-    <div className="min-w-0">
+    <div className={wrap ? 'min-w-0 sm:col-span-2 lg:col-span-4' : 'min-w-0'}>
       <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</p>
-      <p className="mt-1 truncate text-xs font-black text-neutral-800">{value || '-'}</p>
+      <p className={`mt-1 text-xs font-black text-neutral-800 ${wrap ? 'whitespace-normal break-all leading-5' : 'truncate'}`}>
+        {displayValue}
+      </p>
     </div>
   );
 }
@@ -6856,10 +6860,12 @@ function CategoryLearningGroupCard({
                     <PendingMeta label="Destino" value={destinationAccount?.name} />
                     <PendingMeta label="Archivo" value={sample.importedFile || sample.importSource} />
                     <PendingMeta label="Cuotas" value={sample.installmentLabel} />
-                    <PendingMeta label="Detalle" value={sample.transferDetail || sample.sourceLine} />
+                    <PendingMeta label="Detalle" value={sample.transferDetail} />
                     <PendingMeta label="Alias" value={sample.counterpartyAlias} />
                     <PendingMeta label="CBU/CVU" value={sample.counterpartyAccount} />
-                    <PendingMeta label="Huella" value={shortFingerprint(sample.transactionFingerprint)} />
+                    <PendingMeta label="Linea resumen" value={sample.sourceLine || sample.originalDescription} wrap />
+                    <PendingMeta label="Huella movimiento" value={sample.transactionFingerprint} wrap />
+                    <PendingMeta label="Huella resumen" value={sample.statementFingerprint} wrap />
                   </div>
                 </div>
               );

@@ -54,6 +54,7 @@ Siguiente: [proximo paso]
 | Tarea | Estado | Avance estimado | Archivos |
 | --- | --- | ---: | --- |
 | Mostrar detalle de grupos similares importados | Validando | 90% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.import.ts` |
+| Mostrar evidencia completa del resumen importado | Validando | 90% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.import.ts` |
 | Mostrar cuotas detectadas como compromisos futuros | Validando | 88% | `src/components/FinanceTracker.tsx` |
 | Evitar grupos falsos por etiquetas bancarias genericas | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Agregar panel de conciliacion por cuenta | Validando | 85% | `src/components/FinanceTracker.tsx` |
