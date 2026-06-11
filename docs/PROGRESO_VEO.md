@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 86% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
+| Finanzas | Implementando | 87% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -44,7 +44,7 @@ Siguiente: [proximo paso]
 | Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
 | Importador BBVA / Visa / CSV | Implementando | 84% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
 | Reconciliacion de resumenes | Implementando | 76% | Usar saldos de cierre, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
-| Categorias financieras | Implementando | 78% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable y memoria visible. |
+| Categorias financieras | Implementando | 82% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible y aprendizajes desactivables. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 60% | Mejorar lectura practica diaria y mensual con resumen de periodo, proyeccion de cierre, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
@@ -71,6 +71,7 @@ Siguiente: [proximo paso]
 | Compactar diagnostico financiero | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Agregar acciones masivas de revision financiera | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar memoria financiera activa | Validando | 85% | `src/components/FinanceTracker.tsx` |
+| Desactivar aprendizajes financieros incorrectos | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.learning.ts`, `firestore.rules` |
 
 ## Proximos pasos
 
