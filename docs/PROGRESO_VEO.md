@@ -63,7 +63,7 @@ Siguiente: [proximo paso]
 | Agregar panel de conciliacion por cuenta | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar actividad por cuenta desde la ultima conciliacion | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Investigar open source y APIs para acelerar VEO | Listo | 95% | `docs/OPEN_SOURCE_RESEARCH.md` |
-| Exportar contexto maestro para ChatGPT | Listo | 100% | `VEO_CONTEXT_FOR_CHATGPT.md` |
+| Exportar contexto maestro para ChatGPT | Validando | 100% | `VEO_CONTEXT_FOR_CHATGPT.md` |
 | Detectar movimientos contabilizados sin impacto en saldo | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Importar CSV como borradores revisables | Validando | 85% | `package.json`, `package-lock.json`, `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |
 | Importar historial Wallet como aprendizaje | Validando | 98% | `src/features/finance/finance.import.ts`, `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
@@ -92,6 +92,7 @@ Siguiente: [proximo paso]
 | Exportar movimientos financieros en CSV | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar prueba local de integridad de saldos | Validando | 90% | `src/features/finance/finance.balance.ts`, `scripts/finance-balance-smoke.ts`, `package.json`, `docs/PROGRESO_VEO.md` |
 | Actualizar README como documento troncal | Validando | 90% | `README.md`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
+| Regenerar contexto maestro para ChatGPT | Validando | 100% | `VEO_CONTEXT_FOR_CHATGPT.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
