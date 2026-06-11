@@ -10,6 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "finance:backup:validate": "tsx scripts/finance-backup-validate.ts",
+    "finance:reset-test-data": "tsx scripts/finance-reset-test-data.ts",
     "finance:smoke": "tsx scripts/finance-balance-smoke.ts",
     "finance:wallet-history": "tsx scripts/finance-wallet-history.ts",
     "finance:wallet-memory": "tsx scripts/finance-wallet-memory.ts"

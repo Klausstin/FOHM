@@ -50,6 +50,7 @@ Siguiente: [proximo paso]
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 67% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
 | Backup y seguridad de datos | Implementando | 94% | Export JSON, CSV legible, validador local, protocolo de prueba real y playbook de recuperacion listos; falta ejecutar prueba real antes de carga masiva. |
+| Reset seguro de datos financieros de prueba | Implementando | 80% | Script con dry-run, backup previo, confirmacion explicita y preservacion de cuentas/categorias listo para validar. |
 | Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
 
 ## Tarea actual
@@ -96,15 +97,17 @@ Siguiente: [proximo paso]
 | Agregar validador local de backup financiero | Validando | 90% | `scripts/finance-backup-validate.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Crear protocolo de prueba real de Finanzas | Validando | 90% | `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Crear playbook de recuperacion de backup financiero | Validando | 90% | `docs/FINANCE_BACKUP_RECOVERY_PLAYBOOK.md`, `README.md`, `docs/PROGRESO_VEO.md` |
+| Crear reset seguro de datos financieros de prueba | Validando | 90% | `scripts/finance-reset-test-data.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
 1. Ejecutar `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md` en la app antes de carga masiva.
-2. Descargar backup financiero y CSV antes de cargar datos reales masivos, y validar el JSON con `npm run finance:backup:validate`.
-3. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
-4. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
-5. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
-6. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
-7. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-8. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
-9. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
+2. Si se quiere empezar limpio, correr dry-run de `npm run finance:reset-test-data` y aplicar solo con confirmacion explicita.
+3. Descargar backup financiero y CSV antes de cargar datos reales masivos, y validar el JSON con `npm run finance:backup:validate`.
+4. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
+5. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
+6. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
+7. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
+8. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
+9. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+10. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.

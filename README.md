@@ -237,6 +237,18 @@ Validar un backup JSON de Finanzas:
 npm run finance:backup:validate -- "C:\ruta\al\veo-finanzas-backup.json"
 ```
 
+Dry-run para limpiar datos financieros de prueba sin borrar estructura base:
+
+```powershell
+npm run finance:reset-test-data -- --email agustin@granberta.com
+```
+
+Borrado real de datos financieros de prueba:
+
+```powershell
+npm run finance:reset-test-data -- --email agustin@granberta.com --apply --confirm "BORRAR DATOS FINANCIEROS DE PRUEBA"
+```
+
 ## Variables de entorno
 
 Crear `.env` o `.env.local` segun el entorno:
