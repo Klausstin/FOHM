@@ -48,6 +48,7 @@ Siguiente: [proximo paso]
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 67% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
+| Backup y seguridad de datos | Implementando | 70% | Permitir exportar cuentas, movimientos, categorias y memoria antes de cargar datos reales en serio. |
 | Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
 
 ## Tarea actual
@@ -85,14 +86,16 @@ Siguiente: [proximo paso]
 | Hacer mas segura la reversa de saldo al editar o borrar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Filtrar movimientos desde una cuenta a auditar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Mostrar ritmo diario de gasto mensual | Validando | 90% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Agregar export manual de backup financiero | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
 1. Probar flujo real: crear gasto, editar monto/cuenta, borrar gasto y verificar saldo.
-2. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
-3. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
-4. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
-5. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
-6. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-7. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
-8. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
+2. Descargar backup financiero antes de cargar datos reales masivos.
+3. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
+4. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
+5. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
+6. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
+7. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
+8. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+9. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
