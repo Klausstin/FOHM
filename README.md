@@ -335,6 +335,7 @@ docs/
 
 - `docs/PROGRESO_VEO.md`: estado vivo de modulos, bloques, tareas y proximos pasos.
 - `docs/FINANCE_COMPLETION_PLAN.md`: criterio para cerrar Finanzas como MVP usable.
+- `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md`: prueba controlada antes de cargar datos reales masivos.
 - `docs/FINANCE_AUTOMATION_STRATEGY.md`: decision de dejar APIs bancarias para post-MVP.
 - `docs/FINANCE_INFLATION_STRATEGY.md`: criterio de inflacion, valor nominal y valor real.
 - `docs/OPEN_SOURCE_RESEARCH.md`: investigacion de librerias, APIs y proyectos open source.
