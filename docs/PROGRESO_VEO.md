@@ -40,7 +40,7 @@ Siguiente: [proximo paso]
 
 | Bloque | Estado | Avance estimado | Proximo paso |
 | --- | --- | ---: | --- |
-| Modelo de cuentas y tarjetas | Implementando | 88% | Seguir puliendo saldos, deuda, reversas seguras al editar/borrar y conciliacion. |
+| Modelo de cuentas y tarjetas | Implementando | 91% | Saldos, deuda de tarjeta, reversas seguras y smoke test local cubren el flujo critico; falta validacion real con datos de Agustin/Vicky. |
 | Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
 | Importador BBVA / Visa / CSV | Implementando | 86% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
 | Reconciliacion de resumenes | Implementando | 81% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
@@ -89,10 +89,11 @@ Siguiente: [proximo paso]
 | Agregar export manual de backup financiero | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Mostrar confirmacion de backup descargado | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Exportar movimientos financieros en CSV | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Agregar prueba local de integridad de saldos | Validando | 90% | `src/features/finance/finance.balance.ts`, `scripts/finance-balance-smoke.ts`, `package.json`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
-1. Probar flujo real: crear gasto, editar monto/cuenta, borrar gasto y verificar saldo.
+1. Probar flujo real en la app: crear gasto, editar monto/cuenta, borrar gasto y verificar saldo contra la prueba local.
 2. Descargar backup financiero y CSV antes de cargar datos reales masivos.
 3. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
 4. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
