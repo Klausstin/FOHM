@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, collection, addDoc, query, where, orderBy, onSnapshot, handleFirestoreError, OperationType, doc, updateDoc, getDocs, getDoc } from '../firebase.ts';
 import { User } from 'firebase/auth';
 import { 
-  Wallet, Plus, FileText, TrendingUp, TrendingDown, PieChart, Upload, Trash2, Filter, Sparkles, AlertCircle, Check, X, Edit2, Save, Banknote, CreditCard, Briefcase,
+  Wallet, Plus, FileText, TrendingUp, TrendingDown, PieChart, Upload, Trash2, Filter, Sparkles, AlertCircle, Check, X, Edit2, Save, Banknote, CreditCard, Briefcase, Download,
   Utensils, ShoppingBag, Home, Bus, Car, Monitor, Coins, List, User as UserIcon, Tag, ChevronRight, ChevronDown, Calendar, ArrowUpRight, ArrowDownLeft, ArrowLeftRight
 } from 'lucide-react';
 
@@ -73,6 +73,70 @@ function buildPdfPageText(items: any[]) {
         .trim()
     )
     .join('\n');
+}
+
+function toBackupSafeValue(value: any): any {
+  if (value == null) return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+  if (Array.isArray(value)) return value.map(toBackupSafeValue);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => typeof entryValue !== 'function')
+        .map(([key, entryValue]) => [key, toBackupSafeValue(entryValue)]),
+    );
+  }
+  return value;
+}
+
+function buildFinanceBackupPayload(input: {
+  user: any;
+  finances: any[];
+  accounts: any[];
+  categories: any[];
+  mappings: any[];
+  pendingTransactions: PendingTransaction[];
+}) {
+  return toBackupSafeValue({
+    schema: 'veo.finance.backup.v1',
+    exportedAt: new Date(),
+    householdId: input.user?.householdId || '',
+    exportedBy: {
+      uid: input.user?.uid || '',
+      email: input.user?.email || '',
+      displayName: input.user?.displayName || '',
+    },
+    counts: {
+      accounts: input.accounts.length,
+      transactions: input.finances.length,
+      categories: input.categories.length,
+      learningMappings: input.mappings.length,
+      pendingTransactions: input.pendingTransactions.length,
+    },
+    accounts: input.accounts,
+    transactions: input.finances,
+    categories: input.categories,
+    learningMappings: input.mappings,
+    pendingTransactions: input.pendingTransactions,
+  });
+}
+
+function downloadJsonFile(fileName: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildFinanceBackupFileName() {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  return `veo-finanzas-backup-${stamp}.json`;
 }
 
 interface DuplicateMatch {
@@ -3079,6 +3143,18 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleExportFinanceBackup = () => {
+    const payload = buildFinanceBackupPayload({
+      user,
+      finances,
+      accounts: userAccounts,
+      categories: userCategories,
+      mappings: userMappings,
+      pendingTransactions,
+    });
+    downloadJsonFile(buildFinanceBackupFileName(), payload);
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -3088,6 +3164,14 @@ export default function FinanceTracker({ user }: { user: any }) {
           <p className="text-neutral-500 font-medium">Entende donde esta tu plata y si tus gastos sostienen la vida que queres construir.</p>
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleExportFinanceBackup}
+            className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
+          >
+            <Download size={18} />
+            Backup
+          </button>
           <button
             onClick={() => setIsAddingAccount(true)}
             className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
