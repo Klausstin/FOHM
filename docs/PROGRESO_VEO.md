@@ -49,7 +49,7 @@ Siguiente: [proximo paso]
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 67% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
-| Backup y seguridad de datos | Implementando | 92% | Export JSON, CSV legible, validador local y protocolo de prueba real listos; falta ejecutar prueba real antes de carga masiva. |
+| Backup y seguridad de datos | Implementando | 94% | Export JSON, CSV legible, validador local, protocolo de prueba real y playbook de recuperacion listos; falta ejecutar prueba real antes de carga masiva. |
 | Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
 
 ## Tarea actual
@@ -95,6 +95,7 @@ Siguiente: [proximo paso]
 | Regenerar contexto maestro para ChatGPT | Validando | 100% | `VEO_CONTEXT_FOR_CHATGPT.md`, `docs/PROGRESO_VEO.md` |
 | Agregar validador local de backup financiero | Validando | 90% | `scripts/finance-backup-validate.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Crear protocolo de prueba real de Finanzas | Validando | 90% | `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md`, `README.md`, `docs/PROGRESO_VEO.md` |
+| Crear playbook de recuperacion de backup financiero | Validando | 90% | `docs/FINANCE_BACKUP_RECOVERY_PLAYBOOK.md`, `README.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
