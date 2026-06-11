@@ -44,7 +44,7 @@ Siguiente: [proximo paso]
 | Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
 | Importador BBVA / Visa / CSV | Implementando | 86% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
 | Reconciliacion de resumenes | Implementando | 78% | Usar saldos de cierre, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
-| Categorias financieras | Implementando | 84% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible y aprendizajes desactivables. |
+| Categorias financieras | Implementando | 85% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible, aprendizajes desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 63% | Mejorar lectura practica diaria y mensual con resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y diagnostico compacto colapsable. |
@@ -55,6 +55,7 @@ Siguiente: [proximo paso]
 | --- | --- | ---: | --- |
 | Mostrar detalle de grupos similares importados | Validando | 90% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.import.ts` |
 | Mostrar cuotas detectadas como compromisos futuros | Validando | 88% | `src/components/FinanceTracker.tsx` |
+| Evitar grupos falsos por etiquetas bancarias genericas | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Agregar panel de conciliacion por cuenta | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar actividad por cuenta desde la ultima conciliacion | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Investigar open source y APIs para acelerar VEO | Listo | 95% | `docs/OPEN_SOURCE_RESEARCH.md` |
