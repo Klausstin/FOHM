@@ -489,9 +489,9 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
     .split(/\r?\n/)
     .map(line => line.trim())
     .map(stripPdfLineNoise)
-    .map(line => BBVA_MOVEMENT_RE.exec(line))
-    .filter((match): match is RegExpExecArray => Boolean(match))
-    .map(match => {
+    .map(line => ({ line, match: BBVA_MOVEMENT_RE.exec(line) }))
+    .filter((entry): entry is { line: string; match: RegExpExecArray } => Boolean(entry.match))
+    .map(({ line, match }) => {
       const [, datePart, , rawDescription, rawAmount] = match;
       const amount = parseArgentineMoney(rawAmount);
       const description = cleanMovementDescription(rawDescription);
@@ -513,6 +513,7 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
         merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : '',
         ...transferDetails,
         importSource: 'bbva_caja_ahorro_ars',
+        sourceLine: line,
         balanceDelta: amount,
       };
     })
