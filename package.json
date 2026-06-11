@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "finance:smoke": "tsx scripts/finance-balance-smoke.ts",
     "finance:wallet-history": "tsx scripts/finance-wallet-history.ts",
     "finance:wallet-memory": "tsx scripts/finance-wallet-memory.ts"
   },
