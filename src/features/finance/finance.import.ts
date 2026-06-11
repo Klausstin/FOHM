@@ -27,6 +27,10 @@ export interface ImportedFinanceTransaction {
   paymentType?: string;
   tags?: string[];
   balanceDelta?: number;
+  sourceLine?: string;
+  installmentNumber?: number;
+  installmentTotal?: number;
+  installmentLabel?: string;
   transactionFingerprint?: string;
   statementFingerprint?: string;
 }
@@ -330,6 +334,7 @@ function parseBbvaVisaTransactions(text: string, fallbackYear: number): Imported
     const type = amountInfo.amount < 0 ? 'income' as const : 'expense' as const;
     const merchant = suggestMerchant(description);
     const categorySuggestion = suggestVisaCategory(description, merchant);
+    const installmentInfo = extractInstallmentInfo(description);
 
     transactions.push({
       amount,
@@ -346,6 +351,10 @@ function parseBbvaVisaTransactions(text: string, fallbackYear: number): Imported
       merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : normalizeFingerprintText(description).replace(/\s+/g, '-'),
       importSource: 'bbva_visa',
       balanceDelta: type === 'expense' ? -amount : amount,
+      sourceLine: line,
+      installmentNumber: installmentInfo?.number,
+      installmentTotal: installmentInfo?.total,
+      installmentLabel: installmentInfo?.label,
     });
   }
 
@@ -434,6 +443,24 @@ function cleanVisaDescription(description: string) {
     .replace(/\s+/g, ' ')
     .replace(/\bID:\s*/i, 'ID:')
     .trim();
+}
+
+function extractInstallmentInfo(description: string) {
+  const text = String(description || '');
+  const slashMatch = /(?:^|\s)(\d{1,2})\s*\/\s*(\d{1,2})(?:\s|$)/.exec(text);
+  const cuotaMatch = /\b(?:CUOTA|CTA)\s*(\d{1,2})\s*(?:DE|\/)\s*(\d{1,2})\b/i.exec(text);
+  const match = slashMatch || cuotaMatch;
+  if (!match) return null;
+
+  const number = Number(match[1]);
+  const total = Number(match[2]);
+  if (!Number.isFinite(number) || !Number.isFinite(total) || number < 1 || total < 2 || number > total) return null;
+
+  return {
+    number,
+    total,
+    label: `${number}/${total}`,
+  };
 }
 
 function cleanVisaMerchantName(description: string) {

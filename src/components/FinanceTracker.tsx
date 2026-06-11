@@ -582,6 +582,31 @@ function buildFinanceCategoryGroups(finances: any[]) {
         scope: first.scope || legacyScope(first),
         visibility: first.visibility || 'household_shared',
         transactionIds: items.map(item => item.id).filter(Boolean),
+        samples: items.slice(0, 5).map(item => {
+          const trace = parseFinanceTraceNote(item.note);
+          return {
+            id: item.id,
+            date: item.date,
+            amount: Number(item.amount || 0),
+            currency: item.currency || first.currency || 'ARS',
+            description: item.description || '',
+            originalDescription: item.originalDescription || trace.originalConcept || '',
+            merchantName: item.merchantName || item.merchant || '',
+            importSource: item.importSource || '',
+            importedFile: trace.importedFile || '',
+            sourceAccountId: item.sourceAccountId || item.accountId || '',
+            toAccountId: item.toAccountId || '',
+            paymentType: item.paymentType || '',
+            beneficiaryLabel: item.beneficiaryLabel || legacyBeneficiaryLabel(item),
+            sourceLine: trace.sourceLine || '',
+            installmentLabel: trace.installmentLabel || '',
+            transferDetail: trace.transferDetail || '',
+            counterpartyName: trace.counterpartyName || '',
+            counterpartyAlias: trace.counterpartyAlias || '',
+            counterpartyAccount: trace.counterpartyAccount || '',
+            transactionFingerprint: item.transactionFingerprint || '',
+          };
+        }),
       };
     })
     .filter(group => group.count >= 2)
@@ -1204,6 +1229,8 @@ interface ParsedFinanceTrace {
   counterpartyAlias?: string;
   counterpartyAccount?: string;
   importedFile?: string;
+  installmentLabel?: string;
+  sourceLine?: string;
   reconciliations: string[];
   otherLines: string[];
 }
@@ -1234,6 +1261,8 @@ function parseFinanceTraceNote(note?: string): ParsedFinanceTrace {
       else if (label === 'alias') trace.counterpartyAlias = value;
       else if (label === 'cbu/cvu') trace.counterpartyAccount = value;
       else if (label === 'archivo importado') trace.importedFile = value;
+      else if (label === 'cuotas') trace.installmentLabel = value;
+      else if (label === 'linea resumen' || label === 'línea resumen') trace.sourceLine = value;
       else if (label.startsWith('conciliado con')) trace.reconciliations.push(line);
       else trace.otherLines.push(line);
     });
@@ -1249,6 +1278,8 @@ function hasFinanceTrace(trace: ParsedFinanceTrace, finance: any) {
     trace.counterpartyAlias ||
     trace.counterpartyAccount ||
     trace.importedFile ||
+    trace.installmentLabel ||
+    trace.sourceLine ||
     trace.reconciliations.length ||
     trace.otherLines.length ||
     finance.importSource ||
@@ -1302,6 +1333,8 @@ function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
     trace.counterpartyAlias,
     trace.counterpartyAccount,
     trace.importedFile,
+    trace.installmentLabel,
+    trace.sourceLine,
     ...trace.reconciliations,
     ...trace.otherLines,
     ...(Array.isArray(finance.tags) ? finance.tags : []),
@@ -1343,6 +1376,10 @@ interface PendingTransaction {
   statementAccountLabel?: string;
   tags?: string[];
   paymentType?: string;
+  sourceLine?: string;
+  installmentNumber?: number;
+  installmentTotal?: number;
+  installmentLabel?: string;
   accountMatchConfidence?: string;
   accountMatchReason?: string;
   transactionFingerprint?: string;
@@ -2063,6 +2100,8 @@ export default function FinanceTracker({ user }: { user: any }) {
       pt.importMode === 'historical_learning' ? 'Modo importacion: historial para aprendizaje' : '',
       pt.sourceAccountLabel ? `Cuenta original: ${pt.sourceAccountLabel}` : '',
       pt.sourceCategoryLabel ? `Categoria original: ${pt.sourceCategoryLabel}` : '',
+      pt.installmentLabel ? `Cuotas: ${pt.installmentLabel}` : '',
+      pt.sourceLine && pt.sourceLine !== pt.originalDescription ? `Linea resumen: ${pt.sourceLine}` : '',
       pt.transferDetail && pt.transferDetail !== pt.originalDescription ? `Detalle transferencia: ${pt.transferDetail}` : '',
       pt.counterpartyName ? `Destinatario: ${pt.counterpartyName}` : '',
       pt.counterpartyAlias ? `Alias: ${pt.counterpartyAlias}` : '',
@@ -6450,6 +6489,7 @@ function CategoryLearningGroupCard({
     scope: '',
     visibility: '',
   });
+  const [showDetails, setShowDetails] = useState(false);
   const selectedCategory = categories.find(category => category.name === draft.category);
   const canApply = Boolean(
     draft.category ||
@@ -6487,10 +6527,75 @@ function CategoryLearningGroupCard({
             ].filter(Boolean).join(' · ') || 'Sin contexto operativo claro'}
           </p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-          similares
-        </span>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+            similares
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowDetails(prev => !prev)}
+            className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-700 transition hover:border-neutral-400"
+          >
+            {showDetails ? 'Ocultar info' : '+ info'}
+          </button>
+        </div>
       </div>
+
+      {showDetails && (
+        <div className="mt-4 rounded-3xl border border-neutral-100 bg-white p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Muestras del grupo</p>
+              <p className="mt-1 text-xs font-bold text-neutral-500">
+                Hasta 5 movimientos con el detalle que VEO tiene del resumen.
+              </p>
+            </div>
+            <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+              {group.samples?.length || 0} visibles
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-3">
+            {(group.samples || []).map((sample: any, index: number) => {
+              const sourceAccount = accounts.find(account => account.id === sample.sourceAccountId);
+              const destinationAccount = accounts.find(account => account.id === sample.toAccountId);
+              return (
+                <div key={sample.id || index} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-3">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-neutral-950">
+                        {sample.originalDescription || sample.description || 'Movimiento'}
+                      </p>
+                      {sample.description && sample.description !== sample.originalDescription && (
+                        <p className="mt-1 truncate text-xs font-bold text-neutral-500">
+                          Guardado como: {sample.description}
+                        </p>
+                      )}
+                    </div>
+                    <p className="shrink-0 text-sm font-black text-neutral-950">
+                      {sample.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {sample.currency}
+                    </p>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <PendingMeta label="Fecha" value={formatPendingDate(sample.date)} />
+                    <PendingMeta label="Comercio" value={sample.merchantName || 'No detectado'} />
+                    <PendingMeta label="Cuenta usada" value={sourceAccount?.name || 'No detectada'} />
+                    <PendingMeta label="Para" value={sample.beneficiaryLabel} />
+                    <PendingMeta label="Medio" value={sample.paymentType} />
+                    <PendingMeta label="Destino" value={destinationAccount?.name} />
+                    <PendingMeta label="Archivo" value={sample.importedFile || sample.importSource} />
+                    <PendingMeta label="Cuotas" value={sample.installmentLabel} />
+                    <PendingMeta label="Detalle" value={sample.transferDetail || sample.sourceLine} />
+                    <PendingMeta label="Alias" value={sample.counterpartyAlias} />
+                    <PendingMeta label="CBU/CVU" value={sample.counterpartyAccount} />
+                    <PendingMeta label="Huella" value={shortFingerprint(sample.transactionFingerprint)} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid gap-2 md:grid-cols-3">
         <select
