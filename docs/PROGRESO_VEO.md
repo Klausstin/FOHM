@@ -1,6 +1,6 @@
 # Progreso VEO
 
-Ultima actualizacion: 2026-06-10
+Ultima actualizacion: 2026-06-11
 
 Este archivo resume el estado macro del proyecto para no perder contexto entre bloques de trabajo.
 Los porcentajes son estimaciones de avance funcional, no promesas exactas.
@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 87% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
+| Finanzas | Implementando | 88% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -40,10 +40,10 @@ Siguiente: [proximo paso]
 
 | Bloque | Estado | Avance estimado | Proximo paso |
 | --- | --- | ---: | --- |
-| Modelo de cuentas y tarjetas | Implementando | 84% | Seguir puliendo saldos, deuda y conciliacion. |
+| Modelo de cuentas y tarjetas | Implementando | 86% | Seguir puliendo saldos, deuda y conciliacion. |
 | Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
 | Importador BBVA / Visa / CSV | Implementando | 84% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
-| Reconciliacion de resumenes | Implementando | 76% | Usar saldos de cierre, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
+| Reconciliacion de resumenes | Implementando | 78% | Usar saldos de cierre, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
 | Categorias financieras | Implementando | 82% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible y aprendizajes desactivables. |
 | Beneficiarios y economia familiar | Implementando | 55% | Separar cuenta usada de para quien fue el gasto. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
@@ -53,6 +53,7 @@ Siguiente: [proximo paso]
 
 | Tarea | Estado | Avance estimado | Archivos |
 | --- | --- | ---: | --- |
+| Agregar panel de conciliacion por cuenta | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar actividad por cuenta desde la ultima conciliacion | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Investigar open source y APIs para acelerar VEO | Listo | 95% | `docs/OPEN_SOURCE_RESEARCH.md` |
 | Exportar contexto maestro para ChatGPT | Listo | 100% | `VEO_CONTEXT_FOR_CHATGPT.md` |
