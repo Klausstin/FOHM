@@ -1771,6 +1771,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   } | null>(null);
   const [walletMemoryPreview, setWalletMemoryPreview] = useState<WalletMemoryMappingImport[]>([]);
   const [walletMemoryStatus, setWalletMemoryStatus] = useState('');
+  const [backupStatus, setBackupStatus] = useState('');
   const [isApplyingWalletMemory, setIsApplyingWalletMemory] = useState(false);
   
   // Filtering states
@@ -3153,6 +3154,9 @@ export default function FinanceTracker({ user }: { user: any }) {
       pendingTransactions,
     });
     downloadJsonFile(buildFinanceBackupFileName(), payload);
+    setBackupStatus(
+      `Backup descargado: ${finances.length} movimientos, ${userAccounts.length} cuentas, ${userCategories.length} categorias y ${userMappings.length} aprendizajes.`,
+    );
   };
 
   return (
@@ -3189,6 +3193,12 @@ export default function FinanceTracker({ user }: { user: any }) {
           </button>
         </div>
       </header>
+
+      {backupStatus && (
+        <div className="rounded-3xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-900">
+          {backupStatus}
+        </div>
+      )}
 
       {showCatchupPrompt && (
         <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
