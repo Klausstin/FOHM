@@ -110,7 +110,8 @@ Ya hay avances integrados en:
 - inflacion argentina como criterio de lectura financiera;
 - backup JSON completo;
 - export CSV legible;
-- prueba local de integridad de saldos.
+- prueba local de integridad de saldos;
+- validador local de backup financiero.
 
 Finanzas MVP al 100% significa que VEO puede usarse con datos reales sin miedo a perder informacion ni romper saldos basicos. No significa tener APIs bancarias conectadas.
 
@@ -228,6 +229,12 @@ Prueba local de saldos de Finanzas:
 
 ```powershell
 npm run finance:smoke
+```
+
+Validar un backup JSON de Finanzas:
+
+```powershell
+npm run finance:backup:validate -- "C:\ruta\al\veo-finanzas-backup.json"
 ```
 
 ## Variables de entorno
