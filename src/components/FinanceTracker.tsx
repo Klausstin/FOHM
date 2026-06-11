@@ -2492,6 +2492,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       const existingTransaction = finances.find(finance => finance.id === id);
       if (existingTransaction?.accountBalanceApplied) {
         await reverseTransactionFromAccountBalances(existingTransaction);
+        await updateFinancialTransaction(id, { accountBalanceApplied: false } as any);
       }
       await deleteFinancialTransaction(id);
     } catch (error) {
@@ -2523,6 +2524,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       const existingTransaction = finances.find(finance => finance.id === editingId);
       if (existingTransaction?.accountBalanceApplied) {
         await reverseTransactionFromAccountBalances(existingTransaction);
+        await updateFinancialTransaction(editingId, { accountBalanceApplied: false } as any);
       }
 
       const updatedStatus = paymentStatus === 'Pendiente' ? 'pending' : paymentStatus === 'Anulado' ? 'ignored' : editForm.status || 'posted';
