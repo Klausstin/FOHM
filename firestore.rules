@@ -280,7 +280,7 @@ service cloud.firestore {
 
     function isValidMapping(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'originalDescription', 'mappedDescription']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'originalDescription', 'mappedDescription', 'category', 'subCategory', 'subSubCategory', 'kind', 'neutralType', 'isFixed', 'accountId', 'sourceAccountId', 'toAccountId', 'paymentType', 'beneficiaryType', 'beneficiaryLabel', 'scope', 'visibility', 'merchantName', 'merchantKey', 'transactionFingerprint', 'learningKey', 'useCount', 'lastUsedAt', 'createdAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'originalDescription', 'mappedDescription', 'category', 'subCategory', 'subSubCategory', 'kind', 'neutralType', 'isFixed', 'accountId', 'sourceAccountId', 'toAccountId', 'paymentType', 'beneficiaryType', 'beneficiaryLabel', 'scope', 'visibility', 'merchantName', 'merchantKey', 'transactionFingerprint', 'learningKey', 'useCount', 'lastUsedAt', 'createdAt', 'id', 'isArchived', 'archivedAt']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.originalDescription is string && data.originalDescription.size() > 0 && data.originalDescription.size() < 500 &&
              data.mappedDescription is string && data.mappedDescription.size() > 0 && data.mappedDescription.size() < 500 &&
@@ -302,6 +302,8 @@ service cloud.firestore {
              (!('learningKey' in data) || (data.learningKey is string && data.learningKey.size() < 500)) &&
              (!('useCount' in data) || data.useCount is number) &&
              (!('lastUsedAt' in data) || data.lastUsedAt is timestamp) &&
+             (!('isArchived' in data) || data.isArchived is bool) &&
+             (!('archivedAt' in data) || data.archivedAt == null || data.archivedAt is timestamp) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 

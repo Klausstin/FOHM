@@ -29,6 +29,8 @@ export interface FinanceLearningMapping {
   learningKey?: string;
   useCount?: number;
   lastUsedAt?: Date;
+  isArchived?: boolean;
+  archivedAt?: Date;
 }
 
 export function subscribeToFinanceLearningMappings(

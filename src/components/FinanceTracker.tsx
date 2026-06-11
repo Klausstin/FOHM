@@ -475,6 +475,7 @@ function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   const learningKey = buildFinanceLearningKey(transaction.originalDescription || transaction.description || '');
   const merchantKey = transaction.merchantKey || '';
   const learnedMapping = mappings
+    .filter(mapping => !mapping.isArchived)
     .map(mapping => {
     const mappingText = normalizeDuplicateText(mapping.originalDescription || '');
       const mappingLearningKey = mapping.learningKey || buildFinanceLearningKey(mapping.originalDescription || mapping.mappedDescription || '');
@@ -2816,6 +2817,21 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleArchiveLearningMapping = async (mapping: any) => {
+    if (!mapping?.id) return;
+    const confirmed = window.confirm('Desactivar este aprendizaje? VEO deja de usarlo para clasificar gastos futuros, pero no se borra el historial.');
+    if (!confirmed) return;
+
+    try {
+      await updateDoc(doc(db, 'mappings', mapping.id), {
+        isArchived: true,
+        archivedAt: new Date(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `mappings/${mapping.id}`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -3457,7 +3473,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         )}
       </div>
 
-      <FinanceLearningMemoryPanel mappings={userMappings} accounts={userAccounts} />
+      <FinanceLearningMemoryPanel mappings={userMappings} accounts={userAccounts} onArchive={handleArchiveLearningMapping} />
 
       {lastImportResult && (
         <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-5">
@@ -5028,9 +5044,18 @@ function ImportReviewStat({ label, value, tone = 'neutral' }: { label: string; v
   );
 }
 
-function FinanceLearningMemoryPanel({ mappings, accounts }: { mappings: any[]; accounts: any[] }) {
+function FinanceLearningMemoryPanel({
+  mappings,
+  accounts,
+  onArchive,
+}: {
+  mappings: any[];
+  accounts: any[];
+  onArchive: (mapping: any) => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const sortedMappings = [...(mappings || [])]
+  const activeMappings = (mappings || []).filter(mapping => !mapping.isArchived);
+  const sortedMappings = [...activeMappings]
     .sort((a, b) => {
       const usedDiff = Number(b.useCount || 0) - Number(a.useCount || 0);
       if (usedDiff !== 0) return usedDiff;
@@ -5046,7 +5071,7 @@ function FinanceLearningMemoryPanel({ mappings, accounts }: { mappings: any[]; a
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Memoria activa</p>
           <h3 className="mt-1 text-xl font-black tracking-tight text-neutral-950">
-            {mappings.length} aprendizaje(s)
+            {activeMappings.length} aprendizaje(s)
           </h3>
           <p className="mt-1 max-w-2xl text-xs font-bold leading-5 text-neutral-500">
             Estos patrones ayudan a que VEO clasifique mejor gastos parecidos sin pedirte aprobaciones innecesarias.
@@ -5089,6 +5114,13 @@ function FinanceLearningMemoryPanel({ mappings, accounts }: { mappings: any[]; a
                   {mapping.beneficiaryLabel && <span className="rounded-full bg-white px-2 py-1">Para {mapping.beneficiaryLabel}</span>}
                   {learnedAt && <span className="rounded-full bg-white px-2 py-1">{learnedAt.toLocaleDateString('es-AR')}</span>}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onArchive(mapping)}
+                  className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 transition hover:border-red-100 hover:bg-red-50 hover:text-red-700"
+                >
+                  Desactivar
+                </button>
               </div>
             );
           })}
