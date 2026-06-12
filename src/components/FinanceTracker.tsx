@@ -1854,7 +1854,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [pendingTransactions, setPendingTransactions] = useState<PendingTransaction[]>([]);
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
-  const [editFeedback, setEditFeedback] = useState<Record<string, { tone: 'ok' | 'error'; message: string }>>({});
+  const [editFeedback, setEditFeedback] = useState<Record<string, { tone: 'ok' | 'warn' | 'error'; message: string }>>({});
   const [userCategories, setUserCategories] = useState<any[]>([]);
   const [userMappings, setUserMappings] = useState<any[]>([]);
   const [userAccounts, setUserAccounts] = useState<any[]>([]);
@@ -2745,46 +2745,57 @@ export default function FinanceTracker({ user }: { user: any }) {
       }
 
       const updatedStatus = paymentStatus === 'Pendiente' ? 'pending' : paymentStatus === 'Anulado' ? 'ignored' : editForm.status || 'posted';
+      const parsedAmount = Number.parseFloat(amount);
+      const parsedDate = date ? new Date(date) : new Date();
+      const resolvedAccountId = accountId || sourceAccountId || '';
+      const resolvedSourceAccountId = sourceAccountId || accountId || '';
       const updatedTransaction = {
-        amount: parseFloat(amount),
-        currency,
-        description,
-        note,
-        category,
-        subCategory,
+        amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+        currency: currency || 'ARS',
+        description: description || '',
+        note: note || '',
+        category: category || 'Sin categorizar',
+        subCategory: subCategory || '',
         subSubCategory: subSubCategory || '',
-        type,
-        accountId,
-        sourceAccountId: sourceAccountId || accountId || '',
-        toAccountId: toAccountId || null,
-        tags,
-        isFixed,
-        date: new Date(date),
-        generatedBy,
-        assignedTo,
-        payer,
+        type: type || 'expense',
+        accountId: resolvedAccountId,
+        sourceAccountId: resolvedSourceAccountId,
+        toAccountId: toAccountId || '',
+        tags: Array.isArray(tags) ? tags : [],
+        isFixed: Boolean(isFixed),
+        date: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
+        generatedBy: generatedBy || user.uid,
+        assignedTo: assignedTo || '',
+        payer: payer || '',
         createdByUserId: editForm.createdByUserId || generatedBy || user.uid,
         beneficiaryType: beneficiaryType || 'household',
         beneficiaryId: beneficiaryId || '',
         beneficiaryLabel: beneficiaryLabel || 'Hogar',
         scope: scope || 'familia',
         visibility: visibility || 'household_shared',
-        paymentType,
-        paymentStatus,
+        paymentType: paymentType || '',
+        paymentStatus: paymentStatus || 'Contabilizado',
         status: updatedStatus,
-        isConfirmed: true, // Mark as confirmed when edited/saved
+        isConfirmed: true,
         needsReview: false,
         accountBalanceApplied: false,
       };
 
       await updateFinancialTransaction(editingId, updatedTransaction as any);
 
-      const balanceApplied = await applyTransactionToAccountBalances({
-        uid: existingTransaction?.uid || user.uid,
-        householdId: existingTransaction?.householdId || user.householdId,
-        ...updatedTransaction,
-      } as CreateFinancialTransactionInput);
-      await updateFinancialTransaction(editingId, { accountBalanceApplied: balanceApplied } as any);
+      let balanceApplied = false;
+      let balanceWarning = '';
+      try {
+        balanceApplied = await applyTransactionToAccountBalances({
+          uid: existingTransaction?.uid || user.uid,
+          householdId: existingTransaction?.householdId || user.householdId,
+          ...updatedTransaction,
+        } as CreateFinancialTransactionInput);
+        await updateFinancialTransaction(editingId, { accountBalanceApplied: balanceApplied } as any);
+      } catch (balanceError) {
+        console.warn('No pude aplicar el saldo despues de editar el movimiento', balanceError);
+        balanceWarning = 'Guarde el movimiento, pero no pude actualizar el saldo. Va a quedar para revisar en auditoria.';
+      }
 
       // If it was an AI transaction and the user corrected it, update mappings
       const categoryChanged = category !== originalCategory || (subCategory || '') !== (originalSubCategory || '') || (subSubCategory || '') !== (originalSubSubCategory || '');
@@ -2796,52 +2807,63 @@ export default function FinanceTracker({ user }: { user: any }) {
         (beneficiaryLabel || '') !== (originalBeneficiaryLabel || '') ||
         (scope || '') !== (originalScope || '');
       if ((originalDescription || description || merchantKey) && (categoryChanged || contextChanged)) {
-        const normalizedOriginal = normalizeDuplicateText(originalDescription || description || '');
-        await upsertFinanceLearningMapping({
-          uid: user.uid,
-          householdId: user.householdId,
-          originalDescription: originalDescription || description,
-          mappedDescription: description || originalDescription,
-          category,
-          subCategory: subCategory || '',
-          subSubCategory: subSubCategory || '',
-          kind: type === 'transfer' ? 'neutral' : type,
-          isFixed,
-          accountId: accountId || '',
-          sourceAccountId: sourceAccountId || accountId || '',
-          toAccountId: toAccountId || '',
-          paymentType: paymentType || '',
-          beneficiaryType: beneficiaryType || '',
-          beneficiaryLabel: beneficiaryLabel || '',
-          scope: scope || '',
-          visibility: visibility || 'household_shared',
-          merchantName: merchantName || '',
-          merchantKey: merchantKey || '',
-        }, userMappings);
+        try {
+          const normalizedOriginal = normalizeDuplicateText(originalDescription || description || '');
+          await upsertFinanceLearningMapping({
+            uid: user.uid,
+            householdId: user.householdId,
+            originalDescription: originalDescription || description,
+            mappedDescription: description || originalDescription,
+            category,
+            subCategory: subCategory || '',
+            subSubCategory: subSubCategory || '',
+            kind: type === 'transfer' ? 'neutral' : type,
+            isFixed,
+            accountId: accountId || '',
+            sourceAccountId: sourceAccountId || accountId || '',
+            toAccountId: toAccountId || '',
+            paymentType: paymentType || '',
+            beneficiaryType: beneficiaryType || '',
+            beneficiaryLabel: beneficiaryLabel || '',
+            scope: scope || '',
+            visibility: visibility || 'household_shared',
+            merchantName: merchantName || '',
+            merchantKey: merchantKey || '',
+          }, userMappings);
 
-        const similarFinances = finances.filter(finance => {
-          if (finance.id === editingId) return false;
-          const sameMerchant = merchantKey && finance.merchantKey === merchantKey;
-          const sameOriginal = normalizedOriginal && normalizeDuplicateText(finance.originalDescription || finance.description || '') === normalizedOriginal;
-          const stillUsingOldCategory = (finance.category || '') === (originalCategory || '') || finance.category === 'Sin categorizar';
-          return (sameMerchant || sameOriginal) && stillUsingOldCategory;
-        });
+          const similarFinances = finances.filter(finance => {
+            if (finance.id === editingId) return false;
+            const sameMerchant = merchantKey && finance.merchantKey === merchantKey;
+            const sameOriginal = normalizedOriginal && normalizeDuplicateText(finance.originalDescription || finance.description || '') === normalizedOriginal;
+            const stillUsingOldCategory = (finance.category || '') === (originalCategory || '') || finance.category === 'Sin categorizar';
+            return (sameMerchant || sameOriginal) && stillUsingOldCategory;
+          });
 
-        await Promise.all(
-          similarFinances.map(finance =>
-            updateFinancialTransaction(finance.id, {
-              category,
-              subCategory: subCategory || '',
-              subSubCategory: subSubCategory || '',
-              isFixed,
-            } as any),
-          ),
-        );
+          await Promise.all(
+            similarFinances.map(finance =>
+              updateFinancialTransaction(finance.id, {
+                category,
+                subCategory: subCategory || '',
+                subSubCategory: subSubCategory || '',
+                isFixed,
+              } as any),
+            ),
+          );
+        } catch (learningError) {
+          console.warn('Guarde el movimiento, pero no pude actualizar la memoria financiera', learningError);
+        }
       }
 
-      setEditingId(null);
-      setEditForm(null);
-      setEditFeedback(prev => ({ ...prev, [currentEditingId]: { tone: 'ok', message: 'Movimiento guardado.' } }));
+      if (!balanceWarning) {
+        setEditingId(null);
+        setEditForm(null);
+      }
+      setEditFeedback(prev => ({
+        ...prev,
+        [currentEditingId]: balanceWarning
+          ? { tone: 'warn', message: balanceWarning }
+          : { tone: 'ok', message: balanceApplied ? 'Movimiento guardado y saldo actualizado.' : 'Movimiento guardado.' },
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'finances');
       setEditFeedback(prev => ({
@@ -5221,6 +5243,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                           <p className={`rounded-2xl px-3 py-2 text-xs font-bold leading-5 ${
                             currentEditFeedback.tone === 'error'
                               ? 'bg-red-50 text-red-700'
+                              : currentEditFeedback.tone === 'warn'
+                                ? 'bg-amber-50 text-amber-700'
                               : 'bg-emerald-50 text-emerald-700'
                           }`}>
                             {currentEditFeedback.message}

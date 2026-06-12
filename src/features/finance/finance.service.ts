@@ -147,6 +147,12 @@ function compactPayload<T extends Record<string, unknown>>(payload: T) {
   ) as Partial<T>;
 }
 
+function compactUpdatePayload<T extends Record<string, unknown>>(payload: T) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
 function compactAccountUpdatePayload(input: Partial<CreateFinancialAccountInput>) {
   const payload = compactPayload(input as Record<string, unknown>);
   const clearableFields = [
@@ -170,10 +176,10 @@ function compactAccountUpdatePayload(input: Partial<CreateFinancialAccountInput>
 }
 
 export async function updateFinancialTransaction(transactionId: string, input: Partial<CreateFinancialTransactionInput>) {
-  await updateDoc(doc(db, 'finances', transactionId), {
+  await updateDoc(doc(db, 'finances', transactionId), compactUpdatePayload({
     ...input,
     updatedAt: new Date(),
-  });
+  }));
 }
 
 export async function deleteFinancialTransaction(transactionId: string) {

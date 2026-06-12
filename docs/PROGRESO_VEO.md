@@ -1,6 +1,6 @@
 # Progreso VEO
 
-Ultima actualizacion: 2026-06-11
+Ultima actualizacion: 2026-06-12
 
 Este archivo resume el estado macro del proyecto para no perder contexto entre bloques de trabajo.
 Los porcentajes son estimaciones de avance funcional, no promesas exactas.
@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 90% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
+| Finanzas | Implementando | 92% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -42,9 +42,9 @@ Siguiente: [proximo paso]
 | Bloque | Estado | Avance estimado | Proximo paso |
 | --- | --- | ---: | --- |
 | Modelo de cuentas y tarjetas | Implementando | 91% | Saldos, deuda de tarjeta, reversas seguras y smoke test local cubren el flujo critico; falta validacion real con datos de Agustin/Vicky. |
-| Registro manual y desde Luz | Implementando | 82% | Validar casos reales despues de mejorar beneficiarios, memoria y saldos. |
+| Registro manual y desde Luz | Implementando | 86% | Guardado de ediciones mas robusto; falta prueba real completa despues de desplegar reglas. |
 | Importador BBVA / Visa / CSV | Implementando | 86% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
-| Reconciliacion de resumenes | Implementando | 81% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
+| Reconciliacion de resumenes | Implementando | 84% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, evitar duplicados y resolver pendientes en lote. |
 | Categorias financieras | Implementando | 85% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible, aprendizajes desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
@@ -66,6 +66,8 @@ Siguiente: [proximo paso]
 | Investigar open source y APIs para acelerar VEO | Listo | 95% | `docs/OPEN_SOURCE_RESEARCH.md` |
 | Exportar contexto maestro para ChatGPT | Validando | 100% | `VEO_CONTEXT_FOR_CHATGPT.md` |
 | Detectar movimientos contabilizados sin impacto en saldo | Validando | 90% | `src/components/FinanceTracker.tsx` |
+| Guardar ediciones de movimientos importados | Validando | 95% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `firestore.rules` |
+| Permitir metadatos bancarios importados en Firestore | Validando | 95% | `firestore.rules` |
 | Importar CSV como borradores revisables | Validando | 85% | `package.json`, `package-lock.json`, `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |
 | Importar historial Wallet como aprendizaje | Validando | 98% | `src/features/finance/finance.import.ts`, `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
 | Separar candidatos Wallet para memoria activa | Validando | 92% | `src/features/finance/finance.walletHistory.ts`, `scripts/finance-wallet-history.ts` |
