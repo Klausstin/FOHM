@@ -209,7 +209,7 @@ service cloud.firestore {
 
     function isValidFinance(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'amount', 'type', 'date', 'category', 'source']) &&
-             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'sourceAccountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'createdByUserId', 'generatedBy', 'executedByUserId', 'executedByLabel', 'assignedTo', 'payer', 'beneficiaryType', 'beneficiaryId', 'beneficiaryLabel', 'scope', 'visibility', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'travelTripId', 'travelTripName', 'travelTripSuggestion', 'travelCategory', 'originalAmount', 'originalCurrency', 'settlementAmount', 'settlementCurrency', 'fxRate', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
+             hasOnlyAllowedFields(['uid', 'householdId', 'amount', 'currency', 'description', 'note', 'category', 'subCategory', 'subSubCategory', 'type', 'kind', 'neutralType', 'accountId', 'sourceAccountId', 'toAccountId', 'paymentMethodId', 'tags', 'date', 'source', 'confidence', 'status', 'reconciliationBatchId', 'estimatedReason', 'needsReview', 'pdfName', 'isFixed', 'isConfirmed', 'createdByUserId', 'generatedBy', 'executedByUserId', 'executedByLabel', 'assignedTo', 'payer', 'beneficiaryType', 'beneficiaryId', 'beneficiaryLabel', 'scope', 'visibility', 'paymentType', 'paymentStatus', 'merchantName', 'merchantKey', 'merchant', 'importSource', 'importMode', 'importFileName', 'fileName', 'statementFileName', 'statementAccountLabel', 'sourceAccountLabel', 'sourceCategoryLabel', 'originalDescription', 'counterpartyName', 'counterpartyAccount', 'counterpartyAlias', 'transferDetail', 'sourceLine', 'debitCardDetailLine', 'cardLast4', 'voucherNumber', 'installmentNumber', 'installmentTotal', 'installmentLabel', 'accountMatchConfidence', 'accountMatchReason', 'transactionFingerprint', 'statementFingerprint', 'duplicateOfId', 'duplicateReason', 'accountBalanceApplied', 'owner', 'projectId', 'travelTripId', 'travelTripName', 'travelTripSuggestion', 'travelCategory', 'originalAmount', 'originalCurrency', 'settlementAmount', 'settlementCurrency', 'fxRate', 'isReimbursable', 'reimbursementStatus', 'createdAt', 'updatedAt', 'id']) &&
              (isUpdate ? true : data.uid == request.auth.uid) &&
              data.amount is number &&
              data.type in ["expense", "income", "neutral", "transfer"] &&
@@ -240,6 +240,27 @@ service cloud.firestore {
              (!('merchantName' in data) || (data.merchantName is string && data.merchantName.size() < 200)) &&
              (!('merchantKey' in data) || (data.merchantKey is string && data.merchantKey.size() < 200)) &&
              (!('merchant' in data) || (data.merchant is string && data.merchant.size() < 200)) &&
+             (!('importMode' in data) || (data.importMode is string && data.importMode.size() < 100)) &&
+             (!('importFileName' in data) || (data.importFileName is string && data.importFileName.size() < 250)) &&
+             (!('fileName' in data) || (data.fileName is string && data.fileName.size() < 250)) &&
+             (!('statementFileName' in data) || (data.statementFileName is string && data.statementFileName.size() < 250)) &&
+             (!('statementAccountLabel' in data) || (data.statementAccountLabel is string && data.statementAccountLabel.size() < 250)) &&
+             (!('sourceAccountLabel' in data) || (data.sourceAccountLabel is string && data.sourceAccountLabel.size() < 250)) &&
+             (!('sourceCategoryLabel' in data) || (data.sourceCategoryLabel is string && data.sourceCategoryLabel.size() < 250)) &&
+             (!('originalDescription' in data) || (data.originalDescription is string && data.originalDescription.size() < 500)) &&
+             (!('counterpartyName' in data) || (data.counterpartyName is string && data.counterpartyName.size() < 250)) &&
+             (!('counterpartyAccount' in data) || (data.counterpartyAccount is string && data.counterpartyAccount.size() < 250)) &&
+             (!('counterpartyAlias' in data) || (data.counterpartyAlias is string && data.counterpartyAlias.size() < 250)) &&
+             (!('transferDetail' in data) || (data.transferDetail is string && data.transferDetail.size() < 500)) &&
+             (!('sourceLine' in data) || (data.sourceLine is string && data.sourceLine.size() < 1000)) &&
+             (!('debitCardDetailLine' in data) || (data.debitCardDetailLine is string && data.debitCardDetailLine.size() < 1000)) &&
+             (!('cardLast4' in data) || (data.cardLast4 is string && data.cardLast4.size() < 20)) &&
+             (!('voucherNumber' in data) || (data.voucherNumber is string && data.voucherNumber.size() < 100)) &&
+             (!('installmentNumber' in data) || data.installmentNumber is number) &&
+             (!('installmentTotal' in data) || data.installmentTotal is number) &&
+             (!('installmentLabel' in data) || (data.installmentLabel is string && data.installmentLabel.size() < 50)) &&
+             (!('accountMatchConfidence' in data) || (data.accountMatchConfidence is string && data.accountMatchConfidence.size() < 100)) &&
+             (!('accountMatchReason' in data) || (data.accountMatchReason is string && data.accountMatchReason.size() < 500)) &&
              (!('owner' in data) || (data.owner is string && data.owner.size() < 100)) &&
              (!('projectId' in data) || (data.projectId is string && data.projectId.size() < 100)) &&
              (!('travelTripId' in data) || (data.travelTripId is string && data.travelTripId.size() < 100)) &&
