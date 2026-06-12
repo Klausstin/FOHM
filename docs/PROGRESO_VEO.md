@@ -99,6 +99,7 @@ Siguiente: [proximo paso]
 | Crear playbook de recuperacion de backup financiero | Validando | 90% | `docs/FINANCE_BACKUP_RECOVERY_PLAYBOOK.md`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Crear reset seguro de datos financieros de prueba | Validando | 92% | `scripts/finance-reset-test-data.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Aclarar credenciales admin para reset financiero | Validando | 90% | `scripts/finance-reset-test-data.ts`, `README.md`, `docs/PROGRESO_VEO.md` |
+| Mostrar detalle completo en auditoria financiera | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
@@ -109,6 +110,7 @@ Siguiente: [proximo paso]
 5. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
 6. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
 7. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
-8. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-9. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+8. Probar auditoria de movimientos importados validando que comercio, linea del resumen, huella, archivo y cuotas eviten abrir el PDF original.
+9. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
+10. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
 10. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
