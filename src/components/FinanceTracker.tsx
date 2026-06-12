@@ -3051,8 +3051,11 @@ export default function FinanceTracker({ user }: { user: any }) {
         needsReview: balanceApplied ? false : finance.needsReview,
         paymentStatus: balanceApplied ? 'Contabilizado' : finance.paymentStatus,
       } as any);
+
+      return balanceApplied;
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+      return false;
     }
   };
 
@@ -5942,6 +5945,19 @@ function AuditField({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+function isUsefulAuditValue(value?: string | number) {
+  if (value === 0) return true;
+  const text = String(value || '').trim();
+  return Boolean(text && text !== '-' && text.toLowerCase() !== 'no detectado' && text.toLowerCase() !== 'sin cuenta');
+}
+
+function getFinanceTypeLabel(type?: string) {
+  if (type === 'income') return 'Ingreso';
+  if (type === 'transfer') return 'Transferencia';
+  if (type === 'neutral') return 'Movimiento neutro';
+  return 'Gasto';
+}
+
 function FinanceDiagnosticPanel({ items }: { items: FinanceDiagnosticItem[] }) {
   const priorityItem = items.find(item => item.actionable && (item.tone === 'danger' || item.tone === 'warn'));
   const okCount = items.filter(item => item.tone === 'ok').length;
@@ -6625,10 +6641,13 @@ function BalanceIntegrityPanel({
   issues: BalanceIntegrityIssue[];
   accounts: any[];
   categories: any[];
-  onApplyBalance: (finance: any) => void;
+  onApplyBalance: (finance: any) => Promise<boolean>;
   onSaveDetails: (finance: any, draft: any) => void;
 }) {
   const [editingIssueId, setEditingIssueId] = useState<string | null>(null);
+  const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null);
+  const [applyingIssueId, setApplyingIssueId] = useState<string | null>(null);
+  const [issueMessage, setIssueMessage] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<any>(null);
 
   if (!issues.length) return null;
@@ -6671,6 +6690,17 @@ function BalanceIntegrityPanel({
           const isEditing = editingIssueId === issue.id && draft;
           const selectedCategory = categories.find(category => category.name === draft?.category);
           const subCategories = selectedCategory?.subCategories || [];
+          const visibleRows = details.rows.filter(row => row.label !== 'Huella' && isUsefulAuditValue(row.value));
+          const visibleLongRows = details.longRows.filter(row =>
+            isUsefulAuditValue(row.value) &&
+            row.label !== 'Linea del resumen' &&
+            !isGenericBankMovementText(String(row.value || ''))
+          );
+          const rawRows = details.longRows.filter(row =>
+            isUsefulAuditValue(row.value) &&
+            (row.label === 'Linea del resumen' || row.label === 'Detalle tarjeta debito' || isGenericBankMovementText(String(row.value || '')))
+          );
+          const isRawExpanded = expandedIssueId === issue.id;
 
           return (
             <div key={issue.id} className="rounded-3xl border border-amber-100 bg-white p-4 shadow-sm">
@@ -6734,17 +6764,41 @@ function BalanceIntegrityPanel({
                     <p className="mt-1 text-sm font-bold text-neutral-700">{finance.description || 'Sin descripcion'}</p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       <PendingMeta label="Fecha" value={date ? date.toLocaleDateString('es-AR') : 'Sin fecha'} />
-                      <PendingMeta label="Tipo" value={finance.type || finance.kind || 'expense'} />
-                      {details.rows.filter(row => row.label !== 'Huella').map(row => (
+                      <PendingMeta label="Tipo" value={getFinanceTypeLabel(finance.type || finance.kind || 'expense')} />
+                      {visibleRows.map(row => (
                         <PendingMeta key={row.label} label={row.label} value={row.value} />
                       ))}
-                      {details.longRows.map(row => (
+                      {visibleLongRows.map(row => (
                         <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
                       ))}
                     </div>
+                    {rawRows.length > 0 && (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedIssueId(isRawExpanded ? null : issue.id)}
+                          className="rounded-full bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition hover:text-neutral-900"
+                        >
+                          {isRawExpanded ? 'Ocultar detalle banco' : 'Ver detalle banco'}
+                        </button>
+                        {isRawExpanded && (
+                          <div className="mt-3 grid gap-2">
+                            {rawRows.map(row => (
+                              <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
+
+              {issueMessage[issue.id] && (
+                <p className="mt-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
+                  {issueMessage[issue.id]}
+                </p>
+              )}
 
               <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
                 {isEditing ? (
@@ -6783,10 +6837,22 @@ function BalanceIntegrityPanel({
                     {issue.canApplyBalance && (
                       <button
                         type="button"
-                        onClick={() => onApplyBalance(finance)}
-                        className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                        onClick={async () => {
+                          setApplyingIssueId(issue.id);
+                          setIssueMessage(prev => ({ ...prev, [issue.id]: '' }));
+                          const applied = await onApplyBalance(finance);
+                          setApplyingIssueId(null);
+                          setIssueMessage(prev => ({
+                            ...prev,
+                            [issue.id]: applied
+                              ? 'Saldo aplicado. Si la tarjeta no desaparece sola, actualiza la vista en unos segundos.'
+                              : 'No pude aplicar saldo. Revisá que tenga cuenta usada y que el movimiento no esté pendiente/anulado.',
+                          }));
+                        }}
+                        disabled={applyingIssueId === issue.id}
+                        className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
                       >
-                        Aplicar saldo
+                        {applyingIssueId === issue.id ? 'Aplicando...' : 'Aplicar saldo'}
                       </button>
                     )}
                   </>

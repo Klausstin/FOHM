@@ -102,6 +102,7 @@ Siguiente: [proximo paso]
 | Mostrar detalle completo en auditoria financiera | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Cruzar detalle de Visa Debito en BBVA Caja ARS | Validando | 90% | `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Editar movimientos desde auditoria financiera | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.merchants.ts`, `docs/PROGRESO_VEO.md` |
+| Limpiar tarjeta de auditoria y feedback de aplicar saldo | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
