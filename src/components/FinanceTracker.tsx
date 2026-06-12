@@ -3056,6 +3056,59 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   };
 
+  const handleSaveAuditMovementDetails = async (finance: any, draft: any) => {
+    try {
+      const amount = Number(draft.amount || finance.amount || 0);
+      const sourceAccountId = draft.accountId || finance.sourceAccountId || finance.accountId || '';
+      const merchantName = String(draft.merchantName || '').trim();
+      const description = String(draft.description || merchantName || finance.description || '').trim();
+      const date = draft.date ? new Date(`${draft.date}T12:00:00`) : parseFinanceDateValue(finance.date) || new Date();
+      const merchantKey = merchantName ? normalizeDuplicateText(merchantName).replace(/\s+/g, '-') : finance.merchantKey || '';
+
+      const payload = {
+        amount,
+        currency: draft.currency || finance.currency || 'ARS',
+        description,
+        merchantName,
+        merchant: merchantName || finance.merchant || '',
+        merchantKey,
+        category: draft.category || finance.category || 'Sin categorizar',
+        subCategory: draft.subCategory || '',
+        sourceAccountId,
+        accountId: sourceAccountId,
+        date,
+        needsReview: true,
+        accountBalanceApplied: false,
+      };
+
+      await updateFinancialTransaction(finance.id, payload as any);
+
+      await upsertFinanceLearningMapping({
+        uid: user.uid,
+        householdId: user.householdId,
+        originalDescription: finance.originalDescription || finance.description || merchantName || description,
+        mappedDescription: description,
+        category: payload.category,
+        subCategory: payload.subCategory,
+        kind: finance.type === 'transfer' ? 'neutral' : finance.type || 'expense',
+        isFixed: Boolean(finance.isFixed),
+        accountId: sourceAccountId,
+        sourceAccountId,
+        toAccountId: finance.toAccountId || '',
+        paymentType: finance.paymentType || '',
+        beneficiaryType: finance.beneficiaryType || '',
+        beneficiaryLabel: finance.beneficiaryLabel || legacyBeneficiaryLabel(finance),
+        scope: finance.scope || legacyScope(finance),
+        visibility: finance.visibility || 'household_shared',
+        merchantName,
+        merchantKey,
+        transactionFingerprint: finance.transactionFingerprint || '',
+      }, userMappings);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `finances/${finance.id}`);
+    }
+  };
+
   const handleConfirmReviewedFinance = async (finance: any) => {
     try {
       let balanceApplied = Boolean(finance.accountBalanceApplied);
@@ -3437,8 +3490,9 @@ export default function FinanceTracker({ user }: { user: any }) {
       <BalanceIntegrityPanel
         issues={balanceIntegrityIssues}
         accounts={userAccounts}
+        categories={userCategories}
         onApplyBalance={handleApplyMissingBalance}
-        onEdit={(finance) => openFinanceEdit(finance, 'all')}
+        onSaveDetails={handleSaveAuditMovementDetails}
       />
 
       <FinancialInsightsPanel
@@ -5879,6 +5933,15 @@ function PendingMeta({ label, value, wrap = false }: { label: string; value?: st
   );
 }
 
+function AuditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="space-y-1">
+      <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function FinanceDiagnosticPanel({ items }: { items: FinanceDiagnosticItem[] }) {
   const priorityItem = items.find(item => item.actionable && (item.tone === 'danger' || item.tone === 'warn'));
   const okCount = items.filter(item => item.tone === 'ok').length;
@@ -6555,17 +6618,38 @@ function AccountReconciliationPanel({
 function BalanceIntegrityPanel({
   issues,
   accounts,
+  categories,
   onApplyBalance,
-  onEdit,
+  onSaveDetails,
 }: {
   issues: BalanceIntegrityIssue[];
   accounts: any[];
+  categories: any[];
   onApplyBalance: (finance: any) => void;
-  onEdit: (finance: any) => void;
+  onSaveDetails: (finance: any, draft: any) => void;
 }) {
+  const [editingIssueId, setEditingIssueId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<any>(null);
+
   if (!issues.length) return null;
 
   const topIssues = issues.slice(0, 5);
+  const startEditing = (issue: BalanceIntegrityIssue) => {
+    const finance = issue.finance;
+    const date = parseFinanceDateValue(finance.date) || new Date();
+    const details = buildFinanceTraceDetails(finance, accounts);
+    setEditingIssueId(issue.id);
+    setDraft({
+      amount: Number(finance.amount || 0),
+      currency: finance.currency || 'ARS',
+      merchantName: details.merchant || finance.merchantName || finance.merchant || '',
+      description: finance.description || '',
+      category: finance.category || '',
+      subCategory: finance.subCategory || '',
+      accountId: finance.sourceAccountId || finance.accountId || '',
+      date: format(date, 'yyyy-MM-dd'),
+    });
+  };
 
   return (
     <section className="rounded-[2rem] border border-amber-200 bg-amber-50/60 p-5 shadow-sm">
@@ -6584,6 +6668,9 @@ function BalanceIntegrityPanel({
           const finance = issue.finance;
           const date = parseFinanceDateValue(finance.date);
           const details = buildFinanceTraceDetails(finance, accounts);
+          const isEditing = editingIssueId === issue.id && draft;
+          const selectedCategory = categories.find(category => category.name === draft?.category);
+          const subCategories = selectedCategory?.subCategories || [];
 
           return (
             <div key={issue.id} className="rounded-3xl border border-amber-100 bg-white p-4 shadow-sm">
@@ -6598,38 +6685,111 @@ function BalanceIntegrityPanel({
               </div>
 
               <div className="mt-4 rounded-2xl bg-neutral-50 p-3">
-                <p className="text-lg font-black text-neutral-950">
-                  {Number(finance.amount || 0).toLocaleString()} <span className="text-xs font-bold text-neutral-400">{finance.currency || 'ARS'}</span>
-                </p>
-                <p className="mt-1 text-sm font-bold text-neutral-700">{finance.description || 'Sin descripcion'}</p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <PendingMeta label="Fecha" value={date ? date.toLocaleDateString('es-AR') : 'Sin fecha'} />
-                  <PendingMeta label="Tipo" value={finance.type || finance.kind || 'expense'} />
-                  {details.rows.map(row => (
-                    <PendingMeta key={row.label} label={row.label} value={row.value} wrap={row.label === 'Huella'} />
-                  ))}
-                  {details.longRows.map(row => (
-                    <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
-                  ))}
-                </div>
+                {isEditing ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <AuditField label="Monto">
+                      <input type="number" value={draft.amount} onChange={event => setDraft({ ...draft, amount: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
+                    </AuditField>
+                    <AuditField label="Moneda">
+                      <select value={draft.currency} onChange={event => setDraft({ ...draft, currency: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black">
+                        {CURRENCIES.map(currency => <option key={currency} value={currency}>{currency}</option>)}
+                      </select>
+                    </AuditField>
+                    <AuditField label="Comercio">
+                      <input value={draft.merchantName} onChange={event => setDraft({ ...draft, merchantName: event.target.value })} placeholder="Ej: Rappi" className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
+                    </AuditField>
+                    <AuditField label="Fecha">
+                      <input type="date" value={draft.date} onChange={event => setDraft({ ...draft, date: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
+                    </AuditField>
+                    <AuditField label="Categoria">
+                      <select value={draft.category} onChange={event => setDraft({ ...draft, category: event.target.value, subCategory: '' })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black">
+                        <option value="">Elegir categoria</option>
+                        {categories.map(category => <option key={category.id || category.name} value={category.name}>{category.name}</option>)}
+                      </select>
+                    </AuditField>
+                    <AuditField label="Subcategoria">
+                      <select value={draft.subCategory} onChange={event => setDraft({ ...draft, subCategory: event.target.value })} disabled={!draft.category} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black disabled:text-neutral-300">
+                        <option value="">Sin subcategoria</option>
+                        {subCategories.map((sub: any) => {
+                          const name = typeof sub === 'string' ? sub : sub.name;
+                          return <option key={name} value={name}>{name}</option>;
+                        })}
+                      </select>
+                    </AuditField>
+                    <AuditField label="Cuenta usada">
+                      <select value={draft.accountId} onChange={event => setDraft({ ...draft, accountId: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black">
+                        <option value="">Sin cuenta</option>
+                        {accounts.map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>)}
+                      </select>
+                    </AuditField>
+                    <AuditField label="Descripcion">
+                      <input value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
+                    </AuditField>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-lg font-black text-neutral-950">
+                      {Number(finance.amount || 0).toLocaleString()} <span className="text-xs font-bold text-neutral-400">{finance.currency || 'ARS'}</span>
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-neutral-700">{finance.description || 'Sin descripcion'}</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <PendingMeta label="Fecha" value={date ? date.toLocaleDateString('es-AR') : 'Sin fecha'} />
+                      <PendingMeta label="Tipo" value={finance.type || finance.kind || 'expense'} />
+                      {details.rows.filter(row => row.label !== 'Huella').map(row => (
+                        <PendingMeta key={row.label} label={row.label} value={row.value} />
+                      ))}
+                      {details.longRows.map(row => (
+                        <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => onEdit(finance)}
-                  className="rounded-2xl border border-neutral-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400"
-                >
-                  Editar
-                </button>
-                {issue.canApplyBalance && (
-                  <button
-                    type="button"
-                    onClick={() => onApplyBalance(finance)}
-                    className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
-                  >
-                    Aplicar saldo
-                  </button>
+                {isEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingIssueId(null);
+                        setDraft(null);
+                      }}
+                      className="rounded-2xl border border-neutral-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await onSaveDetails(finance, draft);
+                        setEditingIssueId(null);
+                        setDraft(null);
+                      }}
+                      className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                    >
+                      Guardar cambios
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => startEditing(issue)}
+                      className="rounded-2xl border border-neutral-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400"
+                    >
+                      Editar
+                    </button>
+                    {issue.canApplyBalance && (
+                      <button
+                        type="button"
+                        onClick={() => onApplyBalance(finance)}
+                        className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800"
+                      >
+                        Aplicar saldo
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>

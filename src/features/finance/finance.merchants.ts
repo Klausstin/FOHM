@@ -51,6 +51,14 @@ const KNOWN_MERCHANTS = [
     recurring: false,
   },
   {
+    key: 'rappi',
+    name: 'Rappi',
+    patterns: [/\brappi\b/i, /\brappi\s*pago\b/i, /\brappipago\d*\b/i, /\brapipago\d*\b/i],
+    category: 'Comida',
+    subCategory: 'Delivery',
+    recurring: false,
+  },
+  {
     key: 'uber',
     name: 'Uber',
     patterns: [/uber/i],
