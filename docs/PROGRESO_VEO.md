@@ -97,12 +97,13 @@ Siguiente: [proximo paso]
 | Agregar validador local de backup financiero | Validando | 90% | `scripts/finance-backup-validate.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Crear protocolo de prueba real de Finanzas | Validando | 90% | `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Crear playbook de recuperacion de backup financiero | Validando | 90% | `docs/FINANCE_BACKUP_RECOVERY_PLAYBOOK.md`, `README.md`, `docs/PROGRESO_VEO.md` |
-| Crear reset seguro de datos financieros de prueba | Validando | 90% | `scripts/finance-reset-test-data.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
+| Crear reset seguro de datos financieros de prueba | Validando | 92% | `scripts/finance-reset-test-data.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
+| Aclarar credenciales admin para reset financiero | Validando | 90% | `scripts/finance-reset-test-data.ts`, `README.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
 1. Ejecutar `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md` en la app antes de carga masiva.
-2. Si se quiere empezar limpio, correr dry-run de `npm run finance:reset-test-data` y aplicar solo con confirmacion explicita.
+2. Si se quiere empezar limpio, configurar credenciales admin locales y correr dry-run de `npm run finance:reset-test-data`; aplicar solo con confirmacion explicita.
 3. Descargar backup financiero y CSV antes de cargar datos reales masivos, y validar el JSON con `npm run finance:backup:validate`.
 4. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
 5. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.

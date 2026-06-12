@@ -243,6 +243,8 @@ Dry-run para limpiar datos financieros de prueba sin borrar estructura base:
 npm run finance:reset-test-data -- --email agustin@granberta.com
 ```
 
+Este script usa credenciales admin locales de Google Cloud. Si aparece un error de `default credentials`, no borro nada: configurar primero Application Default Credentials con Google Cloud CLI o una service account. `firebase login` alcanza para desplegar reglas, pero no para este script admin.
+
 Borrado real de datos financieros de prueba:
 
 ```powershell

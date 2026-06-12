@@ -34,59 +34,68 @@ interface ResetPlan {
   duplicateLinkCount: number;
 }
 
-const args = parseArgs(process.argv.slice(2));
+let db: FirebaseFirestore.Firestore;
 
-if (!admin.apps.length) {
-  admin.initializeApp({ projectId: firebaseConfig.projectId });
-}
-
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
-
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  printUsage();
-  process.exit(0);
-}
-
-const userContext = await resolveUserContext(args);
-const plan = await buildResetPlan(userContext, args);
-const outputDir = await writePreResetBackups(userContext, plan);
-
-printPlan(userContext, plan, outputDir, args);
-
-if (!args.apply) {
-  console.log('');
-  console.log('Modo dry-run. No borre nada.');
-  console.log(`Para borrar, repetir con --apply --confirm "${CONFIRMATION_PHRASE}"`);
-  process.exit(0);
-}
-
-if (args.confirm !== CONFIRMATION_PHRASE) {
-  console.error('');
-  console.error('Confirmacion invalida. No borre nada.');
-  console.error(`La frase exacta requerida es: ${CONFIRMATION_PHRASE}`);
+main().catch(error => {
+  handleScriptError(error);
   process.exit(1);
-}
-
-await executeReset(plan, args);
-const postAccounts = await db.collection('accounts')
-  .where('householdId', '==', userContext.householdId)
-  .get();
-
-console.log('');
-console.log('Reset financiero completado.');
-console.log(`Movimientos borrados: ${plan.finances.length}`);
-console.log(`Aprendizajes borrados: ${args.keepMappings ? 0 : plan.mappings.length}`);
-console.log(`Cuentas preservadas: ${postAccounts.size}`);
-console.log(`Categorias preservadas: ${plan.categories.length}`);
-console.log(`Backups previos: ${outputDir}`);
-console.log('');
-console.log('Saldos resultantes:');
-postAccounts.docs.forEach(doc => {
-  const account = doc.data();
-  console.log(`- ${account.name || doc.id}: ${Number(account.balance || 0).toLocaleString()} ${account.currency || ''}`.trim());
 });
-console.log('');
-console.log('Ahora correr: npm run finance:smoke');
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printUsage();
+    process.exit(0);
+  }
+
+  if (!admin.apps.length) {
+    admin.initializeApp({ projectId: firebaseConfig.projectId });
+  }
+
+  db = getFirestore(firebaseConfig.firestoreDatabaseId);
+
+  const userContext = await resolveUserContext(args);
+  const plan = await buildResetPlan(userContext, args);
+  const outputDir = await writePreResetBackups(userContext, plan);
+
+  printPlan(userContext, plan, outputDir, args);
+
+  if (!args.apply) {
+    console.log('');
+    console.log('Modo dry-run. No borre nada.');
+    console.log(`Para borrar, repetir con --apply --confirm "${CONFIRMATION_PHRASE}"`);
+    process.exit(0);
+  }
+
+  if (args.confirm !== CONFIRMATION_PHRASE) {
+    console.error('');
+    console.error('Confirmacion invalida. No borre nada.');
+    console.error(`La frase exacta requerida es: ${CONFIRMATION_PHRASE}`);
+    process.exit(1);
+  }
+
+  await executeReset(plan, args);
+  const postAccounts = await db.collection('accounts')
+    .where('householdId', '==', userContext.householdId)
+    .get();
+
+  console.log('');
+  console.log('Reset financiero completado.');
+  console.log(`Movimientos borrados: ${plan.finances.length}`);
+  console.log(`Aprendizajes borrados: ${args.keepMappings ? 0 : plan.mappings.length}`);
+  console.log(`Cuentas preservadas: ${postAccounts.size}`);
+  console.log(`Categorias preservadas: ${plan.categories.length}`);
+  console.log(`Backups previos: ${outputDir}`);
+  console.log('');
+  console.log('Saldos resultantes:');
+  postAccounts.docs.forEach(doc => {
+    const account = doc.data();
+    console.log(`- ${account.name || doc.id}: ${Number(account.balance || 0).toLocaleString()} ${account.currency || ''}`.trim());
+  });
+  console.log('');
+  console.log('Ahora correr: npm run finance:smoke');
+}
 
 async function resolveUserContext(input: ResetArgs): Promise<UserContext> {
   if (input.uid && input.householdId) {
@@ -358,4 +367,32 @@ function printUsage() {
   console.log('  --uid <uid> --household <householdId>  Usar ids directos en vez de email');
   console.log('  --reset-balances zero|preserve         Default: zero');
   console.log('  --keep-mappings                        Preserva memoria financiera');
+}
+
+function handleScriptError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes('Could not load the default credentials') || message.includes('default credentials')) {
+    console.error('');
+    console.error('No pude conectarme a Firestore porque falta la credencial admin local.');
+    console.error('No borre nada: el script fallo antes de leer o modificar datos.');
+    console.error('');
+    console.error('Importante: firebase login sirve para deploys, pero este script usa firebase-admin.');
+    console.error('Para correrlo localmente hace falta configurar Application Default Credentials una vez.');
+    console.error('');
+    console.error('Camino recomendado:');
+    console.error('  1. Instalar Google Cloud CLI si no esta instalado.');
+    console.error('  2. Correr: gcloud auth application-default login --account=agustin@granberta.com');
+    console.error('  3. Reintentar dry-run: npm run finance:reset-test-data -- --email agustin@granberta.com');
+    console.error('');
+    console.error('Alternativa tecnica: usar una service account y GOOGLE_APPLICATION_CREDENTIALS.');
+    return;
+  }
+
+  console.error('');
+  console.error('No pude completar el reset financiero. No continuo con el borrado.');
+  console.error(message);
+  if (error instanceof Error && error.stack) {
+    console.error(error.stack);
+  }
 }
