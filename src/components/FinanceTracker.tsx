@@ -1611,6 +1611,68 @@ function hasFinanceTrace(trace: ParsedFinanceTrace, finance: any) {
   );
 }
 
+function inferStatementMerchant(finance: any, trace: ParsedFinanceTrace) {
+  const storedMerchant = finance.merchantName || finance.merchant;
+  if (storedMerchant) return storedMerchant;
+
+  const sourceText = [
+    trace.sourceLine,
+    trace.originalConcept,
+    finance.originalDescription,
+    finance.description,
+  ].filter(Boolean).join(' ');
+
+  const directMerchant = /\b(RAPIPAGO[A-Z0-9._-]*|PAGOFACIL[A-Z0-9._-]*|MERCADOPAGO[A-Z0-9._-]*|MP\s*[A-Z0-9._-]+)\b/i.exec(sourceText);
+  if (directMerchant?.[1]) return directMerchant[1].replace(/\s+/g, ' ').trim();
+
+  const ignored = new Set([
+    'PAGO',
+    'CON',
+    'VISA',
+    'DEBITO',
+    'DEBITO',
+    'DIRECTO',
+    'OPERACION',
+    'EFECTIVO',
+    'TARJE',
+    'CUENTA',
+    'CA',
+    'ARS',
+    'BBVA',
+  ]);
+  const candidates = sourceText.match(/\b[A-ZÁÉÍÓÚÑ]{3,}[A-Z0-9._-]*\b/g) || [];
+  return candidates.find(candidate => !ignored.has(candidate.toUpperCase()));
+}
+
+function buildFinanceTraceDetails(finance: any, accounts: any[]) {
+  const trace = parseFinanceTraceNote(finance.note);
+  const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
+  const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
+  const merchant = inferStatementMerchant(finance, trace);
+
+  return {
+    trace,
+    merchant,
+    sourceAccount,
+    destinationAccount,
+    rows: [
+      { label: 'Comercio', value: merchant || 'No detectado' },
+      { label: 'Cuenta usada', value: sourceAccount?.name || 'Sin cuenta' },
+      { label: 'Destino', value: destinationAccount?.name || trace.counterpartyName || '-' },
+      { label: 'Alias', value: trace.counterpartyAlias || '-' },
+      { label: 'CBU/CVU', value: trace.counterpartyAccount || '-' },
+      { label: 'Archivo', value: trace.importedFile || finance.importSource || '-' },
+      { label: 'Cuotas', value: trace.installmentLabel || finance.installmentLabel || '-' },
+      { label: 'Huella', value: finance.transactionFingerprint || finance.statementFingerprint || '-' },
+    ],
+    longRows: [
+      { label: 'Concepto original', value: trace.originalConcept || finance.originalDescription || '' },
+      { label: 'Linea del resumen', value: trace.sourceLine || '' },
+      { label: 'Detalle transferencia', value: trace.transferDetail || '' },
+    ].filter(row => row.value),
+  };
+}
+
 function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
   const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
   const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
@@ -1618,6 +1680,7 @@ function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
   const trace = parseFinanceTraceNote(finance.note);
 
   return [
+    finance.id,
     finance.description,
     finance.note,
     finance.category,
@@ -2936,6 +2999,11 @@ export default function FinanceTracker({ user }: { user: any }) {
       date: format(financeDate, "yyyy-MM-dd'T'HH:mm"),
     });
     setActiveListTab(tab);
+    setFilterDateRange('all');
+    setSearchQuery(finance.id || finance.transactionFingerprint || finance.description || '');
+    window.setTimeout(() => {
+      document.getElementById('finance-movement-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   const handleApplyMissingBalance = async (finance: any) => {
@@ -4698,7 +4766,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         </div>
 
         {/* List Section */}
-        <div className="lg:col-span-2 space-y-6">
+        <div id="finance-movement-list" className="lg:col-span-2 scroll-mt-6 space-y-6">
           <div className="flex items-center gap-4 border-b border-neutral-200 pb-px">
             <button 
               onClick={() => setActiveListTab('all')}
@@ -6496,9 +6564,8 @@ function BalanceIntegrityPanel({
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         {topIssues.map(issue => {
           const finance = issue.finance;
-          const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
-          const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
           const date = parseFinanceDateValue(finance.date);
+          const details = buildFinanceTraceDetails(finance, accounts);
 
           return (
             <div key={issue.id} className="rounded-3xl border border-amber-100 bg-white p-4 shadow-sm">
@@ -6520,8 +6587,12 @@ function BalanceIntegrityPanel({
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <PendingMeta label="Fecha" value={date ? date.toLocaleDateString('es-AR') : 'Sin fecha'} />
                   <PendingMeta label="Tipo" value={finance.type || finance.kind || 'expense'} />
-                  <PendingMeta label="Origen" value={sourceAccount?.name || 'Sin cuenta'} />
-                  <PendingMeta label="Destino" value={destinationAccount?.name} />
+                  {details.rows.map(row => (
+                    <PendingMeta key={row.label} label={row.label} value={row.value} wrap={row.label === 'Huella'} />
+                  ))}
+                  {details.longRows.map(row => (
+                    <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
+                  ))}
                 </div>
               </div>
 
