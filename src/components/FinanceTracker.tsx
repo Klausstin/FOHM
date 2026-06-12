@@ -1186,7 +1186,9 @@ interface ReviewResolutionDraft {
   toAccountId?: string;
 }
 
-function buildBalanceIntegrityIssues(finances: any[]) {
+function buildBalanceIntegrityIssues(finances: any[], accounts: any[] = []) {
+  const accountIds = new Set((accounts || []).map(account => account.id));
+
   return (finances || [])
     .map(finance => {
       const status = finance.status || 'posted';
@@ -1194,6 +1196,8 @@ function buildBalanceIntegrityIssues(finances: any[]) {
 
       const sourceAccountId = finance.sourceAccountId || finance.accountId || '';
       const toAccountId = finance.toAccountId || '';
+      const hasRealSourceAccount = sourceAccountId ? accountIds.has(sourceAccountId) : false;
+      const hasRealDestinationAccount = toAccountId ? accountIds.has(toAccountId) : false;
       const type = finance.type || (finance.kind === 'income' ? 'income' : finance.kind === 'neutral' ? 'neutral' : 'expense');
       const isBalanceAdjustment = isBalanceAdjustmentTransaction(finance);
       const shouldAffectBalance = shouldApplyTransactionToAccountBalances({
@@ -1204,24 +1208,28 @@ function buildBalanceIntegrityIssues(finances: any[]) {
         date: parseFinanceDateValue(finance.date) || new Date(),
       });
 
-      if ((type === 'expense' || type === 'income') && !sourceAccountId && Number(finance.amount || 0) > 0) {
+      if ((type === 'expense' || type === 'income') && (!sourceAccountId || !hasRealSourceAccount) && Number(finance.amount || 0) > 0) {
         return {
           id: `${finance.id}-missing-account`,
           type: 'missing_account' as const,
           finance,
           title: 'Movimiento sin cuenta usada',
-          helper: 'Tiene monto y tipo financiero, pero no sabemos de que cuenta salio o entro.',
+          helper: sourceAccountId
+            ? 'Tiene una cuenta heredada del resumen, pero no coincide con una cuenta real de VEO.'
+            : 'Tiene monto y tipo financiero, pero no sabemos de que cuenta salio o entro.',
           canApplyBalance: false,
         };
       }
 
-      if (type === 'transfer' && sourceAccountId && !toAccountId) {
+      if (type === 'transfer' && sourceAccountId && (!toAccountId || !hasRealDestinationAccount)) {
         return {
           id: `${finance.id}-missing-transfer-destination`,
           type: 'missing_transfer_destination' as const,
           finance,
           title: 'Transferencia sin destino',
-          helper: 'Para mover saldo entre cuentas, VEO necesita cuenta origen y cuenta destino.',
+          helper: toAccountId
+            ? 'La cuenta destino guardada no coincide con una cuenta real de VEO.'
+            : 'Para mover saldo entre cuentas, VEO necesita cuenta origen y cuenta destino.',
           canApplyBalance: false,
         };
       }
@@ -2999,7 +3007,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const accountBalanceSummary = useMemo(() => buildAccountBalanceSummary(userAccounts), [userAccounts]);
   const primaryBalanceSummary = accountBalanceSummary.find(item => item.currency === 'ARS') || accountBalanceSummary[0];
   const accountReconciliationQueue = useMemo(() => buildAccountReconciliationQueue(userAccounts), [userAccounts]);
-  const balanceIntegrityIssues = useMemo(() => buildBalanceIntegrityIssues(finances), [finances]);
+  const balanceIntegrityIssues = useMemo(() => buildBalanceIntegrityIssues(finances, userAccounts), [finances, userAccounts]);
   const beneficiaryFilterOptions = useMemo(() => {
     const labels = new Map<string, string>();
     FINANCE_BENEFICIARIES.forEach(item => labels.set(item.label, item.label));
@@ -3068,6 +3076,24 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const handleApplyMissingBalance = async (finance: any) => {
     try {
+      const currentSourceAccountId = finance.sourceAccountId || finance.accountId || '';
+      const currentDestinationAccountId = finance.toAccountId || '';
+      const hasSourceAccount = userAccounts.some(account => account.id === currentSourceAccountId);
+      const hasDestinationAccount = !currentDestinationAccountId || userAccounts.some(account => account.id === currentDestinationAccountId);
+      const sourceMatch = hasSourceAccount
+        ? { account: userAccounts.find(account => account.id === currentSourceAccountId), confidence: 'high' }
+        : findBestAccountForImportedTransaction(finance, userAccounts);
+      const resolvedSourceAccountId = hasSourceAccount
+        ? currentSourceAccountId
+        : sourceMatch.confidence !== 'low'
+          ? sourceMatch.account?.id || ''
+          : '';
+      const resolvedDestinationAccountId = hasDestinationAccount ? currentDestinationAccountId : '';
+
+      if (!resolvedSourceAccountId || (finance.type === 'transfer' && !resolvedDestinationAccountId)) {
+        return false;
+      }
+
       const balanceApplied = await applyTransactionToAccountBalances({
         uid: finance.uid || user.uid,
         householdId: finance.householdId || user.householdId,
@@ -3080,15 +3106,18 @@ export default function FinanceTracker({ user }: { user: any }) {
         type: finance.type || 'expense',
         kind: finance.kind,
         neutralType: finance.neutralType,
-        accountId: finance.sourceAccountId || finance.accountId || '',
-        sourceAccountId: finance.sourceAccountId || finance.accountId || '',
-        toAccountId: finance.toAccountId || '',
+        accountId: resolvedSourceAccountId,
+        sourceAccountId: resolvedSourceAccountId,
+        toAccountId: resolvedDestinationAccountId,
         date: parseFinanceDateValue(finance.date) || new Date(),
         status: finance.status || 'posted',
         source: finance.source || 'manual',
       } as any);
 
       await updateFinancialTransaction(finance.id, {
+        accountId: resolvedSourceAccountId,
+        sourceAccountId: resolvedSourceAccountId,
+        toAccountId: resolvedDestinationAccountId,
         accountBalanceApplied: balanceApplied,
         needsReview: balanceApplied ? false : finance.needsReview,
         paymentStatus: balanceApplied ? 'Contabilizado' : finance.paymentStatus,
@@ -3485,17 +3514,6 @@ export default function FinanceTracker({ user }: { user: any }) {
         </div>
       )}
 
-      <FinanceReviewCenter
-        reviewFinances={reviewFinances}
-        accounts={userAccounts}
-        onConfirm={handleResolveReviewedFinance}
-        onBulkConfirm={handleBulkResolveReviewedFinances}
-        onBulkIgnoreDuplicates={handleBulkIgnoreReviewedFinances}
-        onEdit={(finance) => openFinanceEdit(finance, 'reviews')}
-        onIgnore={handleIgnoreReviewedFinance}
-        onViewAll={() => setActiveListTab('reviews')}
-      />
-
       <FinanceCatchupSessionPanel
         userId={user.uid}
         pendingCount={reviewCount}
@@ -3512,8 +3530,6 @@ export default function FinanceTracker({ user }: { user: any }) {
       />
 
       <InstallmentForecastPanel forecast={installmentForecast} />
-
-      <FinanceDiagnosticPanel items={financeDiagnosticItems} />
 
       <AccountReconciliationOverview
         accounts={userAccounts}
@@ -4889,14 +4905,14 @@ export default function FinanceTracker({ user }: { user: any }) {
               onClick={() => setActiveListTab('all')}
               className={`pb-4 px-2 text-sm font-bold transition-all relative ${activeListTab === 'all' ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
             >
-              Todos los registros
+              Historial
               {activeListTab === 'all' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900" />}
             </button>
             <button 
               onClick={() => setActiveListTab('reviews')}
               className={`pb-4 px-2 text-sm font-bold transition-all relative flex items-center gap-2 ${activeListTab === 'reviews' ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
             >
-              Revisiones
+              Pendientes
               {reviewCount > 0 && (
                 <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                   {reviewCount}
@@ -6745,11 +6761,11 @@ function BalanceIntegrityPanel({
     <section className="rounded-[2rem] border border-amber-200 bg-amber-50/60 p-5 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-700">Auditoria</p>
-          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Movimientos a revisar</h3>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-700">Necesitan accion</p>
+          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Movimientos pendientes</h3>
         </div>
         <p className="max-w-xl text-xs font-bold leading-5 text-amber-800">
-          VEO encontro movimientos que pueden afectar la confianza del saldo. Conviene resolverlos antes de leer caja o patrimonio.
+          Resolver esto mejora la confianza del saldo. Si falta una cuenta real, edita el movimiento; si ya esta claro, aplica saldo.
         </p>
       </div>
 

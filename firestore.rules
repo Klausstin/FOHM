@@ -299,6 +299,13 @@ service cloud.firestore {
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
+    function isValidAccountBalancePatch() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['balance', 'lastReconciledAt']) &&
+             (!('balance' in request.resource.data) || request.resource.data.balance is number) &&
+             (!('lastReconciledAt' in request.resource.data) || request.resource.data.lastReconciledAt == null || request.resource.data.lastReconciledAt is timestamp);
+    }
+
     function isValidMapping(data, isUpdate) {
       return hasRequiredFields(['uid', 'householdId', 'originalDescription', 'mappedDescription']) &&
              hasOnlyAllowedFields(['uid', 'householdId', 'originalDescription', 'mappedDescription', 'category', 'subCategory', 'subSubCategory', 'kind', 'neutralType', 'isFixed', 'accountId', 'sourceAccountId', 'toAccountId', 'paymentType', 'beneficiaryType', 'beneficiaryLabel', 'scope', 'visibility', 'merchantName', 'merchantKey', 'transactionFingerprint', 'learningKey', 'useCount', 'lastUsedAt', 'createdAt', 'id', 'isArchived', 'archivedAt']) &&
@@ -463,7 +470,7 @@ service cloud.firestore {
     match /accounts/{accountId} {
       allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isHouseholdMember(resource.data.householdId) || isAdmin());
       allow create: if isAuthenticated() && isValidAccount(request.resource.data, false) && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
-      allow update: if isAuthenticated() && isValidAccount(request.resource.data, true) && (isHouseholdMember(resource.data.householdId) || isAdmin());
+      allow update: if isAuthenticated() && (isHouseholdMember(resource.data.householdId) || isAdmin()) && (isValidAccount(request.resource.data, true) || isValidAccountBalancePatch());
       allow delete: if isAuthenticated() && (isHouseholdMember(request.resource.data.householdId) || isAdmin());
     }
 
