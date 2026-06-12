@@ -1853,6 +1853,8 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [pendingTransactions, setPendingTransactions] = useState<PendingTransaction[]>([]);
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
+  const [editFeedback, setEditFeedback] = useState<Record<string, { tone: 'ok' | 'error'; message: string }>>({});
   const [userCategories, setUserCategories] = useState<any[]>([]);
   const [userMappings, setUserMappings] = useState<any[]>([]);
   const [userAccounts, setUserAccounts] = useState<any[]>([]);
@@ -2709,6 +2711,11 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const startEditing = (f: any) => {
     setEditingId(f.id);
+    setEditFeedback(prev => {
+      const next = { ...prev };
+      delete next[f.id];
+      return next;
+    });
     setEditForm({
       ...f,
       originalCategory: f.category,
@@ -2726,6 +2733,9 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const saveEdit = async () => {
     if (!editingId || !editForm) return;
+    const currentEditingId = editingId;
+    setSavingEditId(currentEditingId);
+    setEditFeedback(prev => ({ ...prev, [currentEditingId]: { tone: 'ok', message: 'Guardando cambios...' } }));
     try {
       const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, originalAccountId, originalSourceAccountId, originalToAccountId, originalPaymentType, originalBeneficiaryLabel, originalScope, merchantName, merchantKey } = editForm;
       const existingTransaction = finances.find(finance => finance.id === editingId);
@@ -2831,8 +2841,18 @@ export default function FinanceTracker({ user }: { user: any }) {
 
       setEditingId(null);
       setEditForm(null);
+      setEditFeedback(prev => ({ ...prev, [currentEditingId]: { tone: 'ok', message: 'Movimiento guardado.' } }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'finances');
+      setEditFeedback(prev => ({
+        ...prev,
+        [currentEditingId]: {
+          tone: 'error',
+          message: 'No pude guardar este movimiento. Revisá conexión/permisos y probá de nuevo.',
+        },
+      }));
+    } finally {
+      setSavingEditId(null);
     }
   };
 
@@ -5021,6 +5041,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const trace = parseFinanceTraceNote(f.note);
                 const shouldShowTrace = hasFinanceTrace(trace, f);
                 const merchantLabel = f.merchantName || f.merchant;
+                const isSavingThisEdit = savingEditId === f.id;
+                const currentEditFeedback = editFeedback[f.id];
 
                 return (
                   <motion.div
@@ -5175,10 +5197,35 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </select>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => setEditingId(null)} className="p-2 text-neutral-400 hover:text-neutral-600"><X size={18} /></button>
-                            <button onClick={saveEdit} className="bg-neutral-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"><Save size={14} /> Guardar</button>
+                            <button
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditForm(null);
+                              }}
+                              disabled={isSavingThisEdit}
+                              className="p-2 text-neutral-400 transition hover:text-neutral-600 disabled:cursor-wait disabled:opacity-40"
+                            >
+                              <X size={18} />
+                            </button>
+                            <button
+                              onClick={saveEdit}
+                              disabled={isSavingThisEdit}
+                              className="flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-bold text-white shadow-sm transition active:scale-95 hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
+                            >
+                              <Save size={14} />
+                              {isSavingThisEdit ? 'Guardando...' : 'Guardar'}
+                            </button>
                           </div>
                         </div>
+                        {currentEditFeedback && (
+                          <p className={`rounded-2xl px-3 py-2 text-xs font-bold leading-5 ${
+                            currentEditFeedback.tone === 'error'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {currentEditFeedback.message}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <>
