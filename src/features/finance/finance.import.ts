@@ -28,6 +28,9 @@ export interface ImportedFinanceTransaction {
   tags?: string[];
   balanceDelta?: number;
   sourceLine?: string;
+  debitCardDetailLine?: string;
+  cardLast4?: string;
+  voucherNumber?: string;
   installmentNumber?: number;
   installmentTotal?: number;
   installmentLabel?: string;
@@ -64,6 +67,16 @@ const BBVA_MOVEMENT_RE =
   /^(\d{2}\/\d{2})\s+(?:(\d{3})\s+)?(.+?)\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})$/;
 const BBVA_VISA_TRANSACTION_RE =
   /^(\d{1,2})-([A-Za-zÁÉÍÓÚáéíóú]{3})-(\d{2})\s+(.+?)\s+(?:(\d{3,})\s+)?(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})(?:\s+(-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}))?$/;
+
+interface BbvaDebitCardDetail {
+  dateKey: string;
+  amount: number;
+  merchantName: string;
+  merchantKey: string;
+  cardLast4?: string;
+  voucherNumber?: string;
+  rawLine: string;
+}
 
 export function parseFinanceStatementText(text: string, fileName = ''): FinanceImportResult {
   const normalizedText = normalizeWhitespace(text);
@@ -484,6 +497,7 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
   const year = inferYearFromFileName(fileName) || inferYearFromStatementText(text) || new Date().getFullYear();
   const statementHeader = parseBbvaStatementHeader(text, year);
   const warnings: string[] = [];
+  const debitCardDetails = parseBbvaDebitCardDetails(text, year);
 
   const transactions: ImportedFinanceTransaction[] = text
     .split(/\r?\n/)
@@ -495,25 +509,32 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
       const [, datePart, , rawDescription, rawAmount] = match;
       const amount = parseArgentineMoney(rawAmount);
       const description = cleanMovementDescription(rawDescription);
-      const suggestion = suggestMovementClassification(description, amount);
-      const merchant = suggestMerchant(description);
+      const cardDetail = findMatchingDebitCardDetail(debitCardDetails, year, datePart, amount, description);
+      const semanticDescription = cardDetail?.merchantName || description;
+      const suggestion = suggestMovementClassification(semanticDescription, amount);
+      const merchant = suggestMerchant(semanticDescription);
       const transferDetails = extractTransferDetails(description, suggestion.type);
+      const merchantName = merchant.confidence >= 0.8 ? merchant.merchantName : cardDetail?.merchantName || '';
+      const merchantKey = merchant.confidence >= 0.8 ? merchant.merchantKey : cardDetail?.merchantKey || '';
 
       return {
         amount: Math.abs(amount),
-        description,
+        description: cardDetail ? cardDetail.merchantName : description,
         category: merchant.confidence >= 0.8 && suggestion.canUseMerchantCategory ? merchant.category : suggestion.category,
         subCategory: merchant.confidence >= 0.8 && suggestion.canUseMerchantCategory ? merchant.subCategory : suggestion.subCategory,
         type: suggestion.type,
         date: buildIsoDate(year, datePart),
         isFixed: suggestion.isFixed || merchant.isLikelyRecurring,
-        confidence: Math.max(suggestion.confidence, merchant.confidence),
+        confidence: Math.max(suggestion.confidence, merchant.confidence, cardDetail ? 0.76 : 0),
         needsReview: suggestion.needsReview || (suggestion.canUseMerchantCategory && merchant.confidence < 0.8),
-        merchantName: merchant.confidence >= 0.8 ? merchant.merchantName : '',
-        merchantKey: merchant.confidence >= 0.8 ? merchant.merchantKey : '',
+        merchantName,
+        merchantKey,
         ...transferDetails,
         importSource: 'bbva_caja_ahorro_ars',
         sourceLine: line,
+        debitCardDetailLine: cardDetail?.rawLine,
+        cardLast4: cardDetail?.cardLast4,
+        voucherNumber: cardDetail?.voucherNumber,
         balanceDelta: amount,
       };
     })
@@ -532,6 +553,94 @@ function parseBbvaCajaAhorroArs(text: string, fileName: string): Omit<FinanceImp
   }
 
   return { transactions, statement, warnings };
+}
+
+function parseBbvaDebitCardDetails(text: string, year: number): BbvaDebitCardDetail[] {
+  return text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .map(stripPdfLineNoise)
+    .map(line => parseBbvaDebitCardDetailLine(line, year))
+    .filter((detail): detail is BbvaDebitCardDetail => Boolean(detail));
+}
+
+function parseBbvaDebitCardDetailLine(line: string, year: number): BbvaDebitCardDetail | null {
+  const cleanedLine = cleanMovementDescription(line);
+  if (!cleanedLine || !/\*{2,}/.test(cleanedLine)) return null;
+
+  const dateMatch = /^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+/.exec(cleanedLine);
+  if (!dateMatch) return null;
+
+  const amountMatches = cleanedLine.match(/-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g) || [];
+  const rawAmount = amountMatches[amountMatches.length - 1];
+  if (!rawAmount) return null;
+
+  const dateKey = buildDateKeyFromDatePart(dateMatch[1], year);
+  const amount = Math.abs(parseArgentineMoney(rawAmount));
+  if (!dateKey || !Number.isFinite(amount) || amount <= 0) return null;
+
+  let body = cleanedLine
+    .slice(dateMatch[0].length)
+    .replace(rawAmount, ' ')
+    .replace(/(?:U\$S|\$|USD|ARS)/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const cardLast4Match = /(?:\*{2,}\s*){1,4}(\d{4})/.exec(body);
+  const cardLast4 = cardLast4Match?.[1];
+  if (cardLast4Match) {
+    body = body.replace(cardLast4Match[0], ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  const voucherMatch = /(?:^|\s)(\d{4,10})(?:\s*)$/.exec(body);
+  const voucherNumber = voucherMatch?.[1];
+  if (voucherNumber) {
+    body = body.slice(0, voucherMatch.index).trim();
+  }
+
+  const merchantName = body
+    .replace(/\b(?:CUENTA|DEBITO|DÉBITO|CA|COMPRAS|VISA|TARJETA)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!merchantName || merchantName.length < 3) return null;
+
+  return {
+    dateKey,
+    amount,
+    merchantName,
+    merchantKey: normalizeFingerprintText(merchantName).replace(/\s+/g, '-'),
+    cardLast4,
+    voucherNumber,
+    rawLine: cleanedLine,
+  };
+}
+
+function findMatchingDebitCardDetail(
+  details: BbvaDebitCardDetail[],
+  year: number,
+  datePart: string,
+  signedAmount: number,
+  description: string,
+) {
+  const normalizedDescription = normalizeText(description);
+  if (!normalizedDescription.includes('visa debito') && !normalizedDescription.includes('operacion en efectivo tarje')) return undefined;
+
+  const dateKey = buildDateKeyFromDatePart(datePart, year);
+  const amount = Math.abs(signedAmount);
+  return details.find(detail =>
+    detail.dateKey === dateKey &&
+    Math.abs(detail.amount - amount) < 0.01
+  );
+}
+
+function buildDateKeyFromDatePart(datePart: string, fallbackYear: number) {
+  const parts = datePart.split('/').map(part => Number(part));
+  const [day, month, rawYear] = parts;
+  if (!day || !month) return '';
+  const year = rawYear
+    ? rawYear < 100 ? resolveTwoDigitYear(String(rawYear), fallbackYear) : rawYear
+    : fallbackYear;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 function suggestMovementClassification(description: string, signedAmount: number) {

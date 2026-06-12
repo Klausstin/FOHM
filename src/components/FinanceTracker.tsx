@@ -1549,6 +1549,9 @@ interface ParsedFinanceTrace {
   counterpartyAccount?: string;
   importedFile?: string;
   installmentLabel?: string;
+  cardLast4?: string;
+  voucherNumber?: string;
+  debitCardDetailLine?: string;
   sourceLine?: string;
   reconciliations: string[];
   otherLines: string[];
@@ -1581,6 +1584,9 @@ function parseFinanceTraceNote(note?: string): ParsedFinanceTrace {
       else if (label === 'cbu/cvu') trace.counterpartyAccount = value;
       else if (label === 'archivo importado') trace.importedFile = value;
       else if (label === 'cuotas') trace.installmentLabel = value;
+      else if (label === 'tarjeta') trace.cardLast4 = value;
+      else if (label === 'comprobante') trace.voucherNumber = value;
+      else if (label === 'detalle tarjeta debito' || label === 'detalle tarjeta débito') trace.debitCardDetailLine = value;
       else if (label === 'linea resumen' || label === 'línea resumen') trace.sourceLine = value;
       else if (label.startsWith('conciliado con')) trace.reconciliations.push(line);
       else trace.otherLines.push(line);
@@ -1598,6 +1604,9 @@ function hasFinanceTrace(trace: ParsedFinanceTrace, finance: any) {
     trace.counterpartyAccount ||
     trace.importedFile ||
     trace.installmentLabel ||
+    trace.cardLast4 ||
+    trace.voucherNumber ||
+    trace.debitCardDetailLine ||
     trace.sourceLine ||
     trace.reconciliations.length ||
     trace.otherLines.length ||
@@ -1662,12 +1671,15 @@ function buildFinanceTraceDetails(finance: any, accounts: any[]) {
       { label: 'Alias', value: trace.counterpartyAlias || '-' },
       { label: 'CBU/CVU', value: trace.counterpartyAccount || '-' },
       { label: 'Archivo', value: trace.importedFile || finance.importSource || '-' },
+      { label: 'Tarjeta', value: trace.cardLast4 || finance.cardLast4 || '-' },
+      { label: 'Comprobante', value: trace.voucherNumber || finance.voucherNumber || '-' },
       { label: 'Cuotas', value: trace.installmentLabel || finance.installmentLabel || '-' },
       { label: 'Huella', value: finance.transactionFingerprint || finance.statementFingerprint || '-' },
     ],
     longRows: [
       { label: 'Concepto original', value: trace.originalConcept || finance.originalDescription || '' },
       { label: 'Linea del resumen', value: trace.sourceLine || '' },
+      { label: 'Detalle tarjeta debito', value: trace.debitCardDetailLine || finance.debitCardDetailLine || '' },
       { label: 'Detalle transferencia', value: trace.transferDetail || '' },
     ].filter(row => row.value),
   };
@@ -1759,6 +1771,9 @@ interface PendingTransaction {
   tags?: string[];
   paymentType?: string;
   sourceLine?: string;
+  debitCardDetailLine?: string;
+  cardLast4?: string;
+  voucherNumber?: string;
   installmentNumber?: number;
   installmentTotal?: number;
   installmentLabel?: string;
@@ -2484,7 +2499,10 @@ export default function FinanceTracker({ user }: { user: any }) {
       pt.sourceAccountLabel ? `Cuenta original: ${pt.sourceAccountLabel}` : '',
       pt.sourceCategoryLabel ? `Categoria original: ${pt.sourceCategoryLabel}` : '',
       pt.installmentLabel ? `Cuotas: ${pt.installmentLabel}` : '',
+      pt.cardLast4 ? `Tarjeta: ${pt.cardLast4}` : '',
+      pt.voucherNumber ? `Comprobante: ${pt.voucherNumber}` : '',
       pt.sourceLine && pt.sourceLine !== pt.originalDescription ? `Linea resumen: ${pt.sourceLine}` : '',
+      pt.debitCardDetailLine ? `Detalle tarjeta debito: ${pt.debitCardDetailLine}` : '',
       pt.transferDetail && pt.transferDetail !== pt.originalDescription ? `Detalle transferencia: ${pt.transferDetail}` : '',
       pt.counterpartyName ? `Destinatario: ${pt.counterpartyName}` : '',
       pt.counterpartyAlias ? `Alias: ${pt.counterpartyAlias}` : '',

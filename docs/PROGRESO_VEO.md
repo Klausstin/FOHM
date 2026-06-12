@@ -100,6 +100,7 @@ Siguiente: [proximo paso]
 | Crear reset seguro de datos financieros de prueba | Validando | 92% | `scripts/finance-reset-test-data.ts`, `package.json`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Aclarar credenciales admin para reset financiero | Validando | 90% | `scripts/finance-reset-test-data.ts`, `README.md`, `docs/PROGRESO_VEO.md` |
 | Mostrar detalle completo en auditoria financiera | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Cruzar detalle de Visa Debito en BBVA Caja ARS | Validando | 90% | `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
