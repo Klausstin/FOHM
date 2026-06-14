@@ -443,6 +443,16 @@ function normalizeDuplicateText(value: string) {
     .trim();
 }
 
+function isCreditCardPaymentCategory(category?: string, subCategory?: string) {
+  const text = normalizeDuplicateText(`${category || ''} ${subCategory || ''}`);
+  return text.includes('movimientos neutros') && text.includes('pago tarjeta credito');
+}
+
+function isInternalTransferCategory(category?: string, subCategory?: string) {
+  const text = normalizeDuplicateText(`${category || ''} ${subCategory || ''}`);
+  return text.includes('movimientos neutros') && (text.includes('transferencia interna') || text.includes('pago tarjeta credito'));
+}
+
 function enrichImportedTransactionWithAccounts(transaction: any, accounts: any[]) {
   const sourceMatch = findBestAccountForImportedTransaction(transaction, accounts);
   const accountId = transaction.accountId || sourceMatch.account?.id || findSuggestedSourceAccount(transaction, accounts);
@@ -3134,10 +3144,13 @@ export default function FinanceTracker({ user }: { user: any }) {
     try {
       const amount = Number(draft.amount || finance.amount || 0);
       const sourceAccountId = draft.accountId || finance.sourceAccountId || finance.accountId || '';
+      const destinationAccountId = draft.toAccountId || finance.toAccountId || '';
       const merchantName = String(draft.merchantName || '').trim();
       const description = String(draft.description || merchantName || finance.description || '').trim();
       const date = draft.date ? new Date(`${draft.date}T12:00:00`) : parseFinanceDateValue(finance.date) || new Date();
       const merchantKey = merchantName ? normalizeDuplicateText(merchantName).replace(/\s+/g, '-') : finance.merchantKey || '';
+      const isInternalTransfer = isInternalTransferCategory(draft.category || finance.category, draft.subCategory || finance.subCategory);
+      const isCreditCardPayment = isCreditCardPaymentCategory(draft.category || finance.category, draft.subCategory || finance.subCategory);
 
       const payload = {
         amount,
@@ -3150,6 +3163,11 @@ export default function FinanceTracker({ user }: { user: any }) {
         subCategory: draft.subCategory || '',
         sourceAccountId,
         accountId: sourceAccountId,
+        toAccountId: isInternalTransfer ? destinationAccountId : '',
+        type: isInternalTransfer ? 'transfer' : finance.type || 'expense',
+        kind: isInternalTransfer ? 'neutral' : finance.kind,
+        neutralType: isCreditCardPayment ? 'credit_card_payment' : isInternalTransfer ? 'internal_transfer' : finance.neutralType,
+        paymentType: isInternalTransfer ? 'Transferencia' : finance.paymentType || '',
         date,
         needsReview: true,
         accountBalanceApplied: false,
@@ -3164,12 +3182,13 @@ export default function FinanceTracker({ user }: { user: any }) {
         mappedDescription: description,
         category: payload.category,
         subCategory: payload.subCategory,
-        kind: finance.type === 'transfer' ? 'neutral' : finance.type || 'expense',
+        kind: payload.type === 'transfer' ? 'neutral' : finance.type || 'expense',
+        neutralType: payload.neutralType,
         isFixed: Boolean(finance.isFixed),
         accountId: sourceAccountId,
         sourceAccountId,
-        toAccountId: finance.toAccountId || '',
-        paymentType: finance.paymentType || '',
+        toAccountId: payload.toAccountId || '',
+        paymentType: payload.paymentType || finance.paymentType || '',
         beneficiaryType: finance.beneficiaryType || '',
         beneficiaryLabel: finance.beneficiaryLabel || legacyBeneficiaryLabel(finance),
         scope: finance.scope || legacyScope(finance),
@@ -6753,6 +6772,7 @@ function BalanceIntegrityPanel({
       category: finance.category || '',
       subCategory: finance.subCategory || '',
       accountId: finance.sourceAccountId || finance.accountId || '',
+      toAccountId: finance.toAccountId || '',
       date: format(date, 'yyyy-MM-dd'),
     });
   };
@@ -6777,6 +6797,7 @@ function BalanceIntegrityPanel({
           const isEditing = editingIssueId === issue.id && draft;
           const selectedCategory = categories.find(category => category.name === draft?.category);
           const subCategories = selectedCategory?.subCategories || [];
+          const needsDestinationAccount = isEditing && isInternalTransferCategory(draft?.category, draft?.subCategory);
           const visibleRows = details.rows.filter(row => row.label !== 'Huella' && isUsefulAuditValue(row.value));
           const visibleLongRows = details.longRows.filter(row =>
             isUsefulAuditValue(row.value) &&
@@ -6839,6 +6860,16 @@ function BalanceIntegrityPanel({
                         {accounts.map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>)}
                       </select>
                     </AuditField>
+                    {needsDestinationAccount && (
+                      <AuditField label="Cuenta destino">
+                        <select value={draft.toAccountId || ''} onChange={event => setDraft({ ...draft, toAccountId: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black">
+                          <option value="">Elegir destino</option>
+                          {accounts
+                            .filter(account => account.id !== draft.accountId)
+                            .map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>)}
+                        </select>
+                      </AuditField>
+                    )}
                     <AuditField label="Descripcion">
                       <input value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
                     </AuditField>
