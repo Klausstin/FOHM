@@ -70,7 +70,7 @@ Siguiente: [proximo paso]
 | Simplificar revision financiera diaria | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Editar cuenta destino en pagos de tarjeta | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Inferir tarjeta destino en pagos de resumen | Validando | 90% | `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |
-| Guardar edicion de cuentas con feedback claro | Validando | 95% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `firestore.rules` |
+| Guardar edicion de cuentas con feedback claro | Validando | 98% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `firestore.rules` |
 | Guardar ediciones de movimientos importados | Validando | 95% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `firestore.rules` |
 | Permitir metadatos bancarios importados en Firestore | Validando | 95% | `firestore.rules` |
 | Importar CSV como borradores revisables | Validando | 85% | `package.json`, `package-lock.json`, `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |

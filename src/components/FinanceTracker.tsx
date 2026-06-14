@@ -1568,6 +1568,16 @@ function accountPayloadHasChanges(nextPayload: Record<string, any>, currentAccou
     JSON.stringify(normalizeAccountPayloadForCompare(buildAccountPayload(buildAccountDraftFromRecord(currentAccount))));
 }
 
+function buildChangedAccountPatch(nextPayload: Record<string, any>, currentAccount: any) {
+  const currentPayload = buildAccountPayload(buildAccountDraftFromRecord(currentAccount));
+  return Object.fromEntries(
+    Object.entries(nextPayload).filter(([key, value]) => {
+      const currentValue = currentPayload[key as keyof typeof currentPayload];
+      return JSON.stringify(value ?? null) !== JSON.stringify(currentValue ?? null);
+    }),
+  );
+}
+
 function hasAccountDraftUserInput(draft: any) {
   return Boolean(
     String(draft.name || '').trim() ||
@@ -2154,9 +2164,13 @@ export default function FinanceTracker({ user }: { user: any }) {
         const previousBalance = Number(editingAccount.balance || 0);
         const nextBalance = Number(accountPayload.balance || 0);
         const balanceWasReconciled = Math.abs(previousBalance - nextBalance) >= 0.01;
-        await updateFinancialAccount(editingAccount.id, {
-          ...accountPayload,
+        const accountPatch = {
+          ...buildChangedAccountPatch(accountPayload, editingAccount),
           ...(balanceWasReconciled ? { lastReconciledAt: new Date() } : {}),
+        };
+
+        await updateFinancialAccount(editingAccount.id, {
+          ...accountPatch,
         });
         if (balanceWasReconciled) {
           await createFinancialTransaction({
