@@ -1390,6 +1390,54 @@ function buildFinanceDiagnosticItems({
   return items.sort((a, b) => b.priority - a.priority);
 }
 
+const FINANCE_SECTIONS = [
+  { id: 'summary', label: 'Resumen', helper: 'Caja y foco' },
+  { id: 'accounts', label: 'Cuentas', helper: 'Billeteras y tarjetas' },
+  { id: 'movements', label: 'Movimientos', helper: 'Carga y busqueda' },
+  { id: 'import', label: 'Importar', helper: 'PDF y CSV' },
+  { id: 'review', label: 'Revisar', helper: 'Pendientes y saldos' },
+  { id: 'categories', label: 'Categorias', helper: 'Memoria y reglas' },
+  { id: 'reports', label: 'Reportes', helper: 'Lecturas y patrones' },
+  { id: 'backup', label: 'Backup', helper: 'Exportar datos' },
+] as const;
+
+type FinanceSectionId = typeof FINANCE_SECTIONS[number]['id'];
+
+function FinanceInternalNav({
+  active,
+  onChange,
+}: {
+  active: FinanceSectionId;
+  onChange: (section: FinanceSectionId) => void;
+}) {
+  return (
+    <nav className="sticky top-0 z-20 -mx-2 rounded-b-[2rem] bg-[#f7f7f4]/95 px-2 pb-3 pt-2 backdrop-blur">
+      <div className="flex flex-wrap gap-2 rounded-[1.75rem] border border-neutral-200 bg-white p-2 shadow-sm">
+        {FINANCE_SECTIONS.map(section => {
+          const isActive = active === section.id;
+          return (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => onChange(section.id)}
+              className={`rounded-2xl px-4 py-3 text-left transition-all ${
+                isActive
+                  ? 'bg-neutral-950 text-white shadow-sm'
+                  : 'bg-white text-neutral-500 hover:bg-neutral-50 hover:text-neutral-950'
+              }`}
+            >
+              <span className="block text-xs font-black uppercase tracking-widest">{section.label}</span>
+              <span className={`mt-1 block text-[10px] font-bold ${isActive ? 'text-neutral-300' : 'text-neutral-400'}`}>
+                {section.helper}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 function buildMonthlyAccountUsage(finances: any[], accounts: any[], month?: string, currency = 'ARS'): MonthlyAccountUsage | null {
   if (!month) return null;
 
@@ -2028,6 +2076,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [filterAccount, setFilterAccount] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
+  const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionId>('summary');
   const [showPendingImportDetails, setShowPendingImportDetails] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -3607,47 +3656,70 @@ export default function FinanceTracker({ user }: { user: any }) {
           <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Finanzas</h2>
           <p className="text-neutral-500 font-medium">Entende donde esta tu plata y si tus gastos sostienen la vida que queres construir.</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleExportFinanceBackup}
-            className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
-          >
-            <Download size={18} />
-            Backup
-          </button>
-          <button
-            type="button"
-            onClick={handleExportFinanceCsv}
-            className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
-          >
-            <FileText size={18} />
-            CSV
-          </button>
-          <button
-            onClick={() => setIsAddingAccount(true)}
-            className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
-          >
-            <Plus size={18} />
-            Nueva cuenta
-          </button>
-          <button
-            onClick={runAnalysis}
-            disabled={isAnalyzing}
-            className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200 disabled:opacity-50"
-          >
-            {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
-            Analizar finanzas
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {activeFinanceSection === 'accounts' && (
+            <button
+              onClick={() => setIsAddingAccount(true)}
+              className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
+            >
+              <Plus size={18} />
+              Nueva cuenta
+            </button>
+          )}
+          {activeFinanceSection === 'reports' && (
+            <button
+              onClick={runAnalysis}
+              disabled={isAnalyzing}
+              className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200 disabled:opacity-50"
+            >
+              {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
+              Analizar finanzas
+            </button>
+          )}
         </div>
       </header>
 
-      {backupStatus && (
-        <div className="rounded-3xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-900">
-          {backupStatus}
-        </div>
+      <FinanceInternalNav active={activeFinanceSection} onChange={setActiveFinanceSection} />
+
+      {activeFinanceSection === 'backup' && (
+        <section className="rounded-[2rem] border border-neutral-100 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Backup</p>
+              <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Exportar datos financieros</h3>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-neutral-500">
+                Descarga una copia completa antes de importaciones grandes, resets o pruebas reales.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleExportFinanceBackup}
+                className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-5 py-3 text-sm font-black text-neutral-900 shadow-sm transition-all hover:bg-neutral-50"
+              >
+                <Download size={18} />
+                Backup JSON
+              </button>
+              <button
+                type="button"
+                onClick={handleExportFinanceCsv}
+                className="flex items-center gap-2 rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-neutral-800"
+              >
+                <FileText size={18} />
+                Exportar CSV
+              </button>
+            </div>
+          </div>
+          {backupStatus && (
+            <div className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-900">
+              {backupStatus}
+            </div>
+          )}
+        </section>
       )}
 
+      {activeFinanceSection === 'summary' && (
+        <>
       {showCatchupPrompt && (
         <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -3690,7 +3762,10 @@ export default function FinanceTracker({ user }: { user: any }) {
       />
 
       <InstallmentForecastPanel forecast={installmentForecast} />
+        </>
+      )}
 
+      {activeFinanceSection === 'accounts' && (
       <AccountReconciliationOverview
         accounts={userAccounts}
         accountActivityById={accountActivityById}
@@ -3700,9 +3775,13 @@ export default function FinanceTracker({ user }: { user: any }) {
           setFilterAccount(accountId);
           setFilterDateRange('all');
           setSearchQuery('');
+          setActiveFinanceSection('movements');
         }}
       />
+      )}
 
+      {activeFinanceSection === 'review' && (
+        <>
       <AccountReconciliationPanel
         items={accountReconciliationQueue}
         onEditAccount={startEditingAccount}
@@ -3715,12 +3794,17 @@ export default function FinanceTracker({ user }: { user: any }) {
         onApplyBalance={handleApplyMissingBalance}
         onSaveDetails={handleSaveAuditMovementDetails}
       />
+        </>
+      )}
 
+      {activeFinanceSection === 'reports' && (
       <FinancialInsightsPanel
         insights={financialInsights}
         onMarkRecurringAsFixed={handleMarkRecurringAsFixed}
       />
+      )}
 
+      {activeFinanceSection === 'categories' && (
       <CategoryLearningGroupsPanel
         groups={categoryLearningGroups}
         categories={userCategories}
@@ -3728,6 +3812,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         clarityStats={categoryClarityStats}
         onApply={handleApplyCategoryToGroup}
       />
+      )}
 
       <AnimatePresence>
         {showCatchupWizard && (
@@ -3886,6 +3971,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         )}
       </AnimatePresence>
 
+      {activeFinanceSection === 'accounts' && (
+      <>
       {/* Wallets Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {(userAccounts || []).map(acc => {
@@ -4001,6 +4088,8 @@ export default function FinanceTracker({ user }: { user: any }) {
           <span className="text-sm font-bold">Nueva cuenta</span>
         </button>
       </div>
+      </>
+      )}
 
       <AnimatePresence>
         {isAddingAccount && (
@@ -4213,7 +4302,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         )}
       </AnimatePresence>
 
-      {analysisResult && (
+      {activeFinanceSection === 'reports' && analysisResult && (
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -4240,6 +4329,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         </motion.div>
       )}
 
+      {activeFinanceSection === 'categories' && (
+      <>
       <div className="rounded-[2rem] border border-neutral-100 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -4298,8 +4389,10 @@ export default function FinanceTracker({ user }: { user: any }) {
         onUpdate={handleUpdateLearningMapping}
         onDelete={handleDeleteLearningMapping}
       />
+      </>
+      )}
 
-      {lastImportResult && (
+      {activeFinanceSection === 'import' && lastImportResult && (
         <div className="rounded-[2rem] border border-emerald-100 bg-emerald-50 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -4348,6 +4441,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       )}
 
       {/* Pending Transactions Review Section */}
+      {activeFinanceSection === 'import' && (
       <AnimatePresence>
         {pendingTransactions.length > 0 && (
           <motion.div
@@ -4654,8 +4748,9 @@ export default function FinanceTracker({ user }: { user: any }) {
           </motion.div>
         )}
       </AnimatePresence>
+      )}
 
-      {reviewFinances.length > 0 && (
+      {activeFinanceSection === 'review' && reviewFinances.length > 0 && (
         <section className="bg-white border border-amber-100 rounded-[2rem] p-6 shadow-sm space-y-5">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
@@ -4734,10 +4829,12 @@ export default function FinanceTracker({ user }: { user: any }) {
         </section>
       )}
 
+      {(activeFinanceSection === 'summary' || activeFinanceSection === 'movements' || activeFinanceSection === 'import') && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Input & Stats */}
-        <div className="lg:col-span-1 space-y-6">
+        <div className={`${activeFinanceSection === 'import' ? 'lg:col-span-3' : 'lg:col-span-1'} space-y-6`}>
           {/* Balance Card */}
+          {activeFinanceSection === 'summary' && (
           <div className="bg-neutral-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               <div>
@@ -4784,8 +4881,10 @@ export default function FinanceTracker({ user }: { user: any }) {
               <Wallet size={100} />
             </div>
           </div>
+          )}
 
           {/* Manual Entry */}
+          {activeFinanceSection === 'movements' && (
           <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <Plus size={18} className="text-neutral-400" />
@@ -5060,8 +5159,10 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
             </form>
           </div>
+          )}
 
           {/* PDF Upload */}
+          {activeFinanceSection === 'import' && (
           <div 
             {...getRootProps()} 
             className={`p-8 rounded-[2rem] border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-4 ${
@@ -5089,9 +5190,11 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* List Section */}
+        {activeFinanceSection === 'movements' && (
         <div id="finance-movement-list" className="lg:col-span-2 scroll-mt-6 space-y-6">
           <div className="flex items-center gap-4 border-b border-neutral-200 pb-px">
             <button 
@@ -5650,7 +5753,9 @@ export default function FinanceTracker({ user }: { user: any }) {
             )}
           </div>
         </div>
+        )}
       </div>
+      )}
     </div>
   );
 }
