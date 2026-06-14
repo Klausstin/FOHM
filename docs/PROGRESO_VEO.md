@@ -45,7 +45,7 @@ Siguiente: [proximo paso]
 | Registro manual y desde Luz | Implementando | 86% | Guardado de ediciones mas robusto; falta prueba real completa despues de desplegar reglas. |
 | Importador BBVA / Visa / CSV | Implementando | 86% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
 | Reconciliacion de resumenes | Implementando | 86% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, aplicar saldos pendientes, evitar duplicados y resolver pendientes en lote. |
-| Categorias financieras | Implementando | 85% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria visible, aprendizajes desactivables y grupos similares mas confiables. |
+| Categorias financieras | Implementando | 88% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria auditable, aprendizajes editables/desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 69% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y menos paneles redundantes. |
@@ -88,6 +88,7 @@ Siguiente: [proximo paso]
 | Agregar acciones masivas de revision financiera | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Mostrar memoria financiera activa | Validando | 85% | `src/components/FinanceTracker.tsx` |
 | Desactivar aprendizajes financieros incorrectos | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.learning.ts`, `firestore.rules` |
+| Auditar y editar memoria financiera | Validando | 90% | `src/components/FinanceTracker.tsx`, `firestore.rules` |
 | Definir estrategia de automatizacion financiera post-MVP | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md` |
 | Separar APIs del alcance MVP Finanzas | Listo | 100% | `docs/FINANCE_AUTOMATION_STRATEGY.md`, `docs/PROGRESO_VEO.md` |
 | Mejorar lenguaje y filtros de economia familiar | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
