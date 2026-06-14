@@ -2166,6 +2166,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         const balanceWasReconciled = Math.abs(previousBalance - nextBalance) >= 0.01;
         const accountPatch = {
           ...buildChangedAccountPatch(accountPayload, editingAccount),
+          ...(!editingAccount.uid ? { uid: user.uid } : {}),
+          ...(!editingAccount.householdId ? { householdId: user.householdId } : {}),
           ...(balanceWasReconciled ? { lastReconciledAt: new Date() } : {}),
         };
 
