@@ -506,7 +506,14 @@ function findSuggestedSourceAccount(transaction: any, accounts: any[]) {
 }
 
 function findSuggestedDestinationAccount(transaction: any, accounts: any[]) {
-  const text = normalizeDuplicateText(`${transaction.description || ''} ${transaction.subCategory || ''}`);
+  const text = normalizeDuplicateText([
+    transaction.description,
+    transaction.originalDescription,
+    transaction.subCategory,
+    transaction.sourceLine,
+    transaction.transferDetail,
+    transaction.note,
+  ].filter(Boolean).join(' '));
   if (transaction.type === 'transfer' && (text.includes('visa') || text.includes('master') || text.includes('mastercard') || text.includes('mc'))) {
     return findCreditCardAccountByText(accounts, text)?.id || '';
   }
@@ -3087,7 +3094,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const handleApplyMissingBalance = async (finance: any) => {
     try {
       const currentSourceAccountId = finance.sourceAccountId || finance.accountId || '';
-      const currentDestinationAccountId = finance.toAccountId || '';
+      const currentDestinationAccountId = finance.toAccountId || findSuggestedDestinationAccount(finance, userAccounts) || '';
       const hasSourceAccount = userAccounts.some(account => account.id === currentSourceAccountId);
       const hasDestinationAccount = !currentDestinationAccountId || userAccounts.some(account => account.id === currentDestinationAccountId);
       const sourceMatch = hasSourceAccount
@@ -3128,6 +3135,12 @@ export default function FinanceTracker({ user }: { user: any }) {
         accountId: resolvedSourceAccountId,
         sourceAccountId: resolvedSourceAccountId,
         toAccountId: resolvedDestinationAccountId,
+        type: resolvedDestinationAccountId ? 'transfer' : finance.type || 'expense',
+        kind: resolvedDestinationAccountId ? 'neutral' : finance.kind,
+        neutralType: resolvedDestinationAccountId
+          ? (isCreditCardPaymentCategory(finance.category, finance.subCategory) ? 'credit_card_payment' : 'internal_transfer')
+          : finance.neutralType,
+        paymentType: resolvedDestinationAccountId ? 'Transferencia' : finance.paymentType || '',
         accountBalanceApplied: balanceApplied,
         needsReview: balanceApplied ? false : finance.needsReview,
         paymentStatus: balanceApplied ? 'Contabilizado' : finance.paymentStatus,
@@ -6772,7 +6785,7 @@ function BalanceIntegrityPanel({
       category: finance.category || '',
       subCategory: finance.subCategory || '',
       accountId: finance.sourceAccountId || finance.accountId || '',
-      toAccountId: finance.toAccountId || '',
+      toAccountId: finance.toAccountId || findSuggestedDestinationAccount(finance, accounts) || '',
       date: format(date, 'yyyy-MM-dd'),
     });
   };

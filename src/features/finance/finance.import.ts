@@ -670,13 +670,22 @@ function suggestMovementClassification(description: string, signedAmount: number
     };
   }
 
-  if (normalized.includes('cuenta visa') || normalized.includes('pago de servicios tarjeta')) {
+  if (
+    normalized.includes('cuenta visa') ||
+    normalized.includes('cuenta master') ||
+    normalized.includes('cuenta mastercard') ||
+    normalized.includes('pago de servicios tarjeta') ||
+    normalized.includes('pago tarjeta') ||
+    normalized.includes('pago visa') ||
+    normalized.includes('pago mastercard') ||
+    normalized.includes('pago master')
+  ) {
     return {
       type: 'transfer' as const,
       category: 'Movimientos neutros',
       subCategory: 'Pago tarjeta credito',
       isFixed: false,
-      confidence: 0.75,
+      confidence: 0.9,
       needsReview: true,
       canUseMerchantCategory: false,
     };
