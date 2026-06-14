@@ -41,7 +41,7 @@ Siguiente: [proximo paso]
 
 | Bloque | Estado | Avance estimado | Proximo paso |
 | --- | --- | ---: | --- |
-| Modelo de cuentas y tarjetas | Implementando | 94% | Saldos, deuda de tarjeta, pagos de tarjeta con cuenta destino, inferencia Visa/MC desde resumen, reversas seguras y smoke test local cubren el flujo critico; falta validacion real con datos de Agustin/Vicky. |
+| Modelo de cuentas y tarjetas | Implementando | 95% | Saldos, deuda de tarjeta, pagos de tarjeta con cuenta destino, inferencia Visa/MC desde resumen, edicion confiable de cuentas, reversas seguras y smoke test local cubren el flujo critico; falta validacion real con datos de Agustin/Vicky. |
 | Registro manual y desde Luz | Implementando | 86% | Guardado de ediciones mas robusto; falta prueba real completa despues de desplegar reglas. |
 | Importador BBVA / Visa / CSV | Implementando | 86% | Seguir validando PDFs reales, CSV beta y procesamiento interno de historial Wallet sin impacto automatico en saldos. |
 | Reconciliacion de resumenes | Implementando | 86% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, aplicar saldos pendientes, evitar duplicados y resolver pendientes en lote. |
@@ -70,6 +70,7 @@ Siguiente: [proximo paso]
 | Simplificar revision financiera diaria | Validando | 80% | `src/components/FinanceTracker.tsx` |
 | Editar cuenta destino en pagos de tarjeta | Validando | 90% | `src/components/FinanceTracker.tsx` |
 | Inferir tarjeta destino en pagos de resumen | Validando | 90% | `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |
+| Guardar edicion de cuentas con feedback claro | Validando | 95% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `firestore.rules` |
 | Guardar ediciones de movimientos importados | Validando | 95% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `firestore.rules` |
 | Permitir metadatos bancarios importados en Firestore | Validando | 95% | `firestore.rules` |
 | Importar CSV como borradores revisables | Validando | 85% | `package.json`, `package-lock.json`, `src/features/finance/finance.import.ts`, `src/components/FinanceTracker.tsx` |

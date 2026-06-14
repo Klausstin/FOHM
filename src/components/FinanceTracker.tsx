@@ -1521,6 +1521,68 @@ function buildAccountPayload(draft: any) {
   };
 }
 
+function buildAccountDraftFromRecord(account: any) {
+  return {
+    name: account.name || '',
+    currency: account.currency || 'ARS',
+    balance: Number(account.balance || 0),
+    color: account.color || '#3B82F6',
+    type: account.type || 'bank',
+    institution: account.institution || '',
+    accountNumberLast4: account.accountNumberLast4 || '',
+    statementLabel: account.statementLabel || '',
+    alias: account.alias || '',
+    closingDay: account.closingDay || '',
+    dueDay: account.dueDay || '',
+    creditLimit: account.creditLimit || '',
+    notes: account.notes || '',
+  };
+}
+
+function normalizeAccountPayloadForCompare(payload: Record<string, any>) {
+  const keys = [
+    'name',
+    'currency',
+    'balance',
+    'color',
+    'type',
+    'institution',
+    'accountNumberLast4',
+    'statementLabel',
+    'alias',
+    'closingDay',
+    'dueDay',
+    'creditLimit',
+    'notes',
+  ];
+
+  return keys.reduce<Record<string, any>>((acc, key) => {
+    const value = payload[key];
+    acc[key] = value === undefined || value === null ? '' : value;
+    return acc;
+  }, {});
+}
+
+function accountPayloadHasChanges(nextPayload: Record<string, any>, currentAccount: any) {
+  return JSON.stringify(normalizeAccountPayloadForCompare(nextPayload)) !==
+    JSON.stringify(normalizeAccountPayloadForCompare(buildAccountPayload(buildAccountDraftFromRecord(currentAccount))));
+}
+
+function hasAccountDraftUserInput(draft: any) {
+  return Boolean(
+    String(draft.name || '').trim() ||
+    Number(draft.balance || 0) !== 0 ||
+    String(draft.institution || '').trim() ||
+    String(draft.accountNumberLast4 || '').trim() ||
+    String(draft.statementLabel || '').trim() ||
+    String(draft.alias || '').trim() ||
+    String(draft.closingDay || '').trim() ||
+    String(draft.dueDay || '').trim() ||
+    String(draft.creditLimit || '').trim() ||
+    String(draft.notes || '').trim()
+  );
+}
+
 function buildBalanceAdjustmentNote(accountName: string, previousBalance: number, nextBalance: number, currency: string) {
   const difference = nextBalance - previousBalance;
   return [
@@ -1886,6 +1948,8 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [isAddingAccount, setIsAddingAccount] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any | null>(null);
   const [newAccount, setNewAccount] = useState(createEmptyAccountDraft());
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
+  const [accountFeedback, setAccountFeedback] = useState<{ tone: 'ok' | 'warn' | 'error'; message: string } | null>(null);
   const [householdMembers, setHouseholdMembers] = useState<any[]>([]);
   const uniqueHouseholdMembers = useMemo(() => {
     const byIdentity = new Map<string, any>();
@@ -2003,6 +2067,21 @@ export default function FinanceTracker({ user }: { user: any }) {
   }, []);
 
   useEffect(() => {
+    if (!accountFeedback) return;
+
+    if (editingAccount) {
+      if (accountPayloadHasChanges(buildAccountPayload(newAccount), editingAccount)) {
+        setAccountFeedback(null);
+      }
+      return;
+    }
+
+    if (hasAccountDraftUserInput(newAccount)) {
+      setAccountFeedback(null);
+    }
+  }, [accountFeedback, editingAccount, newAccount]);
+
+  useEffect(() => {
     const unsubscribe = subscribeToHouseholdFinancialTransactions(user.householdId, (data) => {
       setFinances(data);
       setShowCatchupPrompt(shouldSuggestFinanceCatchup(data));
@@ -2060,9 +2139,18 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const handleAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingAccount) return;
+
+    setAccountFeedback(null);
     try {
       const accountPayload = buildAccountPayload(newAccount);
       if (editingAccount) {
+        if (!accountPayloadHasChanges(accountPayload, editingAccount)) {
+          setAccountFeedback({ tone: 'warn', message: 'No hubo cambios para guardar.' });
+          return;
+        }
+
+        setIsSavingAccount(true);
         const previousBalance = Number(editingAccount.balance || 0);
         const nextBalance = Number(accountPayload.balance || 0);
         const balanceWasReconciled = Math.abs(previousBalance - nextBalance) >= 0.01;
@@ -2094,19 +2182,32 @@ export default function FinanceTracker({ user }: { user: any }) {
             paymentStatus: 'Contabilizado',
           });
         }
+        const updatedAccount = {
+          ...editingAccount,
+          ...accountPayload,
+          ...(balanceWasReconciled ? { lastReconciledAt: new Date() } : {}),
+        };
+        setEditingAccount(updatedAccount);
+        setNewAccount(buildAccountDraftFromRecord(updatedAccount));
+        setUserAccounts(prev => prev.map(account => account.id === editingAccount.id ? updatedAccount : account));
+        setAccountFeedback({ tone: 'ok', message: 'Cuenta actualizada.' });
       } else {
+        setIsSavingAccount(true);
         await createFinancialAccount({
           ...accountPayload,
           uid: user.uid,
           householdId: user.householdId,
           lastReconciledAt: new Date(),
         });
+        setAccountFeedback({ tone: 'ok', message: 'Cuenta creada.' });
+        setNewAccount(createEmptyAccountDraft());
       }
-      setIsAddingAccount(false);
-      setEditingAccount(null);
-      setNewAccount(createEmptyAccountDraft());
     } catch (error) {
+      console.error('No se pudo guardar la cuenta', error);
+      setAccountFeedback({ tone: 'error', message: 'No se pudo guardar la cuenta. Revisá conexión/permisos y probá de nuevo.' });
       handleFirestoreError(error, editingAccount ? OperationType.UPDATE : OperationType.CREATE, 'accounts');
+    } finally {
+      setIsSavingAccount(false);
     }
   };
 
@@ -2172,21 +2273,8 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const startEditingAccount = (acc: any) => {
     setEditingAccount(acc);
-    setNewAccount({
-      name: acc.name || '',
-      currency: acc.currency || 'ARS',
-      balance: Number(acc.balance || 0),
-      color: acc.color || '#3B82F6',
-      type: acc.type || 'bank',
-      institution: acc.institution || '',
-      accountNumberLast4: acc.accountNumberLast4 || '',
-      statementLabel: acc.statementLabel || '',
-      alias: acc.alias || '',
-      closingDay: acc.closingDay || '',
-      dueDay: acc.dueDay || '',
-      creditLimit: acc.creditLimit || '',
-      notes: acc.notes || '',
-    });
+    setNewAccount(buildAccountDraftFromRecord(acc));
+    setAccountFeedback(null);
     setIsAddingAccount(true);
   };
 
@@ -3862,6 +3950,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           onClick={() => {
             setEditingAccount(null);
             setNewAccount(createEmptyAccountDraft());
+            setAccountFeedback(null);
             setIsAddingAccount(true);
           }}
           className="border-2 border-dashed border-neutral-200 rounded-3xl flex flex-col items-center justify-center gap-2 text-neutral-400 hover:border-neutral-400 hover:text-neutral-500 transition-all min-h-[160px] bg-white group"
@@ -3890,7 +3979,15 @@ export default function FinanceTracker({ user }: { user: any }) {
                 <h3 className="text-2xl font-black text-neutral-900">
                   {editingAccount ? 'Editar cuenta' : 'Nueva cuenta'}
                 </h3>
-                <button onClick={() => setIsAddingAccount(false)} className="text-neutral-400 hover:text-neutral-900">
+                <button
+                  onClick={() => {
+                    setIsAddingAccount(false);
+                    setEditingAccount(null);
+                    setNewAccount(createEmptyAccountDraft());
+                    setAccountFeedback(null);
+                  }}
+                  className="text-neutral-400 hover:text-neutral-900"
+                >
                   <X size={24} />
                 </button>
               </div>
@@ -4048,11 +4145,27 @@ export default function FinanceTracker({ user }: { user: any }) {
                     placeholder="Algo que ayude a reconocer esta cuenta despues."
                   />
                 </div>
+                {accountFeedback && (
+                  <p className={`rounded-2xl px-4 py-3 text-sm font-bold ${
+                    accountFeedback.tone === 'ok'
+                      ? 'bg-emerald-50 text-emerald-800'
+                      : accountFeedback.tone === 'warn'
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'bg-red-50 text-red-700'
+                  }`}>
+                    {accountFeedback.message}
+                  </p>
+                )}
                 <button
                   type="submit"
-                  className="w-full bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg"
+                  disabled={isSavingAccount}
+                  className="w-full bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg disabled:cursor-not-allowed disabled:bg-neutral-400"
                 >
-                  {editingAccount ? 'Guardar Cambios' : 'Crear cuenta'}
+                  {isSavingAccount
+                    ? 'Guardando...'
+                    : accountFeedback?.tone === 'ok'
+                      ? 'Guardado'
+                      : editingAccount ? 'Guardar Cambios' : 'Crear cuenta'}
                 </button>
               </form>
             </motion.div>
