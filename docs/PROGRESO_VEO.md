@@ -48,7 +48,7 @@ Siguiente: [proximo paso]
 | Categorias financieras | Implementando | 88% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria auditable, aprendizajes editables/desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
-| Reportes y dashboard financiero | Implementando | 69% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y menos paneles redundantes. |
+| Reportes y dashboard financiero | Implementando | 72% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y menos paneles redundantes; Finanzas ya empieza a separarse en secciones internas desktop-first. |
 | Backup y seguridad de datos | Implementando | 94% | Export JSON, CSV legible, validador local, protocolo de prueba real y playbook de recuperacion listos; falta ejecutar prueba real antes de carga masiva. |
 | Reset seguro de datos financieros de prueba | Implementando | 80% | Script con dry-run, backup previo, confirmacion explicita y preservacion de cuentas/categorias listo para validar. |
 | Integraciones financieras automaticas | Post-MVP | No computa MVP | Mercado Pago API, BBVA API o agregadores quedan para despues de cerrar Finanzas 100% usable. |
@@ -112,6 +112,7 @@ Siguiente: [proximo paso]
 | Editar movimientos desde auditoria financiera | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.merchants.ts`, `docs/PROGRESO_VEO.md` |
 | Limpiar tarjeta de auditoria y feedback de aplicar saldo | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar feedback visible al guardar movimientos editados | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Organizar Finanzas con navegacion interna desktop-first | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
