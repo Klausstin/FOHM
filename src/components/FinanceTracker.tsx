@@ -5628,7 +5628,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           </div>
 
           <div className="space-y-3">
-            <div className="hidden px-4 text-[10px] font-black uppercase tracking-widest text-neutral-400 xl:grid xl:grid-cols-[96px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:gap-4">
+            <div className="hidden px-4 text-[10px] font-black uppercase tracking-widest text-neutral-400 xl:grid xl:grid-cols-[140px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:gap-4">
               <span>Fecha</span>
               <span>Categoria</span>
               <span>Cuenta</span>
@@ -5949,7 +5949,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </div>
                     ) : (
                       <>
-                        <div className="grid grid-cols-1 gap-3 px-4 py-3 xl:grid-cols-[96px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:items-center xl:gap-4">
+                        <div className="grid grid-cols-1 gap-3 px-4 py-3 xl:grid-cols-[140px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:items-center xl:gap-4">
                           <div className="flex items-center gap-3">
                             <div className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${typeInfo?.bg}`}>
                               {(() => {
@@ -5962,8 +5962,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="text-xs font-black text-neutral-900">{format(f.date.toDate(), 'dd/MM/yyyy')}</p>
-                              <p className="text-[10px] font-bold text-neutral-400">{format(f.date.toDate(), 'HH:mm')}</p>
+                              <p className="whitespace-nowrap text-xs font-black text-neutral-900">{format(f.date.toDate(), 'dd/MM/yyyy')}</p>
+                              <p className="whitespace-nowrap text-[10px] font-bold text-neutral-400">{format(f.date.toDate(), 'HH:mm')}</p>
                             </div>
                           </div>
 
