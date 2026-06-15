@@ -193,10 +193,13 @@ async function adjustAccountBalance(accountId: string, input: BalanceAffectingTr
 
   const currentBalance = Number(accountSnap.data().balance || 0);
   const transactionType = getBalanceTransactionType(input);
+  const balanceAmount = direction === 'destination' && transactionType === 'transfer' && Number.isFinite(Number(input.settlementAmount))
+    ? Number(input.settlementAmount)
+    : Number(input.amount || 0);
   const delta = getAccountBalanceDelta({
     accountType: accountSnap.data().type,
     transactionType,
-    amount: Number(input.amount || 0),
+    amount: balanceAmount,
     direction,
   });
 

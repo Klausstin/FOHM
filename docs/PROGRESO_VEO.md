@@ -114,6 +114,7 @@ Siguiente: [proximo paso]
 | Agregar feedback visible al guardar movimientos editados | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Organizar Finanzas con navegacion interna desktop-first | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Simplificar formulario manual sin campo comercio | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Simplificar transferencias internas con cambio de moneda | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 

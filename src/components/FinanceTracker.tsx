@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, collection, addDoc, query, where, orderBy, onSnapshot, handleFirestoreError, OperationType, doc, updateDoc, getDocs, getDoc, deleteDoc } from '../firebase.ts';
 import { User } from 'firebase/auth';
-import { 
+import {
   Wallet, Plus, FileText, TrendingUp, TrendingDown, PieChart, Upload, Trash2, Filter, Sparkles, AlertCircle, Check, X, Edit2, Save, Banknote, CreditCard, Briefcase, Download,
   Utensils, ShoppingBag, Home, Bus, Car, Monitor, Coins, List, User as UserIcon, Tag, ChevronRight, ChevronDown, Calendar, ArrowUpRight, ArrowDownLeft, ArrowLeftRight
 } from 'lucide-react';
@@ -1982,6 +1982,8 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [type, setType] = useState('expense');
   const [accountId, setAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
+  const [settlementAmount, setSettlementAmount] = useState('');
+  const [fxRate, setFxRate] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
@@ -2061,7 +2063,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [walletMemoryStatus, setWalletMemoryStatus] = useState('');
   const [backupStatus, setBackupStatus] = useState('');
   const [isApplyingWalletMemory, setIsApplyingWalletMemory] = useState(false);
-  
+
   // Filtering states
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, day, month, quarter, year, custom
   const [customStartDate, setCustomStartDate] = useState('');
@@ -2113,6 +2115,59 @@ export default function FinanceTracker({ user }: { user: any }) {
     () => buildAccountActivityById(userAccounts, finances, pendingTransactions),
     [userAccounts, finances, pendingTransactions],
   );
+  const transferSourceAccount = useMemo(
+    () => userAccounts.find(account => account.id === accountId),
+    [userAccounts, accountId],
+  );
+  const transferDestinationAccount = useMemo(
+    () => userAccounts.find(account => account.id === toAccountId),
+    [userAccounts, toAccountId],
+  );
+  const transferSourceCurrency = transferSourceAccount?.currency || currency;
+  const transferDestinationCurrency = transferDestinationAccount?.currency || currency;
+  const transferHasCurrencyExchange = type === 'transfer' && Boolean(toAccountId) && transferSourceCurrency !== transferDestinationCurrency;
+
+  useEffect(() => {
+    if (type !== 'transfer') return;
+
+    if (!toAccountId || !transferHasCurrencyExchange) {
+      setSettlementAmount(amount || '');
+      setFxRate('');
+      return;
+    }
+
+    const sourceAmount = Number(amount);
+    const currentFxRate = Number(fxRate);
+    const currentSettlementAmount = Number(settlementAmount);
+
+    if (Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(currentFxRate) && currentFxRate > 0) {
+      setSettlementAmount(String(Number((sourceAmount * currentFxRate).toFixed(2))));
+    } else if (Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(currentSettlementAmount) && currentSettlementAmount > 0) {
+      setFxRate(String(Number((currentSettlementAmount / sourceAmount).toFixed(6))));
+    }
+  }, [amount, currency, fxRate, settlementAmount, toAccountId, transferHasCurrencyExchange, type]);
+
+  const handleFinanceTypeChange = (nextType: string) => {
+    setType(nextType);
+    if (nextType === 'transfer') {
+      setCategory('Movimientos neutros');
+      setSubCategoria('Transferencia interna');
+      setPaymentType('Transferencia');
+      setBeneficiaryType('household');
+      setBeneficiaryLabel('Hogar');
+      setScope('familia');
+      setSettlementAmount(amount || '');
+      setFxRate('');
+    } else {
+      setToAccountId('');
+      setSettlementAmount('');
+      setFxRate('');
+      if (category === 'Movimientos neutros' && subCategory === 'Transferencia interna') {
+        setCategory('');
+        setSubCategoria('');
+      }
+    }
+  };
 
   useEffect(() => {
     const cachedInflation = getCachedArgentinaInflationSnapshot();
@@ -2345,26 +2400,33 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   const handleSubmit = async (e?: React.FormEvent, keepFields = false) => {
     e?.preventDefault();
-    if (!amount || !category) return;
+    if (!amount || (type !== 'transfer' && !category) || (type === 'transfer' && (!accountId || !toAccountId))) return;
 
     try {
-      const manualDescription = description || note || [category, subCategory].filter(Boolean).join(' / ');
+      const isInternalTransfer = type === 'transfer';
+      const parsedAmount = Number.parseFloat(amount);
+      const parsedSettlementAmount = Number.parseFloat(settlementAmount || amount);
+      const parsedFxRate = Number.parseFloat(fxRate);
+      const transferDestinationCurrencyForSave = transferDestinationAccount?.currency || currency;
+      const manualDescription = description || note || (isInternalTransfer ? 'Transferencia interna' : [category, subCategory].filter(Boolean).join(' / '));
       const transactionInput: CreateFinancialTransactionInput = {
         uid: user.uid,
         householdId: user.householdId,
-        amount: parseFloat(amount),
+        amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
         currency,
         description: manualDescription,
         note,
-        category,
-        subCategory,
-        subSubCategory,
+        category: isInternalTransfer ? 'Movimientos neutros' : category,
+        subCategory: isInternalTransfer ? 'Transferencia interna' : subCategory,
+        subSubCategory: isInternalTransfer ? '' : subSubCategory,
         type,
+        kind: isInternalTransfer ? 'neutral' : undefined,
+        neutralType: isInternalTransfer ? 'internal_transfer' : undefined,
         accountId,
         sourceAccountId: accountId,
-        toAccountId,
-        tags,
-        isFixed,
+        toAccountId: isInternalTransfer ? toAccountId : '',
+        tags: isInternalTransfer ? [] : tags,
+        isFixed: isInternalTransfer ? false : isFixed,
         date: new Date(date),
         source: 'manual',
         confidence: 'exact',
@@ -2377,13 +2439,24 @@ export default function FinanceTracker({ user }: { user: any }) {
         generatedBy: generatedBy || user.uid,
         assignedTo: assignedTo || user.uid,
         payer,
-        beneficiaryType: beneficiaryType as any,
-        beneficiaryLabel,
-        scope: scope as any,
+        beneficiaryType: isInternalTransfer ? 'household' : beneficiaryType as any,
+        beneficiaryLabel: isInternalTransfer ? 'Hogar' : beneficiaryLabel,
+        scope: isInternalTransfer ? 'familia' : scope as any,
         visibility: 'household_shared',
-        paymentType,
+        paymentType: isInternalTransfer ? 'Transferencia' : paymentType,
         paymentStatus
       };
+      if (isInternalTransfer) {
+        transactionInput.originalAmount = Number.isFinite(parsedAmount) ? parsedAmount : undefined;
+        transactionInput.originalCurrency = currency;
+        transactionInput.settlementAmount = Number.isFinite(parsedSettlementAmount)
+          ? parsedSettlementAmount
+          : Number.isFinite(parsedAmount) ? parsedAmount : undefined;
+        transactionInput.settlementCurrency = transferDestinationCurrencyForSave;
+        if (currency !== transferDestinationCurrencyForSave && Number.isFinite(parsedFxRate) && parsedFxRate > 0) {
+          transactionInput.fxRate = parsedFxRate;
+        }
+      }
 
       const transactionRef = await createFinancialTransaction(transactionInput);
       const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
@@ -2394,7 +2467,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       setDescription('');
       setNote('');
       setTags([]);
-      
+
       if (!keepFields) {
         setCurrency('ARS');
         setCategory('');
@@ -2402,6 +2475,8 @@ export default function FinanceTracker({ user }: { user: any }) {
         setSubSubCategoria('');
         setAccountId('');
         setToAccountId('');
+        setSettlementAmount('');
+        setFxRate('');
         setDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
         setIsFijo(false);
         setPayer('');
@@ -2426,7 +2501,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           const typedarray = new Uint8Array(reader.result as ArrayBuffer);
           const pdf = await pdfjsLib.getDocument(typedarray).promise;
           let fullText = '';
-          
+
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
@@ -2469,7 +2544,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           }
 
           const transactions = await categorizeFinanceFromText(fullText, userMappings);
-          
+
           if (!Array.isArray(transactions)) {
             throw new Error("La IA no devolvió una lista de transacciones válida.");
           }
@@ -2579,8 +2654,8 @@ export default function FinanceTracker({ user }: { user: any }) {
     }
   }, [user.uid, userMappings, userAccounts, finances]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
-    onDrop, 
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
     accept: {
       'application/pdf': ['.pdf'],
       'text/csv': ['.csv'],
@@ -2917,46 +2992,77 @@ export default function FinanceTracker({ user }: { user: any }) {
     setEditFeedback(prev => ({ ...prev, [currentEditingId]: { tone: 'ok', message: 'Guardando cambios...' } }));
     try {
       const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, originalAccountId, originalSourceAccountId, originalToAccountId, originalPaymentType, originalBeneficiaryLabel, originalScope, merchantName, merchantKey } = editForm;
+      if (type === 'transfer' && (!(accountId || sourceAccountId) || !toAccountId)) {
+        setEditFeedback(prev => ({
+          ...prev,
+          [currentEditingId]: {
+            tone: 'error',
+            message: 'Para guardar una transferencia interna necesito cuenta origen y cuenta destino.',
+          },
+        }));
+        return;
+      }
+
       const existingTransaction = finances.find(finance => finance.id === editingId);
       if (existingTransaction?.accountBalanceApplied) {
         await reverseTransactionFromAccountBalances(existingTransaction);
         await updateFinancialTransaction(editingId, { accountBalanceApplied: false } as any);
       }
 
+      const isInternalTransfer = type === 'transfer';
       const updatedStatus = paymentStatus === 'Pendiente' ? 'pending' : paymentStatus === 'Anulado' ? 'ignored' : editForm.status || 'posted';
       const parsedAmount = Number.parseFloat(amount);
+      const parsedSettlementAmount = Number.parseFloat(editForm.settlementAmount || amount);
+      const parsedFxRate = Number.parseFloat(editForm.fxRate);
       const parsedDate = date ? new Date(date) : new Date();
       const resolvedAccountId = accountId || sourceAccountId || '';
       const resolvedSourceAccountId = sourceAccountId || accountId || '';
+      const editDestinationAccount = userAccounts.find(account => account.id === toAccountId);
+      const settlementCurrencyForSave = editDestinationAccount?.currency || editForm.settlementCurrency || currency || 'ARS';
       const updatedTransaction = {
         amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
         currency: currency || 'ARS',
-        description: description || '',
+        description: description || note || (isInternalTransfer ? 'Transferencia interna' : ''),
         note: note || '',
-        category: category || 'Sin categorizar',
-        subCategory: subCategory || '',
-        subSubCategory: subSubCategory || '',
+        category: isInternalTransfer ? 'Movimientos neutros' : category || 'Sin categorizar',
+        subCategory: isInternalTransfer ? 'Transferencia interna' : subCategory || '',
+        subSubCategory: isInternalTransfer ? '' : subSubCategory || '',
         type: type || 'expense',
+        kind: isInternalTransfer ? 'neutral' : undefined,
+        neutralType: isInternalTransfer ? 'internal_transfer' : undefined,
         accountId: resolvedAccountId,
         sourceAccountId: resolvedSourceAccountId,
-        toAccountId: toAccountId || '',
-        tags: Array.isArray(tags) ? tags : [],
-        isFixed: Boolean(isFixed),
+        toAccountId: isInternalTransfer ? toAccountId || '' : toAccountId || '',
+        tags: isInternalTransfer ? [] : Array.isArray(tags) ? tags : [],
+        isFixed: isInternalTransfer ? false : Boolean(isFixed),
         date: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
         generatedBy: generatedBy || user.uid,
         assignedTo: assignedTo || '',
         payer: payer || '',
         createdByUserId: editForm.createdByUserId || generatedBy || user.uid,
-        beneficiaryType: beneficiaryType || 'household',
-        beneficiaryId: beneficiaryId || '',
-        beneficiaryLabel: beneficiaryLabel || 'Hogar',
-        scope: scope || 'familia',
+        beneficiaryType: isInternalTransfer ? 'household' : beneficiaryType || 'household',
+        beneficiaryId: isInternalTransfer ? '' : beneficiaryId || '',
+        beneficiaryLabel: isInternalTransfer ? 'Hogar' : beneficiaryLabel || 'Hogar',
+        scope: isInternalTransfer ? 'familia' : scope || 'familia',
         visibility: visibility || 'household_shared',
-        paymentType: paymentType || '',
+        paymentType: isInternalTransfer ? 'Transferencia' : paymentType || '',
         paymentStatus: paymentStatus || 'Contabilizado',
         status: updatedStatus,
         isConfirmed: true,
         needsReview: false,
+        originalAmount: isInternalTransfer
+          ? Number.isFinite(parsedAmount) ? parsedAmount : undefined
+          : editForm.originalAmount,
+        originalCurrency: isInternalTransfer ? currency || 'ARS' : editForm.originalCurrency || '',
+        settlementAmount: isInternalTransfer
+          ? Number.isFinite(parsedSettlementAmount)
+            ? parsedSettlementAmount
+            : Number.isFinite(parsedAmount) ? parsedAmount : undefined
+          : editForm.settlementAmount,
+        settlementCurrency: isInternalTransfer ? settlementCurrencyForSave : editForm.settlementCurrency || '',
+        fxRate: isInternalTransfer && (currency || 'ARS') !== settlementCurrencyForSave && Number.isFinite(parsedFxRate) && parsedFxRate > 0
+          ? parsedFxRate
+          : editForm.fxRate,
         accountBalanceApplied: false,
       };
 
@@ -3060,7 +3166,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const filteredFinances = finances.filter(f => {
     const fDate = f.date.toDate();
     const now = new Date();
-    
+
     // Review Filter
     if (activeListTab === 'reviews' && f.isConfirmed !== false && !f.needsReview) return false;
 
@@ -3989,17 +4095,17 @@ export default function FinanceTracker({ user }: { user: any }) {
               <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-neutral-50 rounded-full opacity-50 group-hover:scale-110 transition-transform" />
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
-                  <div 
+                  <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
                     style={{ backgroundColor: acc.color || '#3B82F6' }}
                   >
-                    {acc.type === 'bank' ? <Banknote size={18} /> : 
-                     acc.type === 'credit_card' ? <CreditCard size={18} /> : 
-                     acc.type === 'investment' ? <Briefcase size={18} /> : 
+                    {acc.type === 'bank' ? <Banknote size={18} /> :
+                     acc.type === 'credit_card' ? <CreditCard size={18} /> :
+                     acc.type === 'investment' ? <Briefcase size={18} /> :
                      <Wallet size={18} />}
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
+                    <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id); }}
                       className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
                     >
@@ -4074,7 +4180,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             </motion.div>
           );
         })}
-        <button 
+        <button
           onClick={() => {
             setEditingAccount(null);
             setNewAccount(createEmptyAccountDraft());
@@ -4304,7 +4410,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       </AnimatePresence>
 
       {activeFinanceSection === 'reports' && analysisResult && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="bg-neutral-900 text-white p-8 rounded-[2rem] shadow-2xl relative overflow-hidden"
@@ -4320,7 +4426,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             <div className="prose prose-invert max-w-none text-neutral-300 leading-relaxed">
               {analysisResult}
             </div>
-            <button 
+            <button
               onClick={() => setAnalysisResult(null)}
               className="mt-6 text-sm font-bold text-neutral-400 hover:text-white transition-colors"
             >
@@ -4474,7 +4580,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 >
                   Guardar listos ({pendingImportSummary.readyCount})
                 </button>
-                <button 
+                <button
                   onClick={() => setPendingTransactions([])}
                   className="rounded-2xl bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-700 transition hover:bg-amber-100"
                 >
@@ -4575,7 +4681,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex-1 min-w-[200px] space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Descripcion</label>
-                      <input 
+                      <input
                         type="text"
                         value={pt.description}
                         onChange={(e) => updatePending(pt.id, { description: e.target.value })}
@@ -4584,7 +4690,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     </div>
                     <div className="w-32 space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Importe</label>
-                      <input 
+                      <input
                         type="number"
                         value={pt.amount}
                         onChange={(e) => updatePending(pt.id, { amount: parseFloat(e.target.value) })}
@@ -4593,7 +4699,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     </div>
                     <div className="w-48 space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
-                      <select 
+                      <select
                         value={pt.category}
                         onChange={(e) => {
                           const nextType = getPendingCategoryType(e.target.value);
@@ -4627,7 +4733,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     </div>
                     <div className="w-48 space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sub-Categoria</label>
-                      <select 
+                      <select
                         value={pt.subCategory}
                         onChange={(e) => updatePending(pt.id, { subCategory: e.target.value, subSubCategory: '' })}
                         className="w-full bg-neutral-50 border-none rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500"
@@ -4669,7 +4775,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     )}
                     <div className="flex items-center gap-4 pt-4">
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input 
+                        <input
                           type="checkbox"
                           checked={pt.isFixed}
                           onChange={(e) => updatePending(pt.id, { isFixed: e.target.checked })}
@@ -4678,13 +4784,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                         <span className="text-xs font-bold text-neutral-600">Gasto fijo</span>
                       </label>
                       <div className="flex gap-2">
-                        <button 
+                        <button
                           onClick={() => setPendingTransactions(prev => prev.filter(t => t.id !== pt.id))}
                           className="p-2 text-neutral-400 hover:text-red-500 transition-colors"
                         >
                           <X size={20} />
                         </button>
-                        <button 
+                        <button
                           onClick={() => confirmTransaction(pt)}
                           disabled={!canConfirmPendingTransaction(pt)}
                           title={!canConfirmPendingTransaction(pt) ? 'Falta cuenta origen/destino o hay posible duplicado.' : 'Confirmar movimiento'}
@@ -4900,10 +5006,10 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => setType(t.id)}
+                        onClick={() => handleFinanceTypeChange(t.id)}
                         className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold transition-all border ${
-                          type === t.id 
-                            ? t.activeClass 
+                          type === t.id
+                            ? t.activeClass
                             : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
                         }`}
                       >
@@ -4918,14 +5024,23 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <input
                         type="number"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e) => {
+                          setAmount(e.target.value);
+                          if (type === 'transfer' && !transferHasCurrencyExchange) setSettlementAmount(e.target.value);
+                        }}
                         placeholder="0.00"
                         required
                         className="flex-1 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       />
                       <select
                         value={currency}
-                        onChange={(e) => setCurrency(e.target.value)}
+                        onChange={(e) => {
+                          setCurrency(e.target.value);
+                          if (type === 'transfer' && transferDestinationAccount?.currency === e.target.value) {
+                            setSettlementAmount(amount || '');
+                            setFxRate('');
+                          }
+                        }}
                         className="w-24 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                       >
                         {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
@@ -4939,7 +5054,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                     </label>
                     <select
                       value={accountId}
-                      onChange={(e) => setAccountId(e.target.value)}
+                      onChange={(e) => {
+                        setAccountId(e.target.value);
+                        const selectedAccount = userAccounts.find(account => account.id === e.target.value);
+                        if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
+                      }}
                       className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
                     >
                       <option value="">Seleccionar cuenta</option>
@@ -4950,24 +5069,87 @@ export default function FinanceTracker({ user }: { user: any }) {
                   </div>
 
                   {type === 'transfer' && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">A cuenta</label>
-                      <select
-                        value={toAccountId}
-                        onChange={(e) => setToAccountId(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                      >
-                        <option value="">Seleccionar cuenta destino</option>
-                        {(userAccounts || []).map(acc => (
-                          <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
-                        ))}
-                      </select>
+                    <div className="space-y-4 rounded-3xl border border-neutral-100 bg-neutral-50/70 p-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cuenta destino</label>
+                        <select
+                          value={toAccountId}
+                          onChange={(e) => {
+                            setToAccountId(e.target.value);
+                            const destination = userAccounts.find(account => account.id === e.target.value);
+                            if (!destination || destination.currency === currency) {
+                              setSettlementAmount(amount || '');
+                              setFxRate('');
+                            }
+                          }}
+                          className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                        >
+                          <option value="">Seleccionar cuenta destino</option>
+                          {(userAccounts || []).map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Monto destino</label>
+                          <input
+                            type="number"
+                            value={settlementAmount}
+                            onChange={(e) => {
+                              setSettlementAmount(e.target.value);
+                              const sourceAmount = Number(amount);
+                              const destinationAmount = Number(e.target.value);
+                              if (transferHasCurrencyExchange && sourceAmount > 0 && destinationAmount > 0) {
+                                setFxRate(String(Number((destinationAmount / sourceAmount).toFixed(6))));
+                              }
+                            }}
+                            placeholder="0.00"
+                            className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Moneda destino</label>
+                          <input
+                            type="text"
+                            value={transferDestinationCurrency}
+                            readOnly
+                            className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm font-bold text-neutral-500"
+                          />
+                        </div>
+                      </div>
+
+                      {transferHasCurrencyExchange && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">
+                            Tipo de cambio real ({transferDestinationCurrency} por 1 {transferSourceCurrency})
+                          </label>
+                          <input
+                            type="number"
+                            value={fxRate}
+                            onChange={(e) => {
+                              setFxRate(e.target.value);
+                              const sourceAmount = Number(amount);
+                              const nextRate = Number(e.target.value);
+                              if (sourceAmount > 0 && nextRate > 0) {
+                                setSettlementAmount(String(Number((sourceAmount * nextRate).toFixed(2))));
+                              }
+                            }}
+                            placeholder={`Ej: ${transferDestinationCurrency === 'ARS' ? '1440' : '1'}`}
+                            className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                          />
+                        </div>
+                      )}
+
                       <p className="px-1 text-[11px] font-bold leading-5 text-neutral-400">
                         Transferencia es solo entre cuentas propias. Si le pagaste a alguien, cargalo como gasto y dejalo en notas.
                       </p>
                     </div>
                   )}
 
+                  {type !== 'transfer' && (
+                  <>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Categoria *</label>
                     <select
@@ -5041,6 +5223,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </div>
                     )}
                   </div>
+                  </>
+                  )}
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha y hora</label>
@@ -5052,21 +5236,23 @@ export default function FinanceTracker({ user }: { user: any }) {
                     />
                   </div>
 
-                  <label className="flex items-center gap-2 px-1 cursor-pointer">
-                    <input 
-                      type="checkbox"
-                      checked={isFixed}
-                      onChange={(e) => setIsFijo(e.target.checked)}
-                      className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
-                    />
-                    <span className="text-xs font-bold text-neutral-600">Crear plantilla desde este registro</span>
-                  </label>
+                  {type !== 'transfer' && (
+                    <label className="flex items-center gap-2 px-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isFixed}
+                        onChange={(e) => setIsFijo(e.target.checked)}
+                        className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
+                      />
+                      <span className="text-xs font-bold text-neutral-600">Crear plantilla desde este registro</span>
+                    </label>
+                  )}
                 </div>
 
                 {/* Right Column */}
                 <div className="space-y-4">
                   <h4 className="text-sm font-bold text-neutral-900 border-b border-neutral-100 pb-2">Otros detalles</h4>
-                  
+
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Notas</label>
                     <textarea
@@ -5077,6 +5263,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                     />
                   </div>
 
+                  {type !== 'transfer' && (
+                  <>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para</label>
                     <select
@@ -5143,6 +5331,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </select>
                     </div>
                   </div>
+                  </>
+                  )}
                 </div>
               </div>
 
@@ -5167,8 +5357,8 @@ export default function FinanceTracker({ user }: { user: any }) {
 
           {/* PDF Upload */}
           {activeFinanceSection === 'import' && (
-          <div 
-            {...getRootProps()} 
+          <div
+            {...getRootProps()}
             className={`p-8 rounded-[2rem] border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-4 ${
               isDragActive ? 'border-neutral-900 bg-neutral-50' : 'border-neutral-200 bg-white hover:border-neutral-400'
             }`}
@@ -5185,7 +5375,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             </div>
             {isProcessingPdf && (
               <div className="w-full bg-neutral-100 h-1 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: '100%' }}
                   transition={{ duration: 2, repeat: Infinity }}
@@ -5201,14 +5391,14 @@ export default function FinanceTracker({ user }: { user: any }) {
         {activeFinanceSection === 'movements' && (
         <div id="finance-movement-list" className="lg:col-span-2 scroll-mt-6 space-y-6">
           <div className="flex items-center gap-4 border-b border-neutral-200 pb-px">
-            <button 
+            <button
               onClick={() => setActiveListTab('all')}
               className={`pb-4 px-2 text-sm font-bold transition-all relative ${activeListTab === 'all' ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
             >
               Historial
               {activeListTab === 'all' && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900" />}
             </button>
-            <button 
+            <button
               onClick={() => setActiveListTab('reviews')}
               className={`pb-4 px-2 text-sm font-bold transition-all relative flex items-center gap-2 ${activeListTab === 'reviews' ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
             >
@@ -5229,7 +5419,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 Filtros y busqueda
               </h3>
               {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || filterBeneficiary !== 'all' || filterScope !== 'all' || filterAccount !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
-                <button 
+                <button
                   onClick={() => {
                     setFilterDateRange('all');
                     setFilterCategory('all');
@@ -5252,7 +5442,7 @@ export default function FinanceTracker({ user }: { user: any }) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Periodo</label>
-                <select 
+                <select
                   value={filterDateRange}
                   onChange={(e) => setFilterDateRange(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
@@ -5270,7 +5460,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                 <>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha inicial</label>
-                    <input 
+                    <input
                       type="date"
                       value={customStartDate}
                       onChange={(e) => setCustomStartDate(e.target.value)}
@@ -5279,7 +5469,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha final</label>
-                    <input 
+                    <input
                       type="date"
                       value={customEndDate}
                       onChange={(e) => setCustomEndDate(e.target.value)}
@@ -5291,7 +5481,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Categoria</label>
-                <select 
+                <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
@@ -5303,7 +5493,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cargado por</label>
-                <select 
+                <select
                   value={filterGeneratedBy}
                   onChange={(e) => setFilterGeneratedBy(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
@@ -5315,7 +5505,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para quien</label>
-                <select 
+                <select
                   value={filterBeneficiary}
                   onChange={(e) => setFilterBeneficiary(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
@@ -5327,7 +5517,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Ambito</label>
-                <select 
+                <select
                   value={filterScope}
                   onChange={(e) => setFilterScope(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
@@ -5341,7 +5531,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cuenta usada</label>
-                <select 
+                <select
                   value={filterAccount}
                   onChange={(e) => setFilterAccount(e.target.value)}
                   className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
@@ -5355,7 +5545,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
               <div className="space-y-1 lg:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Buscar</label>
-                <input 
+                <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -5381,6 +5571,15 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const merchantLabel = f.merchantName || f.merchant;
                 const isSavingThisEdit = savingEditId === f.id;
                 const currentEditFeedback = editFeedback[f.id];
+                const editSourceAccount = isEditing
+                  ? userAccounts.find(account => account.id === (editForm?.accountId || editForm?.sourceAccountId))
+                  : null;
+                const editDestinationAccount = isEditing
+                  ? userAccounts.find(account => account.id === editForm?.toAccountId)
+                  : null;
+                const editSourceCurrency = editSourceAccount?.currency || editForm?.currency || f.currency || 'ARS';
+                const editDestinationCurrency = editDestinationAccount?.currency || editForm?.settlementCurrency || editForm?.currency || f.currency || 'ARS';
+                const editHasCurrencyExchange = editForm?.type === 'transfer' && Boolean(editForm?.toAccountId) && editSourceCurrency !== editDestinationCurrency;
 
                 return (
                   <motion.div
@@ -5394,29 +5593,44 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           <div className="flex gap-1">
-                            <input 
+                            <input
                               type="number"
                               value={editForm.amount}
-                              onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                              onChange={(e) => {
+                                const nextAmount = e.target.value;
+                                setEditForm({
+                                  ...editForm,
+                                  amount: nextAmount,
+                                  settlementAmount: editForm.type === 'transfer' && !editHasCurrencyExchange ? nextAmount : editForm.settlementAmount,
+                                });
+                              }}
                               className="flex-1 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             />
-                            <select 
+                            <select
                               value={editForm.currency}
-                              onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+                              onChange={(e) => setEditForm({
+                                ...editForm,
+                                currency: e.target.value,
+                                originalCurrency: e.target.value,
+                                settlementAmount: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? editForm.amount : editForm.settlementAmount,
+                                fxRate: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? '' : editForm.fxRate,
+                              })}
                               className="w-16 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
                               {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                           </div>
-                          <select 
-                            value={editForm.category}
-                            onChange={(e) => setEditForm({ ...editForm, category: e.target.value, subCategory: '' })}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          >
-                            {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                          </select>
-                          {editForm.category && userCategories.find(c => c.name === editForm.category)?.subCategories?.length > 0 && (
-                            <select 
+                          {editForm.type !== 'transfer' && (
+                            <select
+                              value={editForm.category}
+                              onChange={(e) => setEditForm({ ...editForm, category: e.target.value, subCategory: '' })}
+                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                            >
+                              {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </select>
+                          )}
+                          {editForm.type !== 'transfer' && editForm.category && userCategories.find(c => c.name === editForm.category)?.subCategories?.length > 0 && (
+                            <select
                               value={editForm.subCategory}
                               onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value, subSubCategory: '' })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
@@ -5428,9 +5642,19 @@ export default function FinanceTracker({ user }: { user: any }) {
                               })}
                             </select>
                           )}
-                          <select 
+                          <select
                             value={editForm.accountId}
-                            onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value, sourceAccountId: e.target.value })}
+                            onChange={(e) => {
+                              const selectedAccount = userAccounts.find(account => account.id === e.target.value);
+                              setEditForm({
+                                ...editForm,
+                                accountId: e.target.value,
+                                sourceAccountId: e.target.value,
+                                currency: selectedAccount?.currency || editForm.currency,
+                                originalCurrency: selectedAccount?.currency || editForm.originalCurrency,
+                                settlementAmount: editForm.type === 'transfer' && selectedAccount?.currency === editDestinationCurrency ? editForm.amount : editForm.settlementAmount,
+                              });
+                            }}
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           >
                             <option value="">Sin cuenta usada</option>
@@ -5439,9 +5663,19 @@ export default function FinanceTracker({ user }: { user: any }) {
                             ))}
                           </select>
                           {editForm.type === 'transfer' && (
-                            <select 
+                            <select
                               value={editForm.toAccountId}
-                              onChange={(e) => setEditForm({ ...editForm, toAccountId: e.target.value })}
+                              onChange={(e) => {
+                                const selectedDestination = userAccounts.find(account => account.id === e.target.value);
+                                const nextDestinationCurrency = selectedDestination?.currency || editForm.settlementCurrency || editForm.currency;
+                                setEditForm({
+                                  ...editForm,
+                                  toAccountId: e.target.value,
+                                  settlementCurrency: nextDestinationCurrency,
+                                  settlementAmount: nextDestinationCurrency === editForm.currency ? editForm.amount : editForm.settlementAmount || editForm.amount,
+                                  fxRate: nextDestinationCurrency === editForm.currency ? '' : editForm.fxRate,
+                                });
+                              }}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
                               <option value="">Sin cuenta destino</option>
@@ -5450,7 +5684,55 @@ export default function FinanceTracker({ user }: { user: any }) {
                               ))}
                             </select>
                           )}
-                          <input 
+                          {editForm.type === 'transfer' && (
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                value={editForm.settlementAmount || ''}
+                                onChange={(e) => {
+                                  const nextSettlementAmount = e.target.value;
+                                  const sourceAmount = Number(editForm.amount);
+                                  const parsedSettlement = Number(nextSettlementAmount);
+                                  setEditForm({
+                                    ...editForm,
+                                    settlementAmount: nextSettlementAmount,
+                                    settlementCurrency: editDestinationCurrency,
+                                    fxRate: editHasCurrencyExchange && Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(parsedSettlement) && parsedSettlement > 0
+                                      ? String(Number((parsedSettlement / sourceAmount).toFixed(6)))
+                                      : editForm.fxRate,
+                                  });
+                                }}
+                                placeholder="Monto destino"
+                                className="flex-1 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                              />
+                              <input
+                                value={editDestinationCurrency}
+                                readOnly
+                                className="w-16 bg-neutral-100 border border-neutral-100 rounded-lg p-2 text-xs font-bold text-neutral-500"
+                              />
+                            </div>
+                          )}
+                          {editForm.type === 'transfer' && editHasCurrencyExchange && (
+                            <input
+                              type="number"
+                              value={editForm.fxRate || ''}
+                              onChange={(e) => {
+                                const nextFxRate = e.target.value;
+                                const sourceAmount = Number(editForm.amount);
+                                const parsedFxRate = Number(nextFxRate);
+                                setEditForm({
+                                  ...editForm,
+                                  fxRate: nextFxRate,
+                                  settlementAmount: Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(parsedFxRate) && parsedFxRate > 0
+                                    ? String(Number((sourceAmount * parsedFxRate).toFixed(2)))
+                                    : editForm.settlementAmount,
+                                });
+                              }}
+                              placeholder={`TC ${editDestinationCurrency}/${editSourceCurrency}`}
+                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                            />
+                          )}
+                          <input
                             type="datetime-local"
                             value={editForm.date}
                             onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
@@ -5466,42 +5748,58 @@ export default function FinanceTracker({ user }: { user: any }) {
                           />
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {editForm.type !== 'transfer' && (
+                            <select
+                              value={`${editForm.beneficiaryType || 'family'}:${editForm.beneficiaryLabel || legacyBeneficiaryLabel(editForm)}`}
+                              onChange={(e) => {
+                                const [nextType, nextLabel] = e.target.value.split(':');
+                                const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                                setEditForm({
+                                  ...editForm,
+                                  beneficiaryType: nextType,
+                                  beneficiaryLabel: nextLabel,
+                                  scope: option?.scope || editForm.scope || 'familia',
+                                  visibility: editForm.visibility || 'household_shared',
+                                });
+                              }}
+                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                            >
+                              {FINANCE_BENEFICIARIES.map(item => (
+                                <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          {editForm.type !== 'transfer' && (
+                            <select
+                              value={editForm.paymentType}
+                              onChange={(e) => setEditForm({ ...editForm, paymentType: e.target.value })}
+                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                            >
+                              {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          )}
+                          {editForm.type !== 'transfer' && (
+                            <select
+                              value={editForm.paymentStatus}
+                              onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
+                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                            >
+                              {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          )}
                           <select
-                            value={`${editForm.beneficiaryType || 'family'}:${editForm.beneficiaryLabel || legacyBeneficiaryLabel(editForm)}`}
+                            value={editForm.type}
                             onChange={(e) => {
-                              const [nextType, nextLabel] = e.target.value.split(':');
-                              const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                              const nextType = e.target.value;
                               setEditForm({
                                 ...editForm,
-                                beneficiaryType: nextType,
-                                beneficiaryLabel: nextLabel,
-                                scope: option?.scope || editForm.scope || 'familia',
-                                visibility: editForm.visibility || 'household_shared',
+                                type: nextType,
+                                category: nextType === 'transfer' ? 'Movimientos neutros' : editForm.category,
+                                subCategory: nextType === 'transfer' ? 'Transferencia interna' : editForm.subCategory,
+                                paymentType: nextType === 'transfer' ? 'Transferencia' : editForm.paymentType,
+                                settlementAmount: nextType === 'transfer' ? editForm.settlementAmount || editForm.amount : editForm.settlementAmount,
                               });
                             }}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          >
-                            {FINANCE_BENEFICIARIES.map(item => (
-                              <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
-                            ))}
-                          </select>
-                          <select 
-                            value={editForm.paymentType}
-                            onChange={(e) => setEditForm({ ...editForm, paymentType: e.target.value })}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          >
-                            {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                          <select 
-                            value={editForm.paymentStatus}
-                            onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          >
-                            {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                          <select 
-                            value={editForm.type}
-                            onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           >
                             {(FINANCE_TYPES || []).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
@@ -5509,22 +5807,24 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex gap-4">
-                            <select 
+                            <select
                               value={editForm.generatedBy}
                               onChange={(e) => setEditForm({ ...editForm, generatedBy: e.target.value })}
                               className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                             >
                               {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                             </select>
-                            <select 
-                              value={editForm.scope || 'familia'}
-                              onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {FINANCE_SCOPE_OPTIONS.map(option => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                              ))}
-                            </select>
+                            {editForm.type !== 'transfer' && (
+                              <select
+                                value={editForm.scope || 'familia'}
+                                onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
+                                className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                              >
+                                {FINANCE_SCOPE_OPTIONS.map(option => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                            )}
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -5632,14 +5932,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               {(f.isConfirmed === false || f.needsReview) && (
                                 <>
-                                  <button 
+                                  <button
                                     onClick={() => handleConfirmReviewedFinance(f)}
                                     className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
                                     title="Confirmar"
                                   >
                                     <Check size={16} />
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => handleIgnoreReviewedFinance(f)}
                                     className="p-2 text-neutral-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-all"
                                     title="Ignorar"
@@ -5648,13 +5948,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                                   </button>
                                 </>
                               )}
-                              <button 
+                              <button
                                 onClick={() => startEditing(f)}
                                 className="p-2 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-50 rounded-lg transition-all"
                               >
                                 <Edit2 size={16} />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => handleDelete(f.id)}
                                 className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                               >
