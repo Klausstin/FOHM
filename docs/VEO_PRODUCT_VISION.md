@@ -82,6 +82,10 @@ VEO debe usar una densidad media desktop: calmo, claro y premium, pero no gigant
 
 La prioridad inmediata es aplicar este criterio dentro de Finanzas para llegar a un MVP usable al 100%. El ajuste global de Luz, Panel General, Diario, Wishlist, Objetivos, Habitos, Calendario y Ajustes queda para despues de cerrar Finanzas.
 
+La personalizacion debe aparecer solo cuando simplifica el uso cotidiano. El orden editable de tabs internas en Finanzas es un primer paso local y acotado; no implica abrir por ahora un dashboard editable global ni un constructor de layouts.
+
+Dentro del producto, los headers explicativos deben evitar repetirse en pantallas de uso frecuente. Finanzas prioriza navegacion, acciones y datos por encima de mensajes de marca.
+
 ## Modulos Funcionales
 
 ### Diario
