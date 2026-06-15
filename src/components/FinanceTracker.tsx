@@ -1433,6 +1433,12 @@ function FinanceInternalNav({
 }) {
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const [draggedSectionId, setDraggedSectionId] = useState<FinanceSectionId | null>(null);
+  const [dropPreviewSectionId, setDropPreviewSectionId] = useState<FinanceSectionId | null>(null);
+
+  const clearDragState = () => {
+    setDraggedSectionId(null);
+    setDropPreviewSectionId(null);
+  };
 
   return (
     <nav className="sticky top-0 z-20 -mx-2 rounded-b-[1.5rem] bg-[#f7f7f4]/95 px-2 pb-2 pt-1.5 backdrop-blur">
@@ -1441,6 +1447,7 @@ function FinanceInternalNav({
           {sections.map(section => {
             const isActive = active === section.id;
             const isDragging = draggedSectionId === section.id;
+            const isDropPreview = dropPreviewSectionId === section.id && !isDragging;
             return (
               <button
                 key={section.id}
@@ -1452,8 +1459,15 @@ function FinanceInternalNav({
                 onDragStart={(event) => {
                   if (!isEditingOrder) return;
                   setDraggedSectionId(section.id);
+                  setDropPreviewSectionId(null);
                   event.dataTransfer.effectAllowed = 'move';
                   event.dataTransfer.setData('text/plain', section.id);
+                }}
+                onDragEnter={(event) => {
+                  if (!isEditingOrder || !draggedSectionId || draggedSectionId === section.id) return;
+                  event.preventDefault();
+                  setDropPreviewSectionId(section.id);
+                  onReorderSections(draggedSectionId, section.id);
                 }}
                 onDragOver={(event) => {
                   if (!isEditingOrder) return;
@@ -1463,19 +1477,17 @@ function FinanceInternalNav({
                 onDrop={(event) => {
                   if (!isEditingOrder) return;
                   event.preventDefault();
-                  const fromSection = (event.dataTransfer.getData('text/plain') || draggedSectionId) as FinanceSectionId | null;
-                  if (fromSection && fromSection !== section.id) {
-                    onReorderSections(fromSection, section.id);
-                  }
-                  setDraggedSectionId(null);
+                  clearDragState();
                 }}
-                onDragEnd={() => setDraggedSectionId(null)}
-                className={`rounded-xl px-3 py-2 text-left transition-all ${
+                onDragEnd={clearDragState}
+                className={`rounded-xl px-3 py-2 text-left transition-all duration-150 ${
                   isEditingOrder
                     ? `cursor-grab border border-dashed active:cursor-grabbing ${
                       isDragging
-                        ? 'scale-95 border-neutral-900 bg-neutral-100 opacity-60'
-                        : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50'
+                        ? 'scale-95 border-neutral-900 bg-neutral-100 opacity-70 shadow-inner'
+                        : isDropPreview
+                          ? 'scale-[1.02] border-neutral-900 bg-neutral-50 text-neutral-950 shadow-sm'
+                          : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50'
                     }`
                     : isActive
                       ? 'bg-neutral-950 text-white shadow-sm'
@@ -1501,7 +1513,7 @@ function FinanceInternalNav({
         {isEditingOrder && (
           <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3 py-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-              Arrastra una tab y soltala donde la quieras dejar.
+              Arrastra una tab: la barra previsualiza el lugar antes de soltar.
             </p>
             <button
               type="button"
