@@ -5339,16 +5339,6 @@ export default function FinanceTracker({ user }: { user: any }) {
               ) : (
                 <>
                   <section className="space-y-2 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-2.5">
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setShowManualOptionalDetails(prev => !prev)}
-                        className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition hover:border-neutral-400 hover:text-neutral-900"
-                      >
-                        {showManualOptionalDetails ? 'Ocultar detalles' : 'Detalles'}
-                      </button>
-                    </div>
-
                     <div className="grid grid-cols-1 gap-2 lg:grid-cols-3 xl:grid-cols-[140px_96px_minmax(190px,1fr)_minmax(190px,1fr)_minmax(190px,1fr)_200px]">
                       <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
@@ -5440,22 +5430,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                         />
                       </div>
                     </div>
-                  </section>
 
-                  <section className="rounded-2xl border border-neutral-100 bg-white p-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setShowManualOptionalDetails(prev => !prev)}
-                      className="flex w-full items-center justify-between gap-3 text-left"
-                    >
-                      <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                        {showManualOptionalDetails ? 'Ocultar detalles' : 'Más campos'}
-                      </span>
-                      <ChevronDown size={16} className={`shrink-0 text-neutral-400 transition-transform ${showManualOptionalDetails ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {showManualOptionalDetails && (
-                      <div className="mt-2.5 grid grid-cols-1 gap-2 border-t border-neutral-100 pt-2.5 lg:grid-cols-3 xl:grid-cols-[minmax(160px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(140px,0.8fr)]">
+                    <div className="grid grid-cols-1 gap-2 border-t border-neutral-100 pt-2 lg:grid-cols-3 xl:grid-cols-[minmax(160px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(140px,0.8fr)]">
                         <div className="space-y-1">
                           <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Para</label>
                           <select
@@ -5576,7 +5552,6 @@ export default function FinanceTracker({ user }: { user: any }) {
                           )}
                         </div>
                       </div>
-                    )}
                   </section>
                 </>
               )}
