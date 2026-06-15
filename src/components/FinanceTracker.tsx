@@ -453,6 +453,30 @@ function isInternalTransferCategory(category?: string, subCategory?: string) {
   return text.includes('movimientos neutros') && (text.includes('transferencia interna') || text.includes('pago tarjeta credito'));
 }
 
+function financeNeedsDestinationAccount(finance: any) {
+  const type = String(finance?.type || finance?.kind || '').toLowerCase();
+  const kind = String(finance?.kind || '').toLowerCase();
+  const neutralType = String(finance?.neutralType || '').toLowerCase();
+
+  if (type === 'transfer') return true;
+  if ((type === 'neutral' || kind === 'neutral') && [
+    'internal_transfer',
+    'credit_card_payment',
+    'currency_exchange',
+    'investment_movement',
+    'loan_movement',
+  ].includes(neutralType)) return true;
+
+  return isInternalTransferCategory(finance?.category, finance?.subCategory);
+}
+
+function getFinanceAccountFieldLabel(finance: any) {
+  const type = String(finance?.type || finance?.kind || '').toLowerCase();
+  if (financeNeedsDestinationAccount(finance)) return 'Cuenta origen';
+  if (type === 'income') return 'Cuenta donde entra';
+  return 'Cuenta usada';
+}
+
 function enrichImportedTransactionWithAccounts(transaction: any, accounts: any[]) {
   const sourceMatch = findBestAccountForImportedTransaction(transaction, accounts);
   const accountId = transaction.accountId || sourceMatch.account?.id || findSuggestedSourceAccount(transaction, accounts);
@@ -6946,6 +6970,7 @@ function FinanceLearningMemoryPanel({
     const id = getLearningMappingId(mapping);
     const draft = drafts[id];
     if (!draft) return;
+    const draftNeedsDestination = financeNeedsDestinationAccount({ ...mapping, ...draft });
     onUpdate(mapping, {
       kind: draft.kind || 'expense',
       neutralType: draft.neutralType || null,
@@ -6959,7 +6984,7 @@ function FinanceLearningMemoryPanel({
       paymentType: draft.paymentType || '',
       accountId: draft.accountId || '',
       sourceAccountId: draft.accountId || '',
-      toAccountId: draft.toAccountId || '',
+      toAccountId: draftNeedsDestination ? draft.toAccountId || '' : '',
     });
     setEditingMappingId(null);
   };
@@ -7000,6 +7025,7 @@ function FinanceLearningMemoryPanel({
             const isOpen = openMappingId === id;
             const isEditing = editingMappingId === id;
             const draft = drafts[id] || {};
+            const mappingNeedsDestination = financeNeedsDestinationAccount(isEditing ? { ...mapping, ...draft } : mapping);
             const selectedCategory = categories.find(category => category.name === (draft.category || mapping.category));
             const subCategories = selectedCategory?.subCategories || [];
 
@@ -7081,8 +7107,8 @@ function FinanceLearningMemoryPanel({
                           <LearningDetailRow label="Beneficiario" value={mapping.beneficiaryLabel || '-'} />
                           <LearningDetailRow label="Scope" value={mapping.scope || '-'} />
                           <LearningDetailRow label="Visibilidad" value={mapping.visibility || '-'} />
-                          <LearningDetailRow label="Cuenta origen" value={account?.name || '-'} />
-                          <LearningDetailRow label="Cuenta destino" value={destinationAccount?.name || '-'} />
+                          <LearningDetailRow label={getFinanceAccountFieldLabel(mapping)} value={account?.name || '-'} />
+                          {mappingNeedsDestination && <LearningDetailRow label="Cuenta destino" value={destinationAccount?.name || '-'} />}
                           <LearningDetailRow label="Impacta saldo" value={mapping.kind === 'neutral' && !mapping.neutralType ? 'Depende' : 'Sí, si el movimiento queda contabilizado'} />
                         </>
                       )}
@@ -7191,7 +7217,12 @@ function PendingImportGroupsPanel({
             subCategory: group.subCategory || '',
             isFixed: Boolean(group.sample.isFixed),
           };
-          const requiresDestination = group.sample.type === 'transfer';
+          const requiresDestination = financeNeedsDestinationAccount({
+            ...group.sample,
+            type: group.sample.type || group.type,
+            category: draft.category || group.category || group.sample.category,
+            subCategory: draft.subCategory || group.subCategory || group.sample.subCategory,
+          });
           const canApplyAccounts = Boolean(draft.accountId && (!requiresDestination || draft.toAccountId));
           const selectedCategory = categories.find(category => category.name === draft.category);
           const subCategories = selectedCategory?.subCategories || [];
@@ -7278,7 +7309,14 @@ function PendingImportGroupsPanel({
                   </label>
 
                   <label className="space-y-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">
+                      {getFinanceAccountFieldLabel({
+                        ...group.sample,
+                        type: group.sample.type || group.type,
+                        category: draft.category || group.category || group.sample.category,
+                        subCategory: draft.subCategory || group.subCategory || group.sample.subCategory,
+                      })}
+                    </span>
                     <select
                       value={draft.accountId}
                       onChange={event => updateDraft(group.key, { accountId: event.target.value })}
@@ -8120,7 +8158,12 @@ function BalanceIntegrityPanel({
           const isEditing = editingIssueId === issue.id && draft;
           const selectedCategory = categories.find(category => category.name === draft?.category);
           const subCategories = selectedCategory?.subCategories || [];
-          const needsDestinationAccount = isEditing && isInternalTransferCategory(draft?.category, draft?.subCategory);
+          const needsDestinationAccount = isEditing && financeNeedsDestinationAccount({
+            ...finance,
+            ...draft,
+            category: draft?.category || finance.category,
+            subCategory: draft?.subCategory || finance.subCategory,
+          });
           const visibleRows = details.rows.filter(row => row.label !== 'Huella' && isUsefulAuditValue(row.value));
           const visibleLongRows = details.longRows.filter(row =>
             isUsefulAuditValue(row.value) &&
@@ -8177,7 +8220,7 @@ function BalanceIntegrityPanel({
                         })}
                       </select>
                     </AuditField>
-                    <AuditField label="Cuenta usada">
+                    <AuditField label={getFinanceAccountFieldLabel({ ...finance, ...draft })}>
                       <select value={draft.accountId} onChange={event => setDraft({ ...draft, accountId: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black">
                         <option value="">Sin cuenta</option>
                         {accounts.map(account => <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>)}
@@ -8735,12 +8778,19 @@ function CategoryLearningGroupCard({
   });
   const [showDetails, setShowDetails] = useState(false);
   const selectedCategory = categories.find(category => category.name === draft.category);
+  const needsDestinationAccount = financeNeedsDestinationAccount({
+    ...group,
+    type: group.type || group.kind || 'expense',
+    category: draft.category || group.currentCategory || group.category,
+    subCategory: draft.subCategory || group.currentSubCategory || group.subCategory,
+    toAccountId: draft.toAccountId || group.toAccountId,
+  });
   const canApply = Boolean(
     draft.category ||
     draft.subCategory ||
     draft.subSubCategory ||
     draft.accountId ||
-    draft.toAccountId ||
+    (needsDestinationAccount && draft.toAccountId) ||
     draft.paymentType ||
     draft.beneficiaryLabel ||
     draft.scope ||
@@ -8803,6 +8853,7 @@ function CategoryLearningGroupCard({
             {(group.samples || []).map((sample: any, index: number) => {
               const sourceAccount = accounts.find(account => account.id === sample.sourceAccountId);
               const destinationAccount = accounts.find(account => account.id === sample.toAccountId);
+              const sampleNeedsDestination = financeNeedsDestinationAccount(sample);
               return (
                 <div key={sample.id || index} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-3">
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -8826,7 +8877,7 @@ function CategoryLearningGroupCard({
                     <PendingMeta label="Cuenta usada" value={sourceAccount?.name || 'No detectada'} />
                     <PendingMeta label="Para" value={sample.beneficiaryLabel} />
                     <PendingMeta label="Medio" value={sample.paymentType} />
-                    <PendingMeta label="Destino" value={destinationAccount?.name} />
+                    {sampleNeedsDestination && <PendingMeta label="Destino" value={destinationAccount?.name} />}
                     <PendingMeta label="Archivo" value={sample.importedFile || sample.importSource} />
                     <PendingMeta label="Cuotas" value={sample.installmentLabel} />
                     <PendingMeta label="Detalle" value={sample.transferDetail} />
@@ -8921,16 +8972,18 @@ function CategoryLearningGroupCard({
           ))}
         </select>
 
-        <select
-          value={draft.toAccountId}
-          onChange={(event) => setDraft({ ...draft, toAccountId: event.target.value })}
-          className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
-        >
-          <option value="">Cuenta destino</option>
-          {accounts.map(account => (
-            <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
-          ))}
-        </select>
+        {needsDestinationAccount && (
+          <select
+            value={draft.toAccountId}
+            onChange={(event) => setDraft({ ...draft, toAccountId: event.target.value })}
+            className="rounded-2xl border border-neutral-100 bg-white px-3 py-3 text-xs font-black text-neutral-800 outline-none"
+          >
+            <option value="">Cuenta destino</option>
+            {accounts.map(account => (
+              <option key={account.id} value={account.id}>{account.name} ({account.currency})</option>
+            ))}
+          </select>
+        )}
 
       </div>
 
@@ -8947,7 +9000,7 @@ function CategoryLearningGroupCard({
         <button
           type="button"
           disabled={!canApply}
-          onClick={() => onApply(group, draft)}
+          onClick={() => onApply(group, { ...draft, toAccountId: needsDestinationAccount ? draft.toAccountId : '' })}
           className="rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
         >
           Aplicar al grupo
