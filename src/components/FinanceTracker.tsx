@@ -2194,6 +2194,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionId>('summary');
+  const [showManualOptionalDetails, setShowManualOptionalDetails] = useState(false);
   const financeSectionOrderStorageKey = useMemo(() => getFinanceSectionOrderStorageKey(user.uid), [user.uid]);
   const [financeSectionOrder, setFinanceSectionOrder] = useState<FinanceSectionId[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_FINANCE_SECTION_ORDER;
@@ -5156,12 +5157,12 @@ export default function FinanceTracker({ user }: { user: any }) {
 
           {/* Manual Entry */}
           {activeFinanceSection === 'movements' && (
-          <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm lg:p-5">
-            <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="rounded-[1.25rem] border border-neutral-200 bg-white p-3 shadow-sm lg:p-4">
+            <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Movimientos</p>
-                <h3 className="mt-0.5 flex items-center gap-2 text-xl font-black tracking-tight text-neutral-950">
-                  <Plus size={18} className="text-neutral-400" />
+                <h3 className="mt-0.5 flex items-center gap-2 text-lg font-black tracking-tight text-neutral-950">
+                  <Plus size={16} className="text-neutral-400" />
                   Agregar registro
                 </h3>
               </div>
@@ -5172,7 +5173,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     key={t.id}
                     type="button"
                     onClick={() => handleFinanceTypeChange(t.id)}
-                    className={`rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
+                    className={`rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
                       type === t.id
                         ? 'bg-neutral-950 text-white shadow-sm'
                         : 'text-neutral-500 hover:bg-white hover:text-neutral-900'
@@ -5184,15 +5185,20 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
               {type === 'transfer' ? (
-                <section className="space-y-3 rounded-[1.25rem] border border-neutral-100 bg-neutral-50/70 p-4">
-                  <div>
+                <section className="space-y-2.5 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
-                    <h4 className="mt-0.5 text-base font-black text-neutral-950">Transferencia interna</h4>
+                    <h4 className="mt-0.5 text-sm font-black text-neutral-950">Transferencia interna</h4>
+                    </div>
+                    <p className="hidden max-w-sm text-right text-[11px] font-bold leading-4 text-neutral-400 lg:block">
+                      Solo entre cuentas propias. Pagos a terceros van como gasto.
+                    </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
                     <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
                       <select
@@ -5335,19 +5341,28 @@ export default function FinanceTracker({ user }: { user: any }) {
                     </div>
                   </div>
 
-                  <p className="rounded-xl bg-white px-3 py-2 text-xs font-bold leading-5 text-neutral-500">
+                  <p className="rounded-xl bg-white px-3 py-1.5 text-[11px] font-bold leading-4 text-neutral-500 lg:hidden">
                     Transferencia es solo entre cuentas propias. Si le pagaste a alguien, cargalo como gasto y dejalo en notas.
                   </p>
                 </section>
               ) : (
                 <>
-                  <section className="space-y-3 rounded-[1.25rem] border border-neutral-100 bg-neutral-50/70 p-4">
-                    <div>
+                  <section className="space-y-2.5 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
-                      <h4 className="mt-0.5 text-base font-black text-neutral-950">{type === 'income' ? 'Ingreso' : 'Gasto'}</h4>
+                      <h4 className="mt-0.5 text-sm font-black text-neutral-950">{type === 'income' ? 'Ingreso' : 'Gasto'}</h4>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowManualOptionalDetails(prev => !prev)}
+                        className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition hover:border-neutral-400 hover:text-neutral-900"
+                      >
+                        {showManualOptionalDetails ? 'Ocultar detalles' : 'Detalles'}
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
                       <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
                         <input
@@ -5434,153 +5449,165 @@ export default function FinanceTracker({ user }: { user: any }) {
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
                           placeholder="Ej: Rappi cena domingo, pago de haberes Gran Berta, plomero..."
-                          className="min-h-[64px] w-full resize-none rounded-xl border border-neutral-100 bg-white px-3 py-2 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="min-h-[44px] w-full resize-none rounded-xl border border-neutral-100 bg-white px-3 py-2 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
                     </div>
                   </section>
 
-                  <section className="space-y-3 rounded-[1.25rem] border border-neutral-100 bg-white p-4">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Detalles opcionales</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                      <div className="space-y-1">
-                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Para</label>
-                        <select
-                          value={`${beneficiaryType}:${beneficiaryLabel}`}
-                          onChange={(e) => {
-                            const [nextType, nextLabel] = e.target.value.split(':');
-                            const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
-                            setBeneficiaryType(nextType);
-                            setBeneficiaryLabel(nextLabel);
-                            setScope(option?.scope || 'familia');
-                          }}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
-                        >
-                          {FINANCE_BENEFICIARIES.map(item => (
-                            <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
-                          ))}
-                        </select>
+                  <section className="rounded-2xl border border-neutral-100 bg-white p-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowManualOptionalDetails(prev => !prev)}
+                      className="flex w-full items-center justify-between gap-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Detalles opcionales</p>
+                        <p className="mt-1 truncate text-xs font-bold text-neutral-500">
+                          Para {beneficiaryLabel || 'Familia'} · {paymentType} · {paymentStatus} · {formatFinanceScope(scope)}
+                        </p>
                       </div>
+                      <ChevronDown size={16} className={`shrink-0 text-neutral-400 transition-transform ${showManualOptionalDetails ? 'rotate-180' : ''}`} />
+                    </button>
 
-                      <div className="space-y-1">
-                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de pago</label>
-                        <select
-                          value={paymentType}
-                          onChange={(e) => setPaymentType(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
-                        >
-                          {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
+                    {showManualOptionalDetails && (
+                      <div className="mt-3 grid grid-cols-1 gap-2.5 border-t border-neutral-100 pt-3 lg:grid-cols-3">
+                        <div className="space-y-1">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Para</label>
+                          <select
+                            value={`${beneficiaryType}:${beneficiaryLabel}`}
+                            onChange={(e) => {
+                              const [nextType, nextLabel] = e.target.value.split(':');
+                              const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                              setBeneficiaryType(nextType);
+                              setBeneficiaryLabel(nextLabel);
+                              setScope(option?.scope || 'familia');
+                            }}
+                            className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          >
+                            {FINANCE_BENEFICIARIES.map(item => (
+                              <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                      <div className="space-y-1">
-                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Estado del pago</label>
-                        <select
-                          value={paymentStatus}
-                          onChange={(e) => setPaymentStatus(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
-                        >
-                          {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
+                        <div className="space-y-1">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Tipo de pago</label>
+                          <select
+                            value={paymentType}
+                            onChange={(e) => setPaymentType(e.target.value)}
+                            className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          >
+                            {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
 
-                      <div className="space-y-1">
-                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Registrado por</label>
-                        <select
-                          value={generatedBy}
-                          onChange={(e) => setGeneratedBy(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
-                        >
-                          {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
-                        </select>
-                      </div>
+                        <div className="space-y-1">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Estado del pago</label>
+                          <select
+                            value={paymentStatus}
+                            onChange={(e) => setPaymentStatus(e.target.value)}
+                            className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          >
+                            {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
 
-                      <div className="space-y-1">
-                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Ambito</label>
-                        <select
-                          value={scope}
-                          onChange={(e) => setScope(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
-                        >
-                          <option value="personal">Personal</option>
-                          <option value="pareja">Pareja</option>
-                          <option value="hogar">Hogar</option>
-                          <option value="familia">Familia</option>
-                        </select>
-                      </div>
+                        <div className="space-y-1">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Registrado por</label>
+                          <select
+                            value={generatedBy}
+                            onChange={(e) => setGeneratedBy(e.target.value)}
+                            className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          >
+                            {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
+                          </select>
+                        </div>
 
-                      <label className="flex h-10 items-center gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold text-neutral-600">
-                        <input
-                          type="checkbox"
-                          checked={isFixed}
-                          onChange={(e) => setIsFijo(e.target.checked)}
-                          className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
-                        />
-                        Crear plantilla desde este registro
-                      </label>
+                        <div className="space-y-1">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Ambito</label>
+                          <select
+                            value={scope}
+                            onChange={(e) => setScope(e.target.value)}
+                            className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          >
+                            <option value="personal">Personal</option>
+                            <option value="pareja">Pareja</option>
+                            <option value="hogar">Hogar</option>
+                            <option value="familia">Familia</option>
+                          </select>
+                        </div>
 
-                      <div className="space-y-1 lg:col-span-3">
-                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
-                        <div className="flex gap-2">
+                        <label className="flex h-9 items-center gap-2 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold text-neutral-600">
                           <input
-                            type="text"
-                            value={tagInput}
-                            onChange={(e) => setTagInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
+                            type="checkbox"
+                            checked={isFixed}
+                            onChange={(e) => setIsFijo(e.target.checked)}
+                            className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
+                          />
+                          Crear plantilla
+                        </label>
+
+                        <div className="space-y-1 lg:col-span-3">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={tagInput}
+                              onChange={(e) => setTagInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+                                    setTags([...tags, tagInput.trim()]);
+                                    setTagInput('');
+                                  }
+                                }
+                              }}
+                              placeholder="Escribir etiqueta"
+                              className="h-9 flex-1 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
                                 if (tagInput.trim() && !tags.includes(tagInput.trim())) {
                                   setTags([...tags, tagInput.trim()]);
                                   setTagInput('');
                                 }
-                              }
-                            }}
-                            placeholder="Escribir etiqueta"
-                            className="h-10 flex-1 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-                                setTags([...tags, tagInput.trim()]);
-                                setTagInput('');
-                              }
-                            }}
-                            className="h-10 rounded-xl bg-neutral-900 px-4 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-neutral-800 active:scale-95"
-                          >
-                            Agregar
-                          </button>
-                        </div>
-                        {tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-0.5">
-                            {(tags || []).map(t => (
-                              <span key={t} className="flex items-center gap-2 rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-600">
-                                {t}
-                                <button type="button" onClick={() => setTags(tags.filter(tag => tag !== t))}><X size={12} /></button>
-                              </span>
-                            ))}
+                              }}
+                              className="h-9 rounded-xl bg-neutral-900 px-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-neutral-800 active:scale-95"
+                            >
+                              Agregar
+                            </button>
                           </div>
-                        )}
+                          {tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {(tags || []).map(t => (
+                                <span key={t} className="flex items-center gap-2 rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                                  {t}
+                                  <button type="button" onClick={() => setTags(tags.filter(tag => tag !== t))}><X size={12} /></button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </section>
                 </>
               )}
 
-              <div className="flex flex-col gap-2 border-t border-neutral-100 pt-4 sm:flex-row sm:justify-end">
+              <div className="flex flex-col gap-2 border-t border-neutral-100 pt-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => handleSubmit(undefined, true)}
-                  className="rounded-xl border border-neutral-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
+                  className="h-10 rounded-xl border border-neutral-200 bg-white px-4 text-[10px] font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
                 >
                   Guardar y cargar otro
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-neutral-950 px-6 py-3 text-[11px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
+                  className="h-10 rounded-xl bg-neutral-950 px-5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
                 >
                   Guardar registro
                 </button>
