@@ -1465,9 +1465,9 @@ function FinanceInternalNav({
   };
 
   return (
-    <nav className="sticky top-0 z-20 -mx-2 rounded-b-[1.5rem] bg-[#f7f7f4]/95 px-2 pb-2 pt-1.5 backdrop-blur">
-      <div className="rounded-[1.25rem] border border-neutral-200 bg-white p-1.5 shadow-sm">
-        <div className="flex flex-wrap items-stretch gap-1.5">
+    <nav className="sticky top-0 z-20 -mx-2 rounded-b-[1.25rem] bg-[#f7f7f4]/95 px-2 pb-1.5 pt-1 backdrop-blur">
+      <div className="rounded-[1.1rem] border border-neutral-200 bg-white p-1 shadow-sm">
+        <div className="flex flex-wrap items-stretch gap-1">
           {sections.map(section => {
             const isActive = active === section.id;
             const isDragging = draggedSectionId === section.id;
@@ -1504,7 +1504,8 @@ function FinanceInternalNav({
                   clearDragState();
                 }}
                 onDragEnd={clearDragState}
-                className={`rounded-xl px-3 py-2 text-left transition-all duration-150 ${
+                title={section.helper}
+                className={`rounded-xl px-3 py-1.5 text-left transition-all duration-150 ${
                   isEditingOrder
                     ? `cursor-grab border border-dashed active:cursor-grabbing ${
                       isDragging
@@ -1519,16 +1520,13 @@ function FinanceInternalNav({
                 }`}
               >
                 <span className="block text-[11px] font-black uppercase tracking-widest">{section.label}</span>
-                <span className={`mt-0.5 block text-[9px] font-bold ${isEditingOrder ? 'text-neutral-400' : isActive ? 'text-neutral-300' : 'text-neutral-400'}`}>
-                  {section.helper}
-                </span>
               </button>
             );
           })}
           <button
             type="button"
             onClick={() => setIsEditingOrder(value => !value)}
-            className="ml-auto rounded-xl border border-neutral-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 transition hover:border-neutral-200 hover:text-neutral-800"
+            className="ml-auto rounded-xl border border-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-400 transition hover:border-neutral-200 hover:text-neutral-800"
           >
             {isEditingOrder ? 'Cerrar orden' : 'Editar orden'}
           </button>
@@ -5157,14 +5155,11 @@ export default function FinanceTracker({ user }: { user: any }) {
 
           {/* Manual Entry */}
           {activeFinanceSection === 'movements' && (
-          <div className="rounded-[1.25rem] border border-neutral-200 bg-white p-3 shadow-sm lg:p-4">
-            <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Movimientos</p>
-                <h3 className="mt-0.5 flex items-center gap-2 text-lg font-black tracking-tight text-neutral-950">
+          <div className="rounded-[1.25rem] border border-neutral-200 bg-white p-2.5 shadow-sm lg:p-3">
+            <div className="mb-2.5 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-center gap-2">
                   <Plus size={16} className="text-neutral-400" />
-                  Agregar registro
-                </h3>
+                <h3 className="text-lg font-black tracking-tight text-neutral-950">Agregar registro</h3>
               </div>
 
               <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-100 p-1">
@@ -5185,20 +5180,16 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-2.5">
               {type === 'transfer' ? (
-                <section className="space-y-2.5 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
-                    <h4 className="mt-0.5 text-sm font-black text-neutral-950">Transferencia interna</h4>
-                    </div>
+                <section className="space-y-2 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-2.5">
+                  <div className="flex items-center justify-end gap-3">
                     <p className="hidden max-w-sm text-right text-[11px] font-bold leading-4 text-neutral-400 lg:block">
                       Solo entre cuentas propias. Pagos a terceros van como gasto.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
                     <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
                       <select
@@ -5208,7 +5199,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           const selectedAccount = userAccounts.find(account => account.id === e.target.value);
                           if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
                         }}
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         <option value="">Seleccionar cuenta</option>
                         {(userAccounts || []).map(acc => (
@@ -5228,7 +5219,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         }}
                         placeholder="0.00"
                         required
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
 
@@ -5243,7 +5234,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             setFxRate('');
                           }
                         }}
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -5261,7 +5252,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             setFxRate('');
                           }
                         }}
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         <option value="">Seleccionar cuenta destino</option>
                         {(userAccounts || []).map(acc => (
@@ -5284,7 +5275,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           }
                         }}
                         placeholder="0.00"
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
 
@@ -5294,7 +5285,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         type="text"
                         value={transferDestinationCurrency}
                         readOnly
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold text-neutral-500"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold text-neutral-500"
                       />
                     </div>
 
@@ -5315,7 +5306,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             }
                           }}
                           placeholder={`Ej: ${transferDestinationCurrency === 'ARS' ? '1440' : '1'}`}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
                     )}
@@ -5326,7 +5317,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         type="datetime-local"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
 
@@ -5336,7 +5327,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder="Ej: pago tarjeta, paso a Mercado Pago, compra de dolares..."
-                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
                   </div>
@@ -5347,12 +5338,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </section>
               ) : (
                 <>
-                  <section className="space-y-2.5 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
-                      <h4 className="mt-0.5 text-sm font-black text-neutral-950">{type === 'income' ? 'Ingreso' : 'Gasto'}</h4>
-                      </div>
+                  <section className="space-y-2 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-2.5">
+                    <div className="flex justify-end">
                       <button
                         type="button"
                         onClick={() => setShowManualOptionalDetails(prev => !prev)}
@@ -5362,7 +5349,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-3 xl:grid-cols-[140px_96px_minmax(190px,1fr)_minmax(190px,1fr)_minmax(190px,1fr)_200px]">
                       <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
                         <input
@@ -5371,7 +5358,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           onChange={(e) => setAmount(e.target.value)}
                           placeholder="0.00"
                           required
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
 
@@ -5380,7 +5367,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         <select
                           value={currency}
                           onChange={(e) => setCurrency(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
@@ -5395,7 +5382,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             const selectedAccount = userAccounts.find(account => account.id === e.target.value);
                             if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
                           }}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="">Seleccionar cuenta</option>
                           {(userAccounts || []).map(acc => (
@@ -5410,7 +5397,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           value={category}
                           onChange={(e) => { setCategory(e.target.value); setSubCategoria(''); }}
                           required
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="">Elegir</option>
                           {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -5423,7 +5410,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           value={subCategory}
                           onChange={(e) => { setSubCategoria(e.target.value); setSubSubCategoria(''); }}
                           disabled={!category || !userCategories.find(c => c.name === category)?.subCategories?.length}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all disabled:text-neutral-300 focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all disabled:text-neutral-300 focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="">Sin subcategoria</option>
                           {(userCategories.find(c => c.name === category)?.subCategories || []).map((sub: any) => {
@@ -5439,39 +5426,36 @@ export default function FinanceTracker({ user }: { user: any }) {
                           type="datetime-local"
                           value={date}
                           onChange={(e) => setDate(e.target.value)}
-                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
 
-                      <div className="space-y-1 lg:col-span-3">
+                      <div className="space-y-1 lg:col-span-3 xl:col-span-6">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Notas</label>
-                        <textarea
+                        <input
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
                           placeholder="Ej: Rappi cena domingo, pago de haberes Gran Berta, plomero..."
-                          className="min-h-[44px] w-full resize-none rounded-xl border border-neutral-100 bg-white px-3 py-2 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
                     </div>
                   </section>
 
-                  <section className="rounded-2xl border border-neutral-100 bg-white p-3">
+                  <section className="rounded-2xl border border-neutral-100 bg-white p-2.5">
                     <button
                       type="button"
                       onClick={() => setShowManualOptionalDetails(prev => !prev)}
                       className="flex w-full items-center justify-between gap-3 text-left"
                     >
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Detalles opcionales</p>
-                        <p className="mt-1 truncate text-xs font-bold text-neutral-500">
-                          Para {beneficiaryLabel || 'Familia'} · {paymentType} · {paymentStatus} · {formatFinanceScope(scope)}
-                        </p>
-                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                        {showManualOptionalDetails ? 'Ocultar detalles' : 'Más campos'}
+                      </span>
                       <ChevronDown size={16} className={`shrink-0 text-neutral-400 transition-transform ${showManualOptionalDetails ? 'rotate-180' : ''}`} />
                     </button>
 
                     {showManualOptionalDetails && (
-                      <div className="mt-3 grid grid-cols-1 gap-2.5 border-t border-neutral-100 pt-3 lg:grid-cols-3">
+                      <div className="mt-2.5 grid grid-cols-1 gap-2 border-t border-neutral-100 pt-2.5 lg:grid-cols-3 xl:grid-cols-[minmax(160px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(140px,0.8fr)]">
                         <div className="space-y-1">
                           <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Para</label>
                           <select
@@ -5548,7 +5532,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           Crear plantilla
                         </label>
 
-                        <div className="space-y-1 lg:col-span-3">
+                        <div className="space-y-1 lg:col-span-3 xl:col-span-5">
                           <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
                           <div className="flex gap-2">
                             <input
@@ -5597,17 +5581,17 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </>
               )}
 
-              <div className="flex flex-col gap-2 border-t border-neutral-100 pt-3 sm:flex-row sm:justify-end">
+              <div className="flex flex-col gap-2 border-t border-neutral-100 pt-2.5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => handleSubmit(undefined, true)}
-                  className="h-10 rounded-xl border border-neutral-200 bg-white px-4 text-[10px] font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
+                  className="h-9 rounded-xl border border-neutral-200 bg-white px-4 text-[10px] font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
                 >
                   Guardar y cargar otro
                 </button>
                 <button
                   type="submit"
-                  className="h-10 rounded-xl bg-neutral-950 px-5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
+                  className="h-9 rounded-xl bg-neutral-950 px-5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
                 >
                   Guardar registro
                 </button>
