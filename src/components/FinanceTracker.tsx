@@ -2080,6 +2080,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionId>('summary');
   const [showPendingImportDetails, setShowPendingImportDetails] = useState(false);
+  const [expandedFinanceId, setExpandedFinanceId] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
@@ -5627,6 +5628,15 @@ export default function FinanceTracker({ user }: { user: any }) {
           </div>
 
           <div className="space-y-3">
+            <div className="hidden px-4 text-[10px] font-black uppercase tracking-widest text-neutral-400 xl:grid xl:grid-cols-[96px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:gap-4">
+              <span>Fecha</span>
+              <span>Categoria</span>
+              <span>Cuenta</span>
+              <span>Para</span>
+              <span>Nota</span>
+              <span className="text-right">Monto</span>
+              <span className="text-right">Acciones</span>
+            </div>
             <AnimatePresence initial={false}>
               {(filteredFinances || []).map((f) => {
                 const typeInfo = FINANCE_TYPES.find(t => t.id === f.type);
@@ -5650,6 +5660,14 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const editSourceCurrency = editSourceAccount?.currency || editForm?.currency || f.currency || 'ARS';
                 const editDestinationCurrency = editDestinationAccount?.currency || editForm?.settlementCurrency || editForm?.currency || f.currency || 'ARS';
                 const editHasCurrencyExchange = editForm?.type === 'transfer' && Boolean(editForm?.toAccountId) && editSourceCurrency !== editDestinationCurrency;
+                const isExpanded = expandedFinanceId === f.id;
+                const categoryLabel = [f.category || 'Sin categoria', f.subCategory].filter(Boolean).join(' / ');
+                const accountLabel = f.type === 'transfer'
+                  ? [sourceAccount?.name || 'Sin origen', destinationAccount?.name || 'Sin destino'].join(' -> ')
+                  : sourceAccount?.name || 'Sin cuenta';
+                const beneficiaryLabel = beneficiary || (f.assignedTo === 'Ambos' ? 'Pareja' : (assignee?.displayName || 'Familia'));
+                const primaryNote = (f.note || f.description || merchantLabel || trace.originalConcept || f.originalDescription || 'Sin nota').split('\n')[0];
+                const amountPrefix = f.type === 'expense' ? '-' : f.type === 'income' ? '+' : '';
 
                 return (
                   <motion.div
@@ -5657,7 +5675,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="bg-white p-5 rounded-2xl border border-neutral-100 shadow-sm flex flex-col gap-4 group hover:shadow-md transition-all"
+                    className="bg-white rounded-2xl border border-neutral-100 shadow-sm flex flex-col group hover:border-neutral-200 hover:shadow-md transition-all overflow-hidden"
                   >
                     {isEditing ? (
                       <div className="space-y-4">
@@ -5931,87 +5949,72 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 ${typeInfo?.bg} rounded-xl flex items-center justify-center relative`}>
+                        <div className="grid grid-cols-1 gap-3 px-4 py-3 xl:grid-cols-[96px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:items-center xl:gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${typeInfo?.bg}`}>
                               {(() => {
                                 const cat = userCategories.find(c => c.name === f.category);
-                                if (cat) return <CategoriaIcon name={cat.icon} color={cat.color} size={18} />;
-                                return typeInfo?.icon;
+                                if (cat) return <CategoriaIcon name={cat.icon} color={cat.color} size={15} />;
+                                return <div className="scale-75">{typeInfo?.icon}</div>;
                               })()}
-                              <div className={`absolute -bottom-1 -right-1 w-4 h-4 ${typeInfo?.bg} ${typeInfo?.color} rounded-full border-2 border-white flex items-center justify-center`}>
-                                <div className="scale-75">{typeInfo?.icon}</div>
-                              </div>
                               {(f.isConfirmed === false || f.needsReview) && (
-                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 border-2 border-white rounded-full" />
+                                <div className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-amber-500" />
                               )}
                             </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-bold text-neutral-900">{f.category}</p>
-                                {(f.isConfirmed === false || f.needsReview) && (
-                                  <span className="text-[9px] font-black uppercase tracking-tighter text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 flex items-center gap-1">
-                                    <AlertCircle size={10} /> Revisar
-                                  </span>
-                                )}
-                                {f.subCategory && (
-                                  <span className="text-[10px] font-bold text-neutral-400 bg-neutral-50 px-2 py-0.5 rounded-full border border-neutral-100">
-                                    {f.subCategory}
-                                  </span>
-                                )}
-                                {sourceAccount && (
-                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                    Salio de {sourceAccount.name}
-                                  </span>
-                                )}
-                                {destinationAccount && (
-                                  <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-100">
-                                    A {destinationAccount.name}
-                                  </span>
-                                )}
-                                {beneficiary && (
-                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                                    Para {beneficiary}
-                                  </span>
-                                )}
-                                {f.isFixed && (
-                                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                                    Fijo
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-neutral-400 font-medium truncate max-w-[200px]">
-                                {f.description || f.note || 'Sin descripcion'}
-                              </p>
-                              {merchantLabel && (
-                                <p className="mt-0.5 text-[10px] font-black uppercase tracking-wider text-neutral-300">
-                                  Comercio: {merchantLabel}
-                                </p>
-                              )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-neutral-900">{format(f.date.toDate(), 'dd/MM/yyyy')}</p>
+                              <p className="text-[10px] font-bold text-neutral-400">{format(f.date.toDate(), 'HH:mm')}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <p className={`text-sm font-black ${typeInfo?.color}`}>
-                                {f.type === 'expense' ? '-' : '+'}{f.currency || '$'}{f.amount.toLocaleString()}
-                              </p>
-                              <p className="text-[10px] text-neutral-300 font-bold">
-                                {format(f.date.toDate(), 'MMM d, yyyy')}
-                              </p>
+
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="truncate text-sm font-black text-neutral-950">{categoryLabel}</p>
+                              {f.isFixed && (
+                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                                  Fijo
+                                </span>
+                              )}
+                              {(f.isConfirmed === false || f.needsReview) && (
+                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                                  Revisar
+                                </span>
+                              )}
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="truncate text-[11px] font-bold text-neutral-400">{typeInfo?.label || f.type}</p>
+                          </div>
+
+                          <p className="truncate text-xs font-black text-neutral-700">{accountLabel}</p>
+                          <p className="truncate text-xs font-bold text-neutral-500">{beneficiaryLabel}</p>
+                          <p className="truncate text-xs font-bold text-neutral-600">{primaryNote}</p>
+
+                          <div className="text-left xl:text-right">
+                            <p className={`text-sm font-black ${typeInfo?.color || 'text-neutral-900'}`}>
+                              {amountPrefix}{f.currency || 'ARS'} {Number(f.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-start gap-1 xl:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedFinanceId(isExpanded ? null : f.id)}
+                              className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition-all hover:bg-neutral-100 hover:text-neutral-900"
+                            >
+                              {isExpanded ? 'Ocultar' : 'Detalle'}
+                            </button>
+                            <div className="flex gap-1">
                               {(f.isConfirmed === false || f.needsReview) && (
                                 <>
                                   <button
                                     onClick={() => handleConfirmReviewedFinance(f)}
-                                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                    className="rounded-lg p-2 text-emerald-600 transition-all hover:bg-emerald-50"
                                     title="Confirmar"
                                   >
                                     <Check size={16} />
                                   </button>
                                   <button
                                     onClick={() => handleIgnoreReviewedFinance(f)}
-                                    className="p-2 text-neutral-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-all"
+                                    className="rounded-lg p-2 text-neutral-400 transition-all hover:bg-amber-50 hover:text-amber-700"
                                     title="Ignorar"
                                   >
                                     <X size={16} />
@@ -6020,21 +6023,23 @@ export default function FinanceTracker({ user }: { user: any }) {
                               )}
                               <button
                                 onClick={() => startEditing(f)}
-                                className="p-2 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-50 rounded-lg transition-all"
+                                className="rounded-lg p-2 text-neutral-400 transition-all hover:bg-neutral-100 hover:text-neutral-900"
+                                title="Editar"
                               >
                                 <Edit2 size={16} />
                               </button>
                               <button
                                 onClick={() => handleDelete(f.id)}
-                                className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                className="rounded-lg p-2 text-neutral-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                title="Eliminar"
                               >
                                 <Trash2 size={16} />
                               </button>
                             </div>
                           </div>
                         </div>
-                        {shouldShowTrace && (
-                          <div className="rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
+                        {isExpanded && shouldShowTrace && (
+                          <div className="mx-4 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Rastro</span>
                               {f.importSource && (
@@ -6074,7 +6079,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                             )}
                           </div>
                         )}
-                        <div className="flex items-center gap-4 pt-2 border-t border-neutral-50">
+                        {isExpanded && (
+                        <div className="mx-4 mb-4 flex flex-wrap items-center gap-4 border-t border-neutral-50 pt-3">
                           {(f.source || f.confidence || f.estimatedReason) && (
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Origen</span>
@@ -6105,6 +6111,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </div>
                           )}
                         </div>
+                        )}
                       </>
                     )}
                   </motion.div>
