@@ -115,6 +115,7 @@ Siguiente: [proximo paso]
 | Organizar Finanzas con navegacion interna desktop-first | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Simplificar formulario manual sin campo comercio | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Simplificar transferencias internas con cambio de moneda | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `docs/PROGRESO_VEO.md` |
+| Redisenar Agregar registro en Finanzas | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
