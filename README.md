@@ -71,6 +71,7 @@ Luz debe:
 - En la dinamica familiar, Finanzas, Wishlist, Objetivos y Habitos son `household_shared` por defecto.
 - Diario Mental es `private` por defecto.
 - APIs bancarias y de billeteras son post-MVP: primero debe cerrar Finanzas usable con carga desde Luz, carga manual, PDF/CSV, saldos, conciliacion, categorias y reportes.
+- Criterio UX desktop: densidad media. VEO debe sentirse calmo, claro y premium, pero no gigante ni vacio. Primero se aplica en Finanzas; el resto de modulos se ajusta despues de cerrar Finanzas.
 
 ## Estado actual
 
