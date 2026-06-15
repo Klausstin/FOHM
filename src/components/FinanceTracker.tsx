@@ -1402,37 +1402,116 @@ const FINANCE_SECTIONS = [
 ] as const;
 
 type FinanceSectionId = typeof FINANCE_SECTIONS[number]['id'];
+type FinanceSectionConfig = typeof FINANCE_SECTIONS[number];
+
+const DEFAULT_FINANCE_SECTION_ORDER = FINANCE_SECTIONS.map(section => section.id) as FinanceSectionId[];
+
+function getFinanceSectionOrderStorageKey(userId?: string) {
+  return `veo.finance.sectionOrder.${userId || 'local'}`;
+}
+
+function normalizeFinanceSectionOrder(value: unknown): FinanceSectionId[] {
+  const rawOrder = Array.isArray(value) ? value : [];
+  const allowedIds = new Set(DEFAULT_FINANCE_SECTION_ORDER);
+  const validIds = rawOrder.filter((id): id is FinanceSectionId => allowedIds.has(id as FinanceSectionId));
+  const missingIds = DEFAULT_FINANCE_SECTION_ORDER.filter(id => !validIds.includes(id));
+  return [...validIds, ...missingIds];
+}
 
 function FinanceInternalNav({
   active,
   onChange,
+  sections,
+  onReorderSections,
+  onResetOrder,
 }: {
   active: FinanceSectionId;
   onChange: (section: FinanceSectionId) => void;
+  sections: FinanceSectionConfig[];
+  onReorderSections: (fromSection: FinanceSectionId, toSection: FinanceSectionId) => void;
+  onResetOrder: () => void;
 }) {
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [draggedSectionId, setDraggedSectionId] = useState<FinanceSectionId | null>(null);
+
   return (
     <nav className="sticky top-0 z-20 -mx-2 rounded-b-[1.5rem] bg-[#f7f7f4]/95 px-2 pb-2 pt-1.5 backdrop-blur">
-      <div className="flex flex-wrap gap-1.5 rounded-[1.25rem] border border-neutral-200 bg-white p-1.5 shadow-sm">
-        {FINANCE_SECTIONS.map(section => {
-          const isActive = active === section.id;
-          return (
+      <div className="rounded-[1.25rem] border border-neutral-200 bg-white p-1.5 shadow-sm">
+        <div className="flex flex-wrap items-stretch gap-1.5">
+          {sections.map(section => {
+            const isActive = active === section.id;
+            const isDragging = draggedSectionId === section.id;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                draggable={isEditingOrder}
+                onClick={() => {
+                  if (!isEditingOrder) onChange(section.id);
+                }}
+                onDragStart={(event) => {
+                  if (!isEditingOrder) return;
+                  setDraggedSectionId(section.id);
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', section.id);
+                }}
+                onDragOver={(event) => {
+                  if (!isEditingOrder) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  if (!isEditingOrder) return;
+                  event.preventDefault();
+                  const fromSection = (event.dataTransfer.getData('text/plain') || draggedSectionId) as FinanceSectionId | null;
+                  if (fromSection && fromSection !== section.id) {
+                    onReorderSections(fromSection, section.id);
+                  }
+                  setDraggedSectionId(null);
+                }}
+                onDragEnd={() => setDraggedSectionId(null)}
+                className={`rounded-xl px-3 py-2 text-left transition-all ${
+                  isEditingOrder
+                    ? `cursor-grab border border-dashed active:cursor-grabbing ${
+                      isDragging
+                        ? 'scale-95 border-neutral-900 bg-neutral-100 opacity-60'
+                        : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50'
+                    }`
+                    : isActive
+                      ? 'bg-neutral-950 text-white shadow-sm'
+                      : 'bg-white text-neutral-500 hover:bg-neutral-50 hover:text-neutral-950'
+                }`}
+              >
+                <span className="block text-[11px] font-black uppercase tracking-widest">{section.label}</span>
+                <span className={`mt-0.5 block text-[9px] font-bold ${isEditingOrder ? 'text-neutral-400' : isActive ? 'text-neutral-300' : 'text-neutral-400'}`}>
+                  {section.helper}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setIsEditingOrder(value => !value)}
+            className="ml-auto rounded-xl border border-neutral-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 transition hover:border-neutral-200 hover:text-neutral-800"
+          >
+            {isEditingOrder ? 'Cerrar orden' : 'Editar orden'}
+          </button>
+        </div>
+
+        {isEditingOrder && (
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3 py-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              Arrastra una tab y soltala donde la quieras dejar.
+            </p>
             <button
-              key={section.id}
               type="button"
-              onClick={() => onChange(section.id)}
-              className={`rounded-xl px-3 py-2 text-left transition-all ${
-                isActive
-                  ? 'bg-neutral-950 text-white shadow-sm'
-                  : 'bg-white text-neutral-500 hover:bg-neutral-50 hover:text-neutral-950'
-              }`}
+              onClick={onResetOrder}
+              className="shrink-0 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition hover:border-neutral-400 hover:text-neutral-900"
             >
-              <span className="block text-[11px] font-black uppercase tracking-widest">{section.label}</span>
-              <span className={`mt-0.5 block text-[9px] font-bold ${isActive ? 'text-neutral-300' : 'text-neutral-400'}`}>
-                {section.helper}
-              </span>
+              Restablecer orden
             </button>
-          );
-        })}
+          </div>
+        )}
       </div>
     </nav>
   );
@@ -2079,11 +2158,56 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionId>('summary');
+  const financeSectionOrderStorageKey = useMemo(() => getFinanceSectionOrderStorageKey(user.uid), [user.uid]);
+  const [financeSectionOrder, setFinanceSectionOrder] = useState<FinanceSectionId[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_FINANCE_SECTION_ORDER;
+    try {
+      return normalizeFinanceSectionOrder(JSON.parse(window.localStorage.getItem(getFinanceSectionOrderStorageKey(user.uid)) || '[]'));
+    } catch {
+      return DEFAULT_FINANCE_SECTION_ORDER;
+    }
+  });
   const [showPendingImportDetails, setShowPendingImportDetails] = useState(false);
   const [expandedFinanceId, setExpandedFinanceId] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      setFinanceSectionOrder(normalizeFinanceSectionOrder(JSON.parse(window.localStorage.getItem(financeSectionOrderStorageKey) || '[]')));
+    } catch {
+      setFinanceSectionOrder(DEFAULT_FINANCE_SECTION_ORDER);
+    }
+  }, [financeSectionOrderStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(financeSectionOrderStorageKey, JSON.stringify(financeSectionOrder));
+  }, [financeSectionOrder, financeSectionOrderStorageKey]);
+
+  const orderedFinanceSections = useMemo(() => {
+    return financeSectionOrder
+      .map(sectionId => FINANCE_SECTIONS.find(section => section.id === sectionId))
+      .filter((section): section is FinanceSectionConfig => Boolean(section));
+  }, [financeSectionOrder]);
+
+  const reorderFinanceSections = useCallback((fromSectionId: FinanceSectionId, toSectionId: FinanceSectionId) => {
+    setFinanceSectionOrder(currentOrder => {
+      const nextOrder = [...currentOrder];
+      const fromIndex = nextOrder.indexOf(fromSectionId);
+      const toIndex = nextOrder.indexOf(toSectionId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return currentOrder;
+      const [movedSection] = nextOrder.splice(fromIndex, 1);
+      nextOrder.splice(toIndex, 0, movedSection);
+      return nextOrder;
+    });
+  }, []);
+
+  const resetFinanceSectionOrder = useCallback(() => {
+    setFinanceSectionOrder(DEFAULT_FINANCE_SECTION_ORDER);
+  }, []);
 
   const pendingImportSummary = useMemo(() => {
     const byFile = pendingTransactions.reduce<Record<string, number>>((acc, transaction) => {
@@ -3757,37 +3881,40 @@ export default function FinanceTracker({ user }: { user: any }) {
   };
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Decidi mejor</p>
-          <h2 className="text-3xl font-black text-neutral-900 tracking-tight">Finanzas</h2>
-          <p className="text-neutral-500 font-medium">Entende donde esta tu plata y si tus gastos sostienen la vida que queres construir.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <div className="space-y-5">
+      {(activeFinanceSection === 'accounts' || activeFinanceSection === 'reports') && (
+        <div className="flex justify-end">
           {activeFinanceSection === 'accounts' && (
             <button
+              type="button"
               onClick={() => setIsAddingAccount(true)}
-              className="flex items-center gap-2 bg-white text-neutral-900 border border-neutral-200 px-4 py-2 rounded-xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
+              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-widest text-neutral-900 shadow-sm transition hover:bg-neutral-50"
             >
-              <Plus size={18} />
+              <Plus size={15} />
               Nueva cuenta
             </button>
           )}
           {activeFinanceSection === 'reports' && (
             <button
+              type="button"
               onClick={runAnalysis}
               disabled={isAnalyzing}
-              className="flex items-center gap-2 bg-neutral-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50"
             >
-              {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Sparkles size={18} />}
+              {isAnalyzing ? <Sparkles className="animate-spin" size={15} /> : <Sparkles size={15} />}
               Analizar finanzas
             </button>
           )}
         </div>
-      </header>
+      )}
 
-      <FinanceInternalNav active={activeFinanceSection} onChange={setActiveFinanceSection} />
+      <FinanceInternalNav
+        active={activeFinanceSection}
+        onChange={setActiveFinanceSection}
+        sections={orderedFinanceSections}
+        onReorderSections={reorderFinanceSections}
+        onResetOrder={resetFinanceSectionOrder}
+      />
 
       {activeFinanceSection === 'backup' && (
         <section className="rounded-[2rem] border border-neutral-100 bg-white p-6 shadow-sm">

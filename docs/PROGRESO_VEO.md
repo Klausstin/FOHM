@@ -119,6 +119,7 @@ Siguiente: [proximo paso]
 | Compactar Agregar registro desktop-first | Validando | 85% | `src/components/FinanceTracker.tsx`, `README.md`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 | Compactar lista de movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Redisenar edicion de movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Compactar header y personalizar tabs de Finanzas | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
@@ -131,5 +132,6 @@ Siguiente: [proximo paso]
 7. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
 8. Probar auditoria de movimientos importados validando que comercio, linea del resumen, huella, archivo y cuotas eviten abrir el PDF original.
 9. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-10. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
-10. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
+10. Mantener Importar como tab separada mientras tenga flujo propio: PDF/CSV, preview, evidencias, duplicados, pendientes, errores y confirmacion de importacion.
+11. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+12. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
