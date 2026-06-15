@@ -5668,6 +5668,35 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const beneficiaryLabel = beneficiary || (f.assignedTo === 'Ambos' ? 'Pareja' : (assignee?.displayName || 'Familia'));
                 const primaryNote = (f.note || f.description || merchantLabel || trace.originalConcept || f.originalDescription || 'Sin nota').split('\n')[0];
                 const amountPrefix = f.type === 'expense' ? '-' : f.type === 'income' ? '+' : '';
+                const editType = editForm?.type || f.type || 'expense';
+                const editTitle = (editForm?.note || editForm?.description || primaryNote || 'Movimiento').split('\n')[0];
+                const editCategoryLabel = editType === 'transfer'
+                  ? 'Transferencia interna'
+                  : [editForm?.category || f.category || 'Sin categoria', editForm?.subCategory || f.subCategory].filter(Boolean).join(' / ');
+                const editAccountLabel = editType === 'transfer'
+                  ? [
+                    editSourceAccount?.name || sourceAccount?.name || 'Sin origen',
+                    editDestinationAccount?.name || destinationAccount?.name || 'Sin destino',
+                  ].join(' -> ')
+                  : editSourceAccount?.name || sourceAccount?.name || 'Sin cuenta';
+                const editBeneficiaryLabel = editType === 'transfer'
+                  ? 'Movimiento interno'
+                  : editForm?.beneficiaryLabel || beneficiaryLabel;
+                const editAmountPrefix = editType === 'expense' ? '-' : editType === 'income' ? '+' : '';
+                const editAmountLabel = `${editAmountPrefix}${editForm?.currency || f.currency || 'ARS'} ${Number(editForm?.amount || f.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+                const editDateLabel = editForm?.date
+                  ? format(new Date(editForm.date), 'dd/MM/yyyy HH:mm')
+                  : format(f.date.toDate(), 'dd/MM/yyyy HH:mm');
+                const editToneClasses = editType === 'income'
+                  ? 'border-emerald-100 bg-emerald-50 text-emerald-900'
+                  : editType === 'transfer'
+                    ? 'border-blue-100 bg-blue-50 text-blue-900'
+                    : 'border-red-100 bg-red-50 text-red-900';
+                const editAmountClasses = editType === 'income'
+                  ? 'text-emerald-700'
+                  : editType === 'transfer'
+                    ? 'text-blue-700'
+                    : 'text-red-700';
 
                 return (
                   <motion.div
@@ -5678,274 +5707,437 @@ export default function FinanceTracker({ user }: { user: any }) {
                     className="bg-white rounded-2xl border border-neutral-100 shadow-sm flex flex-col group hover:border-neutral-200 hover:shadow-md transition-all overflow-hidden"
                   >
                     {isEditing ? (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              value={editForm.amount}
-                              onChange={(e) => {
-                                const nextAmount = e.target.value;
-                                setEditForm({
-                                  ...editForm,
-                                  amount: nextAmount,
-                                  settlementAmount: editForm.type === 'transfer' && !editHasCurrencyExchange ? nextAmount : editForm.settlementAmount,
-                                });
-                              }}
-                              className="flex-1 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            />
-                            <select
-                              value={editForm.currency}
-                              onChange={(e) => setEditForm({
-                                ...editForm,
-                                currency: e.target.value,
-                                originalCurrency: e.target.value,
-                                settlementAmount: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? editForm.amount : editForm.settlementAmount,
-                                fxRate: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? '' : editForm.fxRate,
-                              })}
-                              className="w-16 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                      <div className="space-y-5 p-5 lg:p-6">
+                        <div className={`rounded-[1.75rem] border p-5 ${editToneClasses}`}>
+                          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] opacity-60">Editando movimiento</p>
+                              <h3 className="mt-2 truncate text-2xl font-black tracking-tight">{editTitle}</h3>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <span className="rounded-full bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                                  {editCategoryLabel}
+                                </span>
+                                <span className="rounded-full bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                                  {editAccountLabel}
+                                </span>
+                                <span className="rounded-full bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                                  Para {editBeneficiaryLabel}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="shrink-0 rounded-[1.25rem] bg-white px-5 py-4 text-left shadow-sm lg:text-right">
+                              <p className={`text-2xl font-black ${editAmountClasses}`}>{editAmountLabel}</p>
+                              <p className="mt-1 text-xs font-bold text-neutral-500">{editDateLabel}</p>
+                            </div>
                           </div>
-                          {editForm.type !== 'transfer' && (
-                            <select
-                              value={editForm.category}
-                              onChange={(e) => setEditForm({ ...editForm, category: e.target.value, subCategory: '' })}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                            </select>
-                          )}
-                          {editForm.type !== 'transfer' && editForm.category && userCategories.find(c => c.name === editForm.category)?.subCategories?.length > 0 && (
-                            <select
-                              value={editForm.subCategory}
-                              onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value, subSubCategory: '' })}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              <option value="">Sin subcategoria</option>
-                              {(userCategories.find(c => c.name === editForm.category)?.subCategories || []).map((sub: any) => {
-                                const name = typeof sub === 'string' ? sub : sub.name;
-                                return <option key={name} value={name}>{name}</option>;
-                              })}
-                            </select>
-                          )}
-                          <select
-                            value={editForm.accountId}
-                            onChange={(e) => {
-                              const selectedAccount = userAccounts.find(account => account.id === e.target.value);
-                              setEditForm({
-                                ...editForm,
-                                accountId: e.target.value,
-                                sourceAccountId: e.target.value,
-                                currency: selectedAccount?.currency || editForm.currency,
-                                originalCurrency: selectedAccount?.currency || editForm.originalCurrency,
-                                settlementAmount: editForm.type === 'transfer' && selectedAccount?.currency === editDestinationCurrency ? editForm.amount : editForm.settlementAmount,
-                              });
-                            }}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          >
-                            <option value="">Sin cuenta usada</option>
-                            {(userAccounts || []).map(acc => (
-                              <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
-                            ))}
-                          </select>
-                          {editForm.type === 'transfer' && (
-                            <select
-                              value={editForm.toAccountId}
-                              onChange={(e) => {
-                                const selectedDestination = userAccounts.find(account => account.id === e.target.value);
-                                const nextDestinationCurrency = selectedDestination?.currency || editForm.settlementCurrency || editForm.currency;
-                                setEditForm({
-                                  ...editForm,
-                                  toAccountId: e.target.value,
-                                  settlementCurrency: nextDestinationCurrency,
-                                  settlementAmount: nextDestinationCurrency === editForm.currency ? editForm.amount : editForm.settlementAmount || editForm.amount,
-                                  fxRate: nextDestinationCurrency === editForm.currency ? '' : editForm.fxRate,
-                                });
-                              }}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              <option value="">Sin cuenta destino</option>
-                              {(userAccounts || []).map(acc => (
-                                <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
-                              ))}
-                            </select>
-                          )}
-                          {editForm.type === 'transfer' && (
-                            <div className="flex gap-1">
-                              <input
-                                type="number"
-                                value={editForm.settlementAmount || ''}
-                                onChange={(e) => {
-                                  const nextSettlementAmount = e.target.value;
-                                  const sourceAmount = Number(editForm.amount);
-                                  const parsedSettlement = Number(nextSettlementAmount);
-                                  setEditForm({
+                        </div>
+
+                        <section className="rounded-[1.75rem] border border-neutral-100 bg-neutral-50 p-5">
+                          <div className="mb-4 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Datos principales</p>
+                              <p className="mt-1 text-sm font-bold text-neutral-500">Lo minimo para que el movimiento quede bien registrado.</p>
+                            </div>
+                            <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                              {getFinanceTypeLabel(editForm.type)}
+                            </span>
+                          </div>
+
+                          {editForm.type === 'transfer' ? (
+                            <div className="grid gap-4 lg:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto origen</label>
+                                <input
+                                  type="number"
+                                  value={editForm.amount}
+                                  onChange={(e) => {
+                                    const nextAmount = e.target.value;
+                                    setEditForm({
+                                      ...editForm,
+                                      amount: nextAmount,
+                                      settlementAmount: editForm.type === 'transfer' && !editHasCurrencyExchange ? nextAmount : editForm.settlementAmount,
+                                    });
+                                  }}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda origen</label>
+                                <select
+                                  value={editForm.currency}
+                                  onChange={(e) => setEditForm({
                                     ...editForm,
-                                    settlementAmount: nextSettlementAmount,
-                                    settlementCurrency: editDestinationCurrency,
-                                    fxRate: editHasCurrencyExchange && Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(parsedSettlement) && parsedSettlement > 0
-                                      ? String(Number((parsedSettlement / sourceAmount).toFixed(6)))
-                                      : editForm.fxRate,
-                                  });
-                                }}
-                                placeholder="Monto destino"
-                                className="flex-1 bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                              />
-                              <input
-                                value={editDestinationCurrency}
-                                readOnly
-                                className="w-16 bg-neutral-100 border border-neutral-100 rounded-lg p-2 text-xs font-bold text-neutral-500"
-                              />
+                                    currency: e.target.value,
+                                    originalCurrency: e.target.value,
+                                    settlementAmount: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? editForm.amount : editForm.settlementAmount,
+                                    fxRate: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? '' : editForm.fxRate,
+                                  })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                >
+                                  {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
+                                <select
+                                  value={editForm.accountId}
+                                  onChange={(e) => {
+                                    const selectedAccount = userAccounts.find(account => account.id === e.target.value);
+                                    setEditForm({
+                                      ...editForm,
+                                      accountId: e.target.value,
+                                      sourceAccountId: e.target.value,
+                                      currency: selectedAccount?.currency || editForm.currency,
+                                      originalCurrency: selectedAccount?.currency || editForm.originalCurrency,
+                                      settlementAmount: editForm.type === 'transfer' && selectedAccount?.currency === editDestinationCurrency ? editForm.amount : editForm.settlementAmount,
+                                    });
+                                  }}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                >
+                                  <option value="">Sin cuenta origen</option>
+                                  {(userAccounts || []).map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta destino</label>
+                                <select
+                                  value={editForm.toAccountId}
+                                  onChange={(e) => {
+                                    const selectedDestination = userAccounts.find(account => account.id === e.target.value);
+                                    const nextDestinationCurrency = selectedDestination?.currency || editForm.settlementCurrency || editForm.currency;
+                                    setEditForm({
+                                      ...editForm,
+                                      toAccountId: e.target.value,
+                                      settlementCurrency: nextDestinationCurrency,
+                                      settlementAmount: nextDestinationCurrency === editForm.currency ? editForm.amount : editForm.settlementAmount || editForm.amount,
+                                      fxRate: nextDestinationCurrency === editForm.currency ? '' : editForm.fxRate,
+                                    });
+                                  }}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                >
+                                  <option value="">Sin cuenta destino</option>
+                                  {(userAccounts || []).map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto destino</label>
+                                <input
+                                  type="number"
+                                  value={editForm.settlementAmount || ''}
+                                  onChange={(e) => {
+                                    const nextSettlementAmount = e.target.value;
+                                    const sourceAmount = Number(editForm.amount);
+                                    const parsedSettlement = Number(nextSettlementAmount);
+                                    setEditForm({
+                                      ...editForm,
+                                      settlementAmount: nextSettlementAmount,
+                                      settlementCurrency: editDestinationCurrency,
+                                      fxRate: editHasCurrencyExchange && Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(parsedSettlement) && parsedSettlement > 0
+                                        ? String(Number((parsedSettlement / sourceAmount).toFixed(6)))
+                                        : editForm.fxRate,
+                                    });
+                                  }}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda destino</label>
+                                <input
+                                  value={editDestinationCurrency}
+                                  readOnly
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black text-neutral-500 outline-none"
+                                />
+                              </div>
+                              {editHasCurrencyExchange && (
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de cambio real</label>
+                                  <input
+                                    type="number"
+                                    value={editForm.fxRate || ''}
+                                    onChange={(e) => {
+                                      const nextFxRate = e.target.value;
+                                      const sourceAmount = Number(editForm.amount);
+                                      const parsedFxRate = Number(nextFxRate);
+                                      setEditForm({
+                                        ...editForm,
+                                        fxRate: nextFxRate,
+                                        settlementAmount: Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(parsedFxRate) && parsedFxRate > 0
+                                          ? String(Number((sourceAmount * parsedFxRate).toFixed(2)))
+                                          : editForm.settlementAmount,
+                                      });
+                                    }}
+                                    placeholder={`TC ${editDestinationCurrency}/${editSourceCurrency}`}
+                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  />
+                                </div>
+                              )}
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
+                                <input
+                                  type="datetime-local"
+                                  value={editForm.date}
+                                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
+                              <div className="space-y-1.5 lg:col-span-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Nota</label>
+                                <textarea
+                                  value={editForm.note}
+                                  onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                                  placeholder="Detalle libre de la transferencia"
+                                  className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-100 bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid gap-4 lg:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
+                                <input
+                                  type="number"
+                                  value={editForm.amount}
+                                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda</label>
+                                <select
+                                  value={editForm.currency}
+                                  onChange={(e) => setEditForm({ ...editForm, currency: e.target.value, originalCurrency: e.target.value })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                >
+                                  {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta usada</label>
+                                <select
+                                  value={editForm.accountId}
+                                  onChange={(e) => {
+                                    const selectedAccount = userAccounts.find(account => account.id === e.target.value);
+                                    setEditForm({
+                                      ...editForm,
+                                      accountId: e.target.value,
+                                      sourceAccountId: e.target.value,
+                                      currency: selectedAccount?.currency || editForm.currency,
+                                      originalCurrency: selectedAccount?.currency || editForm.originalCurrency,
+                                    });
+                                  }}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                >
+                                  <option value="">Sin cuenta usada</option>
+                                  {(userAccounts || []).map(acc => (
+                                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
+                                <input
+                                  type="datetime-local"
+                                  value={editForm.date}
+                                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
+                                <select
+                                  value={editForm.category}
+                                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value, subCategory: '' })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                >
+                                  {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Subcategoria</label>
+                                <select
+                                  value={editForm.subCategory}
+                                  disabled={!editForm.category || !(userCategories.find(c => c.name === editForm.category)?.subCategories?.length > 0)}
+                                  onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value, subSubCategory: '' })}
+                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 disabled:text-neutral-300"
+                                >
+                                  <option value="">Sin subcategoria</option>
+                                  {(userCategories.find(c => c.name === editForm.category)?.subCategories || []).map((sub: any) => {
+                                    const name = typeof sub === 'string' ? sub : sub.name;
+                                    return <option key={name} value={name}>{name}</option>;
+                                  })}
+                                </select>
+                              </div>
+                              <div className="space-y-1.5 lg:col-span-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Nota</label>
+                                <textarea
+                                  value={editForm.note}
+                                  onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                                  placeholder="Comercio, persona, origen o detalle libre"
+                                  className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-100 bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                />
+                              </div>
                             </div>
                           )}
-                          {editForm.type === 'transfer' && editHasCurrencyExchange && (
-                            <input
-                              type="number"
-                              value={editForm.fxRate || ''}
-                              onChange={(e) => {
-                                const nextFxRate = e.target.value;
-                                const sourceAmount = Number(editForm.amount);
-                                const parsedFxRate = Number(nextFxRate);
-                                setEditForm({
-                                  ...editForm,
-                                  fxRate: nextFxRate,
-                                  settlementAmount: Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(parsedFxRate) && parsedFxRate > 0
-                                    ? String(Number((sourceAmount * parsedFxRate).toFixed(2)))
-                                    : editForm.settlementAmount,
-                                });
-                              }}
-                              placeholder={`TC ${editDestinationCurrency}/${editSourceCurrency}`}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            />
-                          )}
-                          <input
-                            type="datetime-local"
-                            value={editForm.date}
-                            onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          />
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                          <textarea
-                            value={editForm.note}
-                            onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
-                            placeholder="Notas: comercio, persona, origen o detalle libre"
-                            className="min-h-[72px] w-full resize-none bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {editForm.type !== 'transfer' && (
-                            <select
-                              value={`${editForm.beneficiaryType || 'family'}:${editForm.beneficiaryLabel || legacyBeneficiaryLabel(editForm)}`}
-                              onChange={(e) => {
-                                const [nextType, nextLabel] = e.target.value.split(':');
-                                const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
-                                setEditForm({
-                                  ...editForm,
-                                  beneficiaryType: nextType,
-                                  beneficiaryLabel: nextLabel,
-                                  scope: option?.scope || editForm.scope || 'familia',
-                                  visibility: editForm.visibility || 'household_shared',
-                                });
-                              }}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {FINANCE_BENEFICIARIES.map(item => (
-                                <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
-                              ))}
-                            </select>
-                          )}
-                          {editForm.type !== 'transfer' && (
-                            <select
-                              value={editForm.paymentType}
-                              onChange={(e) => setEditForm({ ...editForm, paymentType: e.target.value })}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                          )}
-                          {editForm.type !== 'transfer' && (
-                            <select
-                              value={editForm.paymentStatus}
-                              onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          )}
-                          <select
-                            value={editForm.type}
-                            onChange={(e) => {
-                              const nextType = e.target.value;
-                              setEditForm({
-                                ...editForm,
-                                type: nextType,
-                                category: nextType === 'transfer' ? 'Movimientos neutros' : editForm.category,
-                                subCategory: nextType === 'transfer' ? 'Transferencia interna' : editForm.subCategory,
-                                paymentType: nextType === 'transfer' ? 'Transferencia' : editForm.paymentType,
-                                settlementAmount: nextType === 'transfer' ? editForm.settlementAmount || editForm.amount : editForm.settlementAmount,
-                              });
-                            }}
-                            className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          >
-                            {(FINANCE_TYPES || []).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                          </select>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex gap-4">
-                            <select
-                              value={editForm.generatedBy}
-                              onChange={(e) => setEditForm({ ...editForm, generatedBy: e.target.value })}
-                              className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                            >
-                              {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
-                            </select>
-                            {editForm.type !== 'transfer' && (
+                        </section>
+
+                        <section className="rounded-[1.75rem] border border-neutral-100 bg-white p-5">
+                          <div className="mb-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Detalles</p>
+                            <p className="mt-1 text-sm font-bold text-neutral-500">Contexto util para buscar, filtrar y entender el movimiento despues.</p>
+                          </div>
+                          <div className="grid gap-4 lg:grid-cols-3">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de movimiento</label>
                               <select
-                                value={editForm.scope || 'familia'}
-                                onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
-                                className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                                value={editForm.type}
+                                onChange={(e) => {
+                                  const nextType = e.target.value;
+                                  setEditForm({
+                                    ...editForm,
+                                    type: nextType,
+                                    category: nextType === 'transfer' ? 'Movimientos neutros' : editForm.category,
+                                    subCategory: nextType === 'transfer' ? 'Transferencia interna' : editForm.subCategory,
+                                    paymentType: nextType === 'transfer' ? 'Transferencia' : editForm.paymentType,
+                                    settlementAmount: nextType === 'transfer' ? editForm.settlementAmount || editForm.amount : editForm.settlementAmount,
+                                  });
+                                }}
+                                className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                               >
-                                {FINANCE_SCOPE_OPTIONS.map(option => (
-                                  <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
+                                {(FINANCE_TYPES || []).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                               </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Registrado por</label>
+                              <select
+                                value={editForm.generatedBy}
+                                onChange={(e) => setEditForm({ ...editForm, generatedBy: e.target.value })}
+                                className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                              >
+                                {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
+                              </select>
+                            </div>
+                            {editForm.type !== 'transfer' && (
+                              <>
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Para</label>
+                                  <select
+                                    value={`${editForm.beneficiaryType || 'family'}:${editForm.beneficiaryLabel || legacyBeneficiaryLabel(editForm)}`}
+                                    onChange={(e) => {
+                                      const [nextType, nextLabel] = e.target.value.split(':');
+                                      const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                                      setEditForm({
+                                        ...editForm,
+                                        beneficiaryType: nextType,
+                                        beneficiaryLabel: nextLabel,
+                                        scope: option?.scope || editForm.scope || 'familia',
+                                        visibility: editForm.visibility || 'household_shared',
+                                      });
+                                    }}
+                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  >
+                                    {FINANCE_BENEFICIARIES.map(item => (
+                                      <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de pago</label>
+                                  <select
+                                    value={editForm.paymentType}
+                                    onChange={(e) => setEditForm({ ...editForm, paymentType: e.target.value })}
+                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  >
+                                    {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Estado del pago</label>
+                                  <select
+                                    value={editForm.paymentStatus}
+                                    onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
+                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  >
+                                    {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Ambito</label>
+                                  <select
+                                    value={editForm.scope || 'familia'}
+                                    onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
+                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  >
+                                    {FINANCE_SCOPE_OPTIONS.map(option => (
+                                      <option key={option.value} value={option.value}>{option.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-1.5 lg:col-span-2">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
+                                  <input
+                                    value={Array.isArray(editForm.tags) ? editForm.tags.join(', ') : ''}
+                                    onChange={(e) => setEditForm({
+                                      ...editForm,
+                                      tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean),
+                                    })}
+                                    placeholder="Separadas por coma"
+                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  />
+                                </div>
+                              </>
                             )}
                           </div>
-                          <div className="flex gap-2">
+                        </section>
+
+                        {currentEditFeedback && (
+                          <p className={`rounded-2xl px-4 py-3 text-sm font-bold leading-5 ${
+                            currentEditFeedback.tone === 'error'
+                              ? 'bg-red-50 text-red-700'
+                              : currentEditFeedback.tone === 'warn'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {currentEditFeedback.message}
+                          </p>
+                        )}
+
+                        <div className="flex flex-col gap-3 border-t border-neutral-100 pt-5 lg:flex-row lg:items-center lg:justify-between">
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(f.id)}
+                            disabled={isSavingThisEdit}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-100 px-4 py-3 text-xs font-black uppercase tracking-widest text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-40"
+                          >
+                            <Trash2 size={15} />
+                            Eliminar
+                          </button>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                             <button
+                              type="button"
                               onClick={() => {
                                 setEditingId(null);
                                 setEditForm(null);
                               }}
                               disabled={isSavingThisEdit}
-                              className="p-2 text-neutral-400 transition hover:text-neutral-600 disabled:cursor-wait disabled:opacity-40"
+                              className="rounded-2xl border border-neutral-200 px-5 py-3 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400 disabled:cursor-wait disabled:opacity-40"
                             >
-                              <X size={18} />
+                              Cancelar
                             </button>
                             <button
+                              type="button"
                               onClick={saveEdit}
                               disabled={isSavingThisEdit}
-                              className="flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-bold text-white shadow-sm transition active:scale-95 hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-neutral-950 px-5 py-3 text-xs font-black uppercase tracking-widest text-white shadow-sm transition active:scale-95 hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
                             >
-                              <Save size={14} />
-                              {isSavingThisEdit ? 'Guardando...' : 'Guardar'}
+                              <Save size={15} />
+                              {isSavingThisEdit ? 'Guardando...' : 'Guardar cambios'}
                             </button>
                           </div>
                         </div>
-                        {currentEditFeedback && (
-                          <p className={`rounded-2xl px-3 py-2 text-xs font-bold leading-5 ${
-                            currentEditFeedback.tone === 'error'
-                              ? 'bg-red-50 text-red-700'
-                              : currentEditFeedback.tone === 'warn'
-                                ? 'bg-amber-50 text-amber-700'
-                              : 'bg-emerald-50 text-emerald-700'
-                          }`}>
-                            {currentEditFeedback.message}
-                          </p>
-                        )}
                       </div>
                     ) : (
                       <>

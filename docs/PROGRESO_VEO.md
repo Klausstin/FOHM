@@ -117,6 +117,7 @@ Siguiente: [proximo paso]
 | Simplificar transferencias internas con cambio de moneda | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `docs/PROGRESO_VEO.md` |
 | Redisenar Agregar registro en Finanzas | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Compactar lista de movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Redisenar edicion de movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
