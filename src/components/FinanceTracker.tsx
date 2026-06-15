@@ -4939,7 +4939,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       {(activeFinanceSection === 'summary' || activeFinanceSection === 'movements' || activeFinanceSection === 'import') && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Input & Stats */}
-        <div className={`${activeFinanceSection === 'import' ? 'lg:col-span-3' : 'lg:col-span-1'} space-y-6`}>
+        <div className={`${activeFinanceSection === 'import' || activeFinanceSection === 'movements' ? 'lg:col-span-3' : 'lg:col-span-1'} space-y-6`}>
           {/* Balance Card */}
           {activeFinanceSection === 'summary' && (
           <div className="bg-neutral-900 text-white p-8 rounded-[2rem] shadow-xl relative overflow-hidden">
@@ -4992,363 +4992,433 @@ export default function FinanceTracker({ user }: { user: any }) {
 
           {/* Manual Entry */}
           {activeFinanceSection === 'movements' && (
-          <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm">
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <Plus size={18} className="text-neutral-400" />
-              Agregar registro
-            </h3>
+          <div className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm lg:p-8">
+            <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Movimientos</p>
+                <h3 className="mt-1 flex items-center gap-2 text-2xl font-black tracking-tight text-neutral-950">
+                  <Plus size={20} className="text-neutral-400" />
+                  Agregar registro
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-neutral-100 p-1">
+                {(FINANCE_TYPES || []).map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => handleFinanceTypeChange(t.id)}
+                    className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+                      type === t.id
+                        ? 'bg-neutral-950 text-white shadow-sm'
+                        : 'text-neutral-500 hover:bg-white hover:text-neutral-900'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Left Column */}
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    {(FINANCE_TYPES || []).map(t => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => handleFinanceTypeChange(t.id)}
-                        className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold transition-all border ${
-                          type === t.id
-                            ? t.activeClass
-                            : 'bg-white text-neutral-500 border-neutral-100 hover:border-neutral-300'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
+              {type === 'transfer' ? (
+                <section className="space-y-5 rounded-[1.75rem] border border-neutral-100 bg-neutral-50/70 p-5 lg:p-6">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
+                    <h4 className="mt-1 text-lg font-black text-neutral-950">Transferencia interna</h4>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cantidad *</label>
-                    <div className="flex gap-2">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
+                      <select
+                        value={accountId}
+                        onChange={(e) => {
+                          setAccountId(e.target.value);
+                          const selectedAccount = userAccounts.find(account => account.id === e.target.value);
+                          if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
+                        }}
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                      >
+                        <option value="">Seleccionar cuenta</option>
+                        {(userAccounts || []).map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto origen</label>
                       <input
                         type="number"
                         value={amount}
                         onChange={(e) => {
                           setAmount(e.target.value);
-                          if (type === 'transfer' && !transferHasCurrencyExchange) setSettlementAmount(e.target.value);
+                          if (!transferHasCurrencyExchange) setSettlementAmount(e.target.value);
                         }}
                         placeholder="0.00"
                         required
-                        className="flex-1 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda origen</label>
                       <select
                         value={currency}
                         onChange={(e) => {
                           setCurrency(e.target.value);
-                          if (type === 'transfer' && transferDestinationAccount?.currency === e.target.value) {
+                          if (transferDestinationAccount?.currency === e.target.value) {
                             setSettlementAmount(amount || '');
                             setFxRate('');
                           }
                         }}
-                        className="w-24 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">
-                      {type === 'transfer' ? 'Cuenta origen' : 'Cuenta usada'}
-                    </label>
-                    <select
-                      value={accountId}
-                      onChange={(e) => {
-                        setAccountId(e.target.value);
-                        const selectedAccount = userAccounts.find(account => account.id === e.target.value);
-                        if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
-                      }}
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    >
-                      <option value="">Seleccionar cuenta</option>
-                      {(userAccounts || []).map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
-                      ))}
-                    </select>
-                  </div>
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta destino</label>
+                      <select
+                        value={toAccountId}
+                        onChange={(e) => {
+                          setToAccountId(e.target.value);
+                          const destination = userAccounts.find(account => account.id === e.target.value);
+                          if (!destination || destination.currency === currency) {
+                            setSettlementAmount(amount || '');
+                            setFxRate('');
+                          }
+                        }}
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                      >
+                        <option value="">Seleccionar cuenta destino</option>
+                        {(userAccounts || []).map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {type === 'transfer' && (
-                    <div className="space-y-4 rounded-3xl border border-neutral-100 bg-neutral-50/70 p-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Cuenta destino</label>
-                        <select
-                          value={toAccountId}
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto destino</label>
+                      <input
+                        type="number"
+                        value={settlementAmount}
+                        onChange={(e) => {
+                          setSettlementAmount(e.target.value);
+                          const sourceAmount = Number(amount);
+                          const destinationAmount = Number(e.target.value);
+                          if (transferHasCurrencyExchange && sourceAmount > 0 && destinationAmount > 0) {
+                            setFxRate(String(Number((destinationAmount / sourceAmount).toFixed(6))));
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda destino</label>
+                      <input
+                        type="text"
+                        value={transferDestinationCurrency}
+                        readOnly
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold text-neutral-500"
+                      />
+                    </div>
+
+                    {transferHasCurrencyExchange && (
+                      <div className="space-y-2 lg:col-span-3">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                          Tipo de cambio real ({transferDestinationCurrency} por 1 {transferSourceCurrency})
+                        </label>
+                        <input
+                          type="number"
+                          value={fxRate}
                           onChange={(e) => {
-                            setToAccountId(e.target.value);
-                            const destination = userAccounts.find(account => account.id === e.target.value);
-                            if (!destination || destination.currency === currency) {
-                              setSettlementAmount(amount || '');
-                              setFxRate('');
+                            setFxRate(e.target.value);
+                            const sourceAmount = Number(amount);
+                            const nextRate = Number(e.target.value);
+                            if (sourceAmount > 0 && nextRate > 0) {
+                              setSettlementAmount(String(Number((sourceAmount * nextRate).toFixed(2))));
                             }
                           }}
-                          className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                          placeholder={`Ej: ${transferDestinationCurrency === 'ARS' ? '1440' : '1'}`}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
+                      <input
+                        type="datetime-local"
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                      />
+                    </div>
+
+                    <div className="space-y-2 lg:col-span-2">
+                      <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Notas</label>
+                      <input
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Ej: pago tarjeta, paso a Mercado Pago, compra de dolares..."
+                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="rounded-2xl bg-white px-4 py-3 text-xs font-bold leading-5 text-neutral-500">
+                    Transferencia es solo entre cuentas propias. Si le pagaste a alguien, cargalo como gasto y dejalo en notas.
+                  </p>
+                </section>
+              ) : (
+                <>
+                  <section className="space-y-5 rounded-[1.75rem] border border-neutral-100 bg-neutral-50/70 p-5 lg:p-6">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
+                      <h4 className="mt-1 text-lg font-black text-neutral-950">{type === 'income' ? 'Ingreso' : 'Gasto'}</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
+                        <input
+                          type="number"
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          placeholder="0.00"
+                          required
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda</label>
+                        <select
+                          value={currency}
+                          onChange={(e) => setCurrency(e.target.value)}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
-                          <option value="">Seleccionar cuenta destino</option>
+                          {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta usada</label>
+                        <select
+                          value={accountId}
+                          onChange={(e) => {
+                            setAccountId(e.target.value);
+                            const selectedAccount = userAccounts.find(account => account.id === e.target.value);
+                            if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
+                          }}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          <option value="">Seleccionar cuenta</option>
                           {(userAccounts || []).map(acc => (
                             <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
                           ))}
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Monto destino</label>
-                          <input
-                            type="number"
-                            value={settlementAmount}
-                            onChange={(e) => {
-                              setSettlementAmount(e.target.value);
-                              const sourceAmount = Number(amount);
-                              const destinationAmount = Number(e.target.value);
-                              if (transferHasCurrencyExchange && sourceAmount > 0 && destinationAmount > 0) {
-                                setFxRate(String(Number((destinationAmount / sourceAmount).toFixed(6))));
-                              }
-                            }}
-                            placeholder="0.00"
-                            className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Moneda destino</label>
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
+                        <select
+                          value={category}
+                          onChange={(e) => { setCategory(e.target.value); setSubCategoria(''); }}
+                          required
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          <option value="">Elegir</option>
+                          {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Subcategoria</label>
+                        <select
+                          value={subCategory}
+                          onChange={(e) => { setSubCategoria(e.target.value); setSubSubCategoria(''); }}
+                          disabled={!category || !userCategories.find(c => c.name === category)?.subCategories?.length}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all disabled:text-neutral-300 focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          <option value="">Sin subcategoria</option>
+                          {(userCategories.find(c => c.name === category)?.subCategories || []).map((sub: any) => {
+                            const name = typeof sub === 'string' ? sub : sub.name;
+                            return <option key={name} value={name}>{name}</option>;
+                          })}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
+                        <input
+                          type="datetime-local"
+                          value={date}
+                          onChange={(e) => setDate(e.target.value)}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        />
+                      </div>
+
+                      <div className="space-y-2 lg:col-span-3">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Notas</label>
+                        <textarea
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          placeholder="Ej: Rappi cena domingo, pago de haberes Gran Berta, plomero..."
+                          className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="space-y-5 rounded-[1.75rem] border border-neutral-100 bg-white p-5 lg:p-6">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Detalles opcionales</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Para</label>
+                        <select
+                          value={`${beneficiaryType}:${beneficiaryLabel}`}
+                          onChange={(e) => {
+                            const [nextType, nextLabel] = e.target.value.split(':');
+                            const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
+                            setBeneficiaryType(nextType);
+                            setBeneficiaryLabel(nextLabel);
+                            setScope(option?.scope || 'familia');
+                          }}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          {FINANCE_BENEFICIARIES.map(item => (
+                            <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de pago</label>
+                        <select
+                          value={paymentType}
+                          onChange={(e) => setPaymentType(e.target.value)}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Estado del pago</label>
+                        <select
+                          value={paymentStatus}
+                          onChange={(e) => setPaymentStatus(e.target.value)}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Registrado por</label>
+                        <select
+                          value={generatedBy}
+                          onChange={(e) => setGeneratedBy(e.target.value)}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Ambito</label>
+                        <select
+                          value={scope}
+                          onChange={(e) => setScope(e.target.value)}
+                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        >
+                          <option value="personal">Personal</option>
+                          <option value="pareja">Pareja</option>
+                          <option value="hogar">Hogar</option>
+                          <option value="familia">Familia</option>
+                        </select>
+                      </div>
+
+                      <label className="flex h-12 items-center gap-3 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold text-neutral-600">
+                        <input
+                          type="checkbox"
+                          checked={isFixed}
+                          onChange={(e) => setIsFijo(e.target.checked)}
+                          className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
+                        />
+                        Crear plantilla desde este registro
+                      </label>
+
+                      <div className="space-y-2 lg:col-span-3">
+                        <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
+                        <div className="flex gap-2">
                           <input
                             type="text"
-                            value={transferDestinationCurrency}
-                            readOnly
-                            className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm font-bold text-neutral-500"
-                          />
-                        </div>
-                      </div>
-
-                      {transferHasCurrencyExchange && (
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">
-                            Tipo de cambio real ({transferDestinationCurrency} por 1 {transferSourceCurrency})
-                          </label>
-                          <input
-                            type="number"
-                            value={fxRate}
-                            onChange={(e) => {
-                              setFxRate(e.target.value);
-                              const sourceAmount = Number(amount);
-                              const nextRate = Number(e.target.value);
-                              if (sourceAmount > 0 && nextRate > 0) {
-                                setSettlementAmount(String(Number((sourceAmount * nextRate).toFixed(2))));
+                            value={tagInput}
+                            onChange={(e) => setTagInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+                                  setTags([...tags, tagInput.trim()]);
+                                  setTagInput('');
+                                }
                               }
                             }}
-                            placeholder={`Ej: ${transferDestinationCurrency === 'ARS' ? '1440' : '1'}`}
-                            className="w-full bg-white border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
+                            placeholder="Escribir etiqueta"
+                            className="h-12 flex-1 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                           />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+                                setTags([...tags, tagInput.trim()]);
+                                setTagInput('');
+                              }
+                            }}
+                            className="h-12 rounded-2xl bg-neutral-900 px-5 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-neutral-800 active:scale-95"
+                          >
+                            Agregar
+                          </button>
                         </div>
-                      )}
-
-                      <p className="px-1 text-[11px] font-bold leading-5 text-neutral-400">
-                        Transferencia es solo entre cuentas propias. Si le pagaste a alguien, cargalo como gasto y dejalo en notas.
-                      </p>
-                    </div>
-                  )}
-
-                  {type !== 'transfer' && (
-                  <>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Categoria *</label>
-                    <select
-                      value={category}
-                      onChange={(e) => { setCategory(e.target.value); setSubCategoria(''); }}
-                      required
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    >
-                      <option value="">Elegir</option>
-                      {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
-                  </div>
-
-                  {category && userCategories.find(c => c.name === category)?.subCategories?.length > 0 && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Subcategoria</label>
-                      <select
-                        value={subCategory}
-                        onChange={(e) => { setSubCategoria(e.target.value); setSubSubCategoria(''); }}
-                        className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                      >
-                        <option value="">Ninguna</option>
-                        {(userCategories.find(c => c.name === category)?.subCategories || []).map((sub: any) => {
-                          const name = typeof sub === 'string' ? sub : sub.name;
-                          return <option key={name} value={name}>{name}</option>;
-                        })}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Etiquetas</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-                              setTags([...tags, tagInput.trim()]);
-                              setTagInput('');
-                            }
-                          }
-                        }}
-                        placeholder="Elegir o escribir..."
-                        className="flex-1 bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-                            setTags([...tags, tagInput.trim()]);
-                            setTagInput('');
-                          }
-                        }}
-                        className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 transition-all"
-                      >
-                        <Plus size={18} />
-                      </button>
-                    </div>
-                    {tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {(tags || []).map(t => (
-                          <span key={t} className="bg-neutral-100 text-neutral-600 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1">
-                            {t}
-                            <button type="button" onClick={() => setTags(tags.filter(tag => tag !== t))}><X size={10} /></button>
-                          </span>
-                        ))}
+                        {tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {(tags || []).map(t => (
+                              <span key={t} className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                                {t}
+                                <button type="button" onClick={() => setTags(tags.filter(tag => tag !== t))}><X size={12} /></button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  </>
-                  )}
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Fecha y hora</label>
-                    <input
-                      type="datetime-local"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    />
-                  </div>
-
-                  {type !== 'transfer' && (
-                    <label className="flex items-center gap-2 px-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isFixed}
-                        onChange={(e) => setIsFijo(e.target.checked)}
-                        className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
-                      />
-                      <span className="text-xs font-bold text-neutral-600">Crear plantilla desde este registro</span>
-                    </label>
-                  )}
-                </div>
-
-                {/* Right Column */}
-                <div className="space-y-4">
-                  <h4 className="text-sm font-bold text-neutral-900 border-b border-neutral-100 pb-2">Otros detalles</h4>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Notas</label>
-                    <textarea
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Ej: Rappi cena domingo, pago de haberes Gran Berta, plomero..."
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all min-h-[80px]"
-                    />
-                  </div>
-
-                  {type !== 'transfer' && (
-                  <>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Para</label>
-                    <select
-                      value={`${beneficiaryType}:${beneficiaryLabel}`}
-                      onChange={(e) => {
-                        const [nextType, nextLabel] = e.target.value.split(':');
-                        const option = FINANCE_BENEFICIARIES.find(item => item.type === nextType && item.label === nextLabel);
-                        setBeneficiaryType(nextType);
-                        setBeneficiaryLabel(nextLabel);
-                        setScope(option?.scope || 'familia');
-                      }}
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    >
-                      {FINANCE_BENEFICIARIES.map(item => (
-                        <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Tipo de pago</label>
-                    <select
-                      value={paymentType}
-                      onChange={(e) => setPaymentType(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    >
-                      {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Estado del pago</label>
-                    <select
-                      value={paymentStatus}
-                      onChange={(e) => setPaymentStatus(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                    >
-                      {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Registrado por</label>
-                      <select
-                        value={generatedBy}
-                        onChange={(e) => setGeneratedBy(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                      >
-                        {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
-                      </select>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Ambito</label>
-                      <select
-                        value={scope}
-                        onChange={(e) => setScope(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all"
-                      >
-                        <option value="personal">Personal</option>
-                        <option value="pareja">Pareja</option>
-                        <option value="hogar">Hogar</option>
-                        <option value="familia">Familia</option>
-                      </select>
-                    </div>
-                  </div>
-                  </>
-                  )}
-                </div>
-              </div>
+                  </section>
+                </>
+              )}
 
-              <div className="flex flex-col gap-2 pt-4">
-                <button
-                  type="submit"
-                  className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-md"
-                >
-                  Agregar registro
-                </button>
+              <div className="flex flex-col gap-3 border-t border-neutral-100 pt-6 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => handleSubmit(undefined, true)}
-                  className="w-full bg-white text-blue-600 border border-blue-600 py-4 rounded-xl font-bold text-sm hover:bg-blue-50 transition-all shadow-sm"
+                  className="rounded-2xl border border-neutral-200 bg-white px-6 py-4 text-xs font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
                 >
-                  Agregar y crear otro
+                  Guardar y cargar otro
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-neutral-950 px-8 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
+                >
+                  Guardar registro
                 </button>
               </div>
             </form>
@@ -5389,7 +5459,7 @@ export default function FinanceTracker({ user }: { user: any }) {
 
         {/* List Section */}
         {activeFinanceSection === 'movements' && (
-        <div id="finance-movement-list" className="lg:col-span-2 scroll-mt-6 space-y-6">
+        <div id="finance-movement-list" className="lg:col-span-3 scroll-mt-6 space-y-6">
           <div className="flex items-center gap-4 border-b border-neutral-200 pb-px">
             <button
               onClick={() => setActiveListTab('all')}
