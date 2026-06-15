@@ -113,6 +113,7 @@ Siguiente: [proximo paso]
 | Limpiar tarjeta de auditoria y feedback de aplicar saldo | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar feedback visible al guardar movimientos editados | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Organizar Finanzas con navegacion interna desktop-first | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Simplificar formulario manual sin campo comercio | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 

@@ -2348,12 +2348,13 @@ export default function FinanceTracker({ user }: { user: any }) {
     if (!amount || !category) return;
 
     try {
+      const manualDescription = description || note || [category, subCategory].filter(Boolean).join(' / ');
       const transactionInput: CreateFinancialTransactionInput = {
         uid: user.uid,
         householdId: user.householdId,
         amount: parseFloat(amount),
         currency,
-        description,
+        description: manualDescription,
         note,
         category,
         subCategory,
@@ -4961,6 +4962,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                           <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</option>
                         ))}
                       </select>
+                      <p className="px-1 text-[11px] font-bold leading-5 text-neutral-400">
+                        Transferencia es solo entre cuentas propias. Si le pagaste a alguien, cargalo como gasto y dejalo en notas.
+                      </p>
                     </div>
                   )}
 
@@ -5064,11 +5068,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                   <h4 className="text-sm font-bold text-neutral-900 border-b border-neutral-100 pb-2">Otros detalles</h4>
                   
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Nota</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Notas</label>
                     <textarea
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Describe el registro"
+                      placeholder="Ej: Rappi cena domingo, pago de haberes Gran Berta, plomero..."
                       className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all min-h-[80px]"
                     />
                   </div>
@@ -5453,20 +5457,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                             className="bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <input 
-                            type="text"
-                            value={editForm.description}
-                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                            placeholder="Descripcion"
-                            className="w-full bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
-                          />
-                          <input 
-                            type="text"
+                        <div className="grid grid-cols-1 gap-3">
+                          <textarea
                             value={editForm.note}
                             onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
-                            placeholder="Nota"
-                            className="w-full bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
+                            placeholder="Notas: comercio, persona, origen o detalle libre"
+                            className="min-h-[72px] w-full resize-none bg-neutral-50 border border-neutral-100 rounded-lg p-2 text-xs font-bold"
                           />
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
