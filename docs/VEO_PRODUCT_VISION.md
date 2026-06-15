@@ -76,6 +76,12 @@ Luz no debe:
 - Convertir toda la vida en optimizacion.
 - Proponer objetivos genericos.
 
+## Criterio De Diseño
+
+VEO debe usar una densidad media desktop: calmo, claro y premium, pero no gigante ni vacio.
+
+La prioridad inmediata es aplicar este criterio dentro de Finanzas para llegar a un MVP usable al 100%. El ajuste global de Luz, Panel General, Diario, Wishlist, Objetivos, Habitos, Calendario y Ajustes queda para despues de cerrar Finanzas.
+
 ## Modulos Funcionales
 
 ### Diario

@@ -1411,8 +1411,8 @@ function FinanceInternalNav({
   onChange: (section: FinanceSectionId) => void;
 }) {
   return (
-    <nav className="sticky top-0 z-20 -mx-2 rounded-b-[2rem] bg-[#f7f7f4]/95 px-2 pb-3 pt-2 backdrop-blur">
-      <div className="flex flex-wrap gap-2 rounded-[1.75rem] border border-neutral-200 bg-white p-2 shadow-sm">
+    <nav className="sticky top-0 z-20 -mx-2 rounded-b-[1.5rem] bg-[#f7f7f4]/95 px-2 pb-2 pt-1.5 backdrop-blur">
+      <div className="flex flex-wrap gap-1.5 rounded-[1.25rem] border border-neutral-200 bg-white p-1.5 shadow-sm">
         {FINANCE_SECTIONS.map(section => {
           const isActive = active === section.id;
           return (
@@ -1420,14 +1420,14 @@ function FinanceInternalNav({
               key={section.id}
               type="button"
               onClick={() => onChange(section.id)}
-              className={`rounded-2xl px-4 py-3 text-left transition-all ${
+              className={`rounded-xl px-3 py-2 text-left transition-all ${
                 isActive
                   ? 'bg-neutral-950 text-white shadow-sm'
                   : 'bg-white text-neutral-500 hover:bg-neutral-50 hover:text-neutral-950'
               }`}
             >
-              <span className="block text-xs font-black uppercase tracking-widest">{section.label}</span>
-              <span className={`mt-1 block text-[10px] font-bold ${isActive ? 'text-neutral-300' : 'text-neutral-400'}`}>
+              <span className="block text-[11px] font-black uppercase tracking-widest">{section.label}</span>
+              <span className={`mt-0.5 block text-[9px] font-bold ${isActive ? 'text-neutral-300' : 'text-neutral-400'}`}>
                 {section.helper}
               </span>
             </button>
@@ -4993,23 +4993,23 @@ export default function FinanceTracker({ user }: { user: any }) {
 
           {/* Manual Entry */}
           {activeFinanceSection === 'movements' && (
-          <div className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm lg:p-8">
-            <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-sm lg:p-5">
+            <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Movimientos</p>
-                <h3 className="mt-1 flex items-center gap-2 text-2xl font-black tracking-tight text-neutral-950">
-                  <Plus size={20} className="text-neutral-400" />
+                <h3 className="mt-0.5 flex items-center gap-2 text-xl font-black tracking-tight text-neutral-950">
+                  <Plus size={18} className="text-neutral-400" />
                   Agregar registro
                 </h3>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-neutral-100 p-1">
+              <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-100 p-1">
                 {(FINANCE_TYPES || []).map(t => (
                   <button
                     key={t.id}
                     type="button"
                     onClick={() => handleFinanceTypeChange(t.id)}
-                    className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+                    className={`rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
                       type === t.id
                         ? 'bg-neutral-950 text-white shadow-sm'
                         : 'text-neutral-500 hover:bg-white hover:text-neutral-900'
@@ -5021,16 +5021,16 @@ export default function FinanceTracker({ user }: { user: any }) {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {type === 'transfer' ? (
-                <section className="space-y-5 rounded-[1.75rem] border border-neutral-100 bg-neutral-50/70 p-5 lg:p-6">
+                <section className="space-y-3 rounded-[1.25rem] border border-neutral-100 bg-neutral-50/70 p-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
-                    <h4 className="mt-1 text-lg font-black text-neutral-950">Transferencia interna</h4>
+                    <h4 className="mt-0.5 text-base font-black text-neutral-950">Transferencia interna</h4>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
                       <select
                         value={accountId}
@@ -5039,7 +5039,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           const selectedAccount = userAccounts.find(account => account.id === e.target.value);
                           if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
                         }}
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         <option value="">Seleccionar cuenta</option>
                         {(userAccounts || []).map(acc => (
@@ -5048,7 +5048,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </select>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto origen</label>
                       <input
                         type="number"
@@ -5059,11 +5059,11 @@ export default function FinanceTracker({ user }: { user: any }) {
                         }}
                         placeholder="0.00"
                         required
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda origen</label>
                       <select
                         value={currency}
@@ -5074,13 +5074,13 @@ export default function FinanceTracker({ user }: { user: any }) {
                             setFxRate('');
                           }
                         }}
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta destino</label>
                       <select
                         value={toAccountId}
@@ -5092,7 +5092,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             setFxRate('');
                           }
                         }}
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       >
                         <option value="">Seleccionar cuenta destino</option>
                         {(userAccounts || []).map(acc => (
@@ -5101,7 +5101,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </select>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto destino</label>
                       <input
                         type="number"
@@ -5115,22 +5115,22 @@ export default function FinanceTracker({ user }: { user: any }) {
                           }
                         }}
                         placeholder="0.00"
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda destino</label>
                       <input
                         type="text"
                         value={transferDestinationCurrency}
                         readOnly
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold text-neutral-500"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold text-neutral-500"
                       />
                     </div>
 
                     {transferHasCurrencyExchange && (
-                      <div className="space-y-2 lg:col-span-3">
+                      <div className="space-y-1 lg:col-span-3">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">
                           Tipo de cambio real ({transferDestinationCurrency} por 1 {transferSourceCurrency})
                         </label>
@@ -5146,46 +5146,46 @@ export default function FinanceTracker({ user }: { user: any }) {
                             }
                           }}
                           placeholder={`Ej: ${transferDestinationCurrency === 'ARS' ? '1440' : '1'}`}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
                     )}
 
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
                       <input
                         type="datetime-local"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
 
-                    <div className="space-y-2 lg:col-span-2">
+                    <div className="space-y-1 lg:col-span-2">
                       <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Notas</label>
                       <input
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder="Ej: pago tarjeta, paso a Mercado Pago, compra de dolares..."
-                        className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                        className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                       />
                     </div>
                   </div>
 
-                  <p className="rounded-2xl bg-white px-4 py-3 text-xs font-bold leading-5 text-neutral-500">
+                  <p className="rounded-xl bg-white px-3 py-2 text-xs font-bold leading-5 text-neutral-500">
                     Transferencia es solo entre cuentas propias. Si le pagaste a alguien, cargalo como gasto y dejalo en notas.
                   </p>
                 </section>
               ) : (
                 <>
-                  <section className="space-y-5 rounded-[1.75rem] border border-neutral-100 bg-neutral-50/70 p-5 lg:p-6">
+                  <section className="space-y-3 rounded-[1.25rem] border border-neutral-100 bg-neutral-50/70 p-4">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Datos principales</p>
-                      <h4 className="mt-1 text-lg font-black text-neutral-950">{type === 'income' ? 'Ingreso' : 'Gasto'}</h4>
+                      <h4 className="mt-0.5 text-base font-black text-neutral-950">{type === 'income' ? 'Ingreso' : 'Gasto'}</h4>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                      <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
                         <input
                           type="number"
@@ -5193,22 +5193,22 @@ export default function FinanceTracker({ user }: { user: any }) {
                           onChange={(e) => setAmount(e.target.value)}
                           placeholder="0.00"
                           required
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda</label>
                         <select
                           value={currency}
                           onChange={(e) => setCurrency(e.target.value)}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta usada</label>
                         <select
                           value={accountId}
@@ -5217,7 +5217,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             const selectedAccount = userAccounts.find(account => account.id === e.target.value);
                             if (selectedAccount?.currency) setCurrency(selectedAccount.currency);
                           }}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="">Seleccionar cuenta</option>
                           {(userAccounts || []).map(acc => (
@@ -5226,26 +5226,26 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
                         <select
                           value={category}
                           onChange={(e) => { setCategory(e.target.value); setSubCategoria(''); }}
                           required
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="">Elegir</option>
                           {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Subcategoria</label>
                         <select
                           value={subCategory}
                           onChange={(e) => { setSubCategoria(e.target.value); setSubSubCategoria(''); }}
                           disabled={!category || !userCategories.find(c => c.name === category)?.subCategories?.length}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all disabled:text-neutral-300 focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all disabled:text-neutral-300 focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="">Sin subcategoria</option>
                           {(userCategories.find(c => c.name === category)?.subCategories || []).map((sub: any) => {
@@ -5255,35 +5255,35 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
                         <input
                           type="datetime-local"
                           value={date}
                           onChange={(e) => setDate(e.target.value)}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
 
-                      <div className="space-y-2 lg:col-span-3">
+                      <div className="space-y-1 lg:col-span-3">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Notas</label>
                         <textarea
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
                           placeholder="Ej: Rappi cena domingo, pago de haberes Gran Berta, plomero..."
-                          className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="min-h-[64px] w-full resize-none rounded-xl border border-neutral-100 bg-white px-3 py-2 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         />
                       </div>
                     </div>
                   </section>
 
-                  <section className="space-y-5 rounded-[1.75rem] border border-neutral-100 bg-white p-5 lg:p-6">
+                  <section className="space-y-3 rounded-[1.25rem] border border-neutral-100 bg-white p-4">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-400">Detalles opcionales</p>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                      <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Para</label>
                         <select
                           value={`${beneficiaryType}:${beneficiaryLabel}`}
@@ -5294,7 +5294,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                             setBeneficiaryLabel(nextLabel);
                             setScope(option?.scope || 'familia');
                           }}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           {FINANCE_BENEFICIARIES.map(item => (
                             <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
@@ -5302,45 +5302,45 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de pago</label>
                         <select
                           value={paymentType}
                           onChange={(e) => setPaymentType(e.target.value)}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Estado del pago</label>
                         <select
                           value={paymentStatus}
                           onChange={(e) => setPaymentStatus(e.target.value)}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Registrado por</label>
                         <select
                           value={generatedBy}
                           onChange={(e) => setGeneratedBy(e.target.value)}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                         </select>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Ambito</label>
                         <select
                           value={scope}
                           onChange={(e) => setScope(e.target.value)}
-                          className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          className="h-10 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                         >
                           <option value="personal">Personal</option>
                           <option value="pareja">Pareja</option>
@@ -5349,7 +5349,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </select>
                       </div>
 
-                      <label className="flex h-12 items-center gap-3 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold text-neutral-600">
+                      <label className="flex h-10 items-center gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold text-neutral-600">
                         <input
                           type="checkbox"
                           checked={isFixed}
@@ -5359,7 +5359,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         Crear plantilla desde este registro
                       </label>
 
-                      <div className="space-y-2 lg:col-span-3">
+                      <div className="space-y-1 lg:col-span-3">
                         <label className="px-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
                         <div className="flex gap-2">
                           <input
@@ -5376,7 +5376,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                               }
                             }}
                             placeholder="Escribir etiqueta"
-                            className="h-12 flex-1 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                            className="h-10 flex-1 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-sm font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                           />
                           <button
                             type="button"
@@ -5386,15 +5386,15 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 setTagInput('');
                               }
                             }}
-                            className="h-12 rounded-2xl bg-neutral-900 px-5 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-neutral-800 active:scale-95"
+                            className="h-10 rounded-xl bg-neutral-900 px-4 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-neutral-800 active:scale-95"
                           >
                             Agregar
                           </button>
                         </div>
                         {tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-1">
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
                             {(tags || []).map(t => (
-                              <span key={t} className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                              <span key={t} className="flex items-center gap-2 rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-neutral-600">
                                 {t}
                                 <button type="button" onClick={() => setTags(tags.filter(tag => tag !== t))}><X size={12} /></button>
                               </span>
@@ -5407,17 +5407,17 @@ export default function FinanceTracker({ user }: { user: any }) {
                 </>
               )}
 
-              <div className="flex flex-col gap-3 border-t border-neutral-100 pt-6 sm:flex-row sm:justify-end">
+              <div className="flex flex-col gap-2 border-t border-neutral-100 pt-4 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => handleSubmit(undefined, true)}
-                  className="rounded-2xl border border-neutral-200 bg-white px-6 py-4 text-xs font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
+                  className="rounded-xl border border-neutral-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-widest text-neutral-700 transition-all hover:border-neutral-900 active:scale-95"
                 >
                   Guardar y cargar otro
                 </button>
                 <button
                   type="submit"
-                  className="rounded-2xl bg-neutral-950 px-8 py-4 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
+                  className="rounded-xl bg-neutral-950 px-6 py-3 text-[11px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-neutral-800 active:scale-95"
                 >
                   Guardar registro
                 </button>
