@@ -117,8 +117,8 @@ Siguiente: [proximo paso]
 | Simplificar transferencias internas con cambio de moneda | Validando | 85% | `src/components/FinanceTracker.tsx`, `src/features/finance/finance.service.ts`, `docs/PROGRESO_VEO.md` |
 | Redisenar Agregar registro en Finanzas | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Compactar Agregar registro desktop-first | Validando | 99% | `src/components/FinanceTracker.tsx`, `README.md`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
-| Compactar lista de movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
-| Redisenar edicion de movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Compactar lista de movimientos financieros | Validando | 88% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Redisenar edicion de movimientos financieros | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Compactar header y personalizar tabs de Finanzas | Validando | 95% | `src/components/FinanceTracker.tsx`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 | Ocultar Cuenta destino cuando no aplica | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
