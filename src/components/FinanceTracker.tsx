@@ -2217,6 +2217,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [activeListTab, setActiveListTab] = useState<'all' | 'reviews'>('all');
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionId>('summary');
   const [showManualOptionalDetails, setShowManualOptionalDetails] = useState(false);
+  const [showMovementFilters, setShowMovementFilters] = useState(false);
   const financeSectionOrderStorageKey = useMemo(() => getFinanceSectionOrderStorageKey(user.uid), [user.uid]);
   const [financeSectionOrder, setFinanceSectionOrder] = useState<FinanceSectionId[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_FINANCE_SECTION_ORDER;
@@ -3417,6 +3418,28 @@ export default function FinanceTracker({ user }: { user: any }) {
     });
     return groups;
   }, [] as Array<{ key: string; date: Date; arsTotal: number; items: any[] }>);
+
+  const hasActiveMovementFilters = filterDateRange !== 'all' ||
+    filterCategory !== 'all' ||
+    filterGeneratedBy !== 'all' ||
+    filterAssignedTo !== 'all' ||
+    filterBeneficiary !== 'all' ||
+    filterScope !== 'all' ||
+    filterAccount !== 'all' ||
+    Boolean(filterAmountMin || filterAmountMax);
+  const hasActiveMovementSearch = Boolean(searchQuery);
+  const resetMovementFilters = () => {
+    setFilterDateRange('all');
+    setFilterCategory('all');
+    setFilterGeneratedBy('all');
+    setFilterAssignedTo('all');
+    setFilterBeneficiary('all');
+    setFilterScope('all');
+    setFilterAccount('all');
+    setSearchQuery('');
+    setFilterAmountMin('');
+    setFilterAmountMax('');
+  };
 
   const runAnalysis = async () => {
     if (finances.length === 0) return;
@@ -5681,34 +5704,44 @@ export default function FinanceTracker({ user }: { user: any }) {
             </button>
           </div>
 
-          <div className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                <Filter size={18} className="text-neutral-400" />
-                Filtros y busqueda
-              </h3>
-              {(filterDateRange !== 'all' || filterCategory !== 'all' || filterGeneratedBy !== 'all' || filterAssignedTo !== 'all' || filterBeneficiary !== 'all' || filterScope !== 'all' || filterAccount !== 'all' || searchQuery || filterAmountMin || filterAmountMax) && (
+          <div className="rounded-3xl border border-neutral-200 bg-white p-3 shadow-sm">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+              <div className="relative flex-1">
+                <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-300" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar nota, categoria, alias, CBU, cuenta, PDF..."
+                  className="h-10 w-full rounded-2xl border border-neutral-100 bg-neutral-50 pl-9 pr-3 text-xs font-medium outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                />
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    setFilterDateRange('all');
-                    setFilterCategory('all');
-                    setFilterGeneratedBy('all');
-                    setFilterAssignedTo('all');
-                    setFilterBeneficiary('all');
-                    setFilterScope('all');
-                    setFilterAccount('all');
-                    setSearchQuery('');
-                    setFilterAmountMin('');
-                    setFilterAmountMax('');
-                  }}
-                  className="text-xs font-bold text-neutral-400 hover:text-neutral-900 transition-colors"
+                  type="button"
+                  onClick={() => setShowMovementFilters(prev => !prev)}
+                  className={`h-10 rounded-2xl px-4 text-[10px] font-semibold uppercase tracking-widest transition ${
+                    showMovementFilters || hasActiveMovementFilters
+                      ? 'bg-neutral-950 text-white'
+                      : 'border border-neutral-100 bg-white text-neutral-500 hover:text-neutral-900'
+                  }`}
                 >
-                  Limpiar filtros
+                  Filtros{hasActiveMovementFilters ? ' activos' : ''}
+                </button>
+                {(hasActiveMovementFilters || hasActiveMovementSearch) && (
+                <button
+                  type="button"
+                  onClick={resetMovementFilters}
+                  className="h-10 rounded-2xl border border-neutral-100 bg-white px-4 text-[10px] font-semibold uppercase tracking-widest text-neutral-400 transition hover:text-neutral-900"
+                >
+                  Limpiar
                 </button>
               )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(showMovementFilters || hasActiveMovementFilters) && (
+            <div className="mt-3 grid grid-cols-1 gap-3 border-t border-neutral-100 pt-3 md:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Periodo</label>
                 <select
@@ -5811,18 +5844,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                   ))}
                 </select>
               </div>
-
-              <div className="space-y-1 lg:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 px-1">Buscar</label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar descripcion, comercio, alias, CBU, cuenta, PDF..."
-                  className="w-full bg-neutral-50 border border-neutral-100 rounded-xl p-2 text-xs font-bold"
-                />
-              </div>
             </div>
+            )}
           </div>
 
           <div className="space-y-3">
