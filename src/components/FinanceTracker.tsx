@@ -5856,45 +5856,44 @@ export default function FinanceTracker({ user }: { user: any }) {
                     className="bg-white rounded-2xl border border-neutral-100 shadow-sm flex flex-col group hover:border-neutral-200 hover:shadow-md transition-all overflow-hidden"
                   >
                     {isEditing ? (
-                      <div className="space-y-5 p-5 lg:p-6">
-                        <div className={`rounded-[1.75rem] border p-5 ${editToneClasses}`}>
-                          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2.5 p-3">
+                        <div className={`rounded-2xl border p-3 ${editToneClasses}`}>
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                             <div className="min-w-0">
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] opacity-60">Editando movimiento</p>
-                              <h3 className="mt-2 truncate text-2xl font-black tracking-tight">{editTitle}</h3>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <span className="rounded-full bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                              <h3 className="mt-1 truncate text-lg font-black tracking-tight">{editTitle}</h3>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">
                                   {editCategoryLabel}
                                 </span>
-                                <span className="rounded-full bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">
                                   {editAccountLabel}
                                 </span>
-                                <span className="rounded-full bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">
                                   Para {editBeneficiaryLabel}
                                 </span>
                               </div>
                             </div>
-                            <div className="shrink-0 rounded-[1.25rem] bg-white px-5 py-4 text-left shadow-sm lg:text-right">
-                              <p className={`text-2xl font-black ${editAmountClasses}`}>{editAmountLabel}</p>
-                              <p className="mt-1 text-xs font-bold text-neutral-500">{editDateLabel}</p>
+                            <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-left shadow-sm lg:text-right">
+                              <p className={`text-lg font-black ${editAmountClasses}`}>{editAmountLabel}</p>
+                              <p className="mt-0.5 text-[10px] font-bold text-neutral-500">{editDateLabel}</p>
                             </div>
                           </div>
                         </div>
 
-                        <section className="rounded-[1.75rem] border border-neutral-100 bg-neutral-50 p-5">
-                          <div className="mb-4 flex items-center justify-between gap-3">
+                        <section className="rounded-2xl border border-neutral-100 bg-neutral-50 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
                             <div>
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Datos principales</p>
-                              <p className="mt-1 text-sm font-bold text-neutral-500">Lo minimo para que el movimiento quede bien registrado.</p>
                             </div>
-                            <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                            <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">
                               {getFinanceTypeLabel(editForm.type)}
                             </span>
                           </div>
 
                           {editForm.type === 'transfer' ? (
-                            <div className="grid gap-4 lg:grid-cols-2">
-                              <div className="space-y-1.5">
+                            <div className="grid gap-2 lg:grid-cols-3 xl:grid-cols-[140px_96px_minmax(190px,1fr)_minmax(190px,1fr)_140px_96px]">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto origen</label>
                                 <input
                                   type="number"
@@ -5907,10 +5906,10 @@ export default function FinanceTracker({ user }: { user: any }) {
                                       settlementAmount: editForm.type === 'transfer' && !editHasCurrencyExchange ? nextAmount : editForm.settlementAmount,
                                     });
                                   }}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda origen</label>
                                 <select
                                   value={editForm.currency}
@@ -5921,12 +5920,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                                     settlementAmount: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? editForm.amount : editForm.settlementAmount,
                                     fxRate: editForm.type === 'transfer' && editDestinationCurrency === e.target.value ? '' : editForm.fxRate,
                                   })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 >
                                   {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta origen</label>
                                 <select
                                   value={editForm.accountId}
@@ -5941,7 +5940,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                       settlementAmount: editForm.type === 'transfer' && selectedAccount?.currency === editDestinationCurrency ? editForm.amount : editForm.settlementAmount,
                                     });
                                   }}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 >
                                   <option value="">Sin cuenta origen</option>
                                   {(userAccounts || []).map(acc => (
@@ -5949,7 +5948,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                   ))}
                                 </select>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta destino</label>
                                 <select
                                   value={editForm.toAccountId}
@@ -5964,7 +5963,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                       fxRate: nextDestinationCurrency === editForm.currency ? '' : editForm.fxRate,
                                     });
                                   }}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 >
                                   <option value="">Sin cuenta destino</option>
                                   {(userAccounts || []).map(acc => (
@@ -5972,7 +5971,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                   ))}
                                 </select>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto destino</label>
                                 <input
                                   type="number"
@@ -5990,19 +5989,19 @@ export default function FinanceTracker({ user }: { user: any }) {
                                         : editForm.fxRate,
                                     });
                                   }}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda destino</label>
                                 <input
                                   value={editDestinationCurrency}
                                   readOnly
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black text-neutral-500 outline-none"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black text-neutral-500 outline-none"
                                 />
                               </div>
                               {editHasCurrencyExchange && (
-                                <div className="space-y-1.5">
+                                <div className="space-y-1">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de cambio real</label>
                                   <input
                                     type="number"
@@ -6020,51 +6019,51 @@ export default function FinanceTracker({ user }: { user: any }) {
                                       });
                                     }}
                                     placeholder={`TC ${editDestinationCurrency}/${editSourceCurrency}`}
-                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                   />
                                 </div>
                               )}
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
                                 <input
                                   type="datetime-local"
                                   value={editForm.date}
                                   onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
-                              <div className="space-y-1.5 lg:col-span-2">
+                              <div className="space-y-1 lg:col-span-3 xl:col-span-6">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Nota</label>
-                                <textarea
+                                <input
                                   value={editForm.note}
                                   onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
                                   placeholder="Detalle libre de la transferencia"
-                                  className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-100 bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
                             </div>
                           ) : (
-                            <div className="grid gap-4 lg:grid-cols-2">
-                              <div className="space-y-1.5">
+                            <div className="grid gap-2 lg:grid-cols-3 xl:grid-cols-[140px_96px_minmax(190px,1fr)_200px_minmax(190px,1fr)_minmax(190px,1fr)]">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Monto</label>
                                 <input
                                   type="number"
                                   value={editForm.amount}
                                   onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Moneda</label>
                                 <select
                                   value={editForm.currency}
                                   onChange={(e) => setEditForm({ ...editForm, currency: e.target.value, originalCurrency: e.target.value })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 >
                                   {(CURRENCIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Cuenta usada</label>
                                 <select
                                   value={editForm.accountId}
@@ -6078,7 +6077,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                       originalCurrency: selectedAccount?.currency || editForm.originalCurrency,
                                     });
                                   }}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 >
                                   <option value="">Sin cuenta usada</option>
                                   {(userAccounts || []).map(acc => (
@@ -6086,32 +6085,32 @@ export default function FinanceTracker({ user }: { user: any }) {
                                   ))}
                                 </select>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Fecha y hora</label>
                                 <input
                                   type="datetime-local"
                                   value={editForm.date}
                                   onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Categoria</label>
                                 <select
                                   value={editForm.category}
                                   onChange={(e) => setEditForm({ ...editForm, category: e.target.value, subCategory: '' })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 >
                                   {(userCategories || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                 </select>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Subcategoria</label>
                                 <select
                                   value={editForm.subCategory}
                                   disabled={!editForm.category || !(userCategories.find(c => c.name === editForm.category)?.subCategories?.length > 0)}
                                   onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value, subSubCategory: '' })}
-                                  className="h-12 w-full rounded-2xl border border-neutral-100 bg-white px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 disabled:text-neutral-300"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10 disabled:text-neutral-300"
                                 >
                                   <option value="">Sin subcategoria</option>
                                   {(userCategories.find(c => c.name === editForm.category)?.subCategories || []).map((sub: any) => {
@@ -6120,26 +6119,25 @@ export default function FinanceTracker({ user }: { user: any }) {
                                   })}
                                 </select>
                               </div>
-                              <div className="space-y-1.5 lg:col-span-2">
+                              <div className="space-y-1 lg:col-span-3 xl:col-span-6">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Nota</label>
-                                <textarea
+                                <input
                                   value={editForm.note}
                                   onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
                                   placeholder="Comercio, persona, origen o detalle libre"
-                                  className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-100 bg-white px-4 py-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
                             </div>
                           )}
                         </section>
 
-                        <section className="rounded-[1.75rem] border border-neutral-100 bg-white p-5">
-                          <div className="mb-4">
+                        <section className="rounded-2xl border border-neutral-100 bg-white p-3">
+                          <div className="mb-2">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Detalles</p>
-                            <p className="mt-1 text-sm font-bold text-neutral-500">Contexto util para buscar, filtrar y entender el movimiento despues.</p>
                           </div>
-                          <div className="grid gap-4 lg:grid-cols-3">
-                            <div className="space-y-1.5">
+                          <div className="grid gap-2 lg:grid-cols-3 xl:grid-cols-[minmax(160px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(140px,0.8fr)]">
+                            <div className="space-y-1">
                               <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de movimiento</label>
                               <select
                                 value={editForm.type}
@@ -6154,24 +6152,24 @@ export default function FinanceTracker({ user }: { user: any }) {
                                     settlementAmount: nextType === 'transfer' ? editForm.settlementAmount || editForm.amount : editForm.settlementAmount,
                                   });
                                 }}
-                                className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                               >
                                 {(FINANCE_TYPES || []).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                               </select>
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="space-y-1">
                               <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Registrado por</label>
                               <select
                                 value={editForm.generatedBy}
                                 onChange={(e) => setEditForm({ ...editForm, generatedBy: e.target.value })}
-                                className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                               >
                                 {uniqueHouseholdMembers.map(m => <option key={m.uid} value={m.uid}>{m.displayName || m.email}</option>)}
                               </select>
                             </div>
                             {editForm.type !== 'transfer' && (
                               <>
-                                <div className="space-y-1.5">
+                                <div className="space-y-1">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Para</label>
                                   <select
                                     value={`${editForm.beneficiaryType || 'family'}:${editForm.beneficiaryLabel || legacyBeneficiaryLabel(editForm)}`}
@@ -6186,46 +6184,46 @@ export default function FinanceTracker({ user }: { user: any }) {
                                         visibility: editForm.visibility || 'household_shared',
                                       });
                                     }}
-                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                   >
                                     {FINANCE_BENEFICIARIES.map(item => (
                                       <option key={`${item.type}:${item.label}`} value={`${item.type}:${item.label}`}>{item.label}</option>
                                     ))}
                                   </select>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-1">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Tipo de pago</label>
                                   <select
                                     value={editForm.paymentType}
                                     onChange={(e) => setEditForm({ ...editForm, paymentType: e.target.value })}
-                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                   >
                                     {(PAYMENT_TYPES || []).map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-1">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Estado del pago</label>
                                   <select
                                     value={editForm.paymentStatus}
                                     onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
-                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                   >
                                     {(PAYMENT_STATUSES || []).map(s => <option key={s} value={s}>{s}</option>)}
                                   </select>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-1">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Ambito</label>
                                   <select
                                     value={editForm.scope || 'familia'}
                                     onChange={(e) => setEditForm({ ...editForm, scope: e.target.value })}
-                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-black outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                   >
                                     {FINANCE_SCOPE_OPTIONS.map(option => (
                                       <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
                                   </select>
                                 </div>
-                                <div className="space-y-1.5 lg:col-span-2">
+                                <div className="space-y-1 lg:col-span-2">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
                                   <input
                                     value={Array.isArray(editForm.tags) ? editForm.tags.join(', ') : ''}
@@ -6234,7 +6232,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                       tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean),
                                     })}
                                     placeholder="Separadas por coma"
-                                    className="h-12 w-full rounded-2xl border border-neutral-100 bg-neutral-50 px-4 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                   />
                                 </div>
                               </>
@@ -6243,7 +6241,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                         </section>
 
                         {currentEditFeedback && (
-                          <p className={`rounded-2xl px-4 py-3 text-sm font-bold leading-5 ${
+                          <p className={`rounded-xl px-3 py-2 text-xs font-bold leading-5 ${
                             currentEditFeedback.tone === 'error'
                               ? 'bg-red-50 text-red-700'
                               : currentEditFeedback.tone === 'warn'
@@ -6254,12 +6252,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                           </p>
                         )}
 
-                        <div className="flex flex-col gap-3 border-t border-neutral-100 pt-5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex flex-col gap-2 border-t border-neutral-100 pt-3 lg:flex-row lg:items-center lg:justify-between">
                           <button
                             type="button"
                             onClick={() => handleDelete(f.id)}
                             disabled={isSavingThisEdit}
-                            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-100 px-4 py-3 text-xs font-black uppercase tracking-widest text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-40"
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-red-100 px-3 text-[10px] font-black uppercase tracking-widest text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-40"
                           >
                             <Trash2 size={15} />
                             Eliminar
@@ -6272,7 +6270,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 setEditForm(null);
                               }}
                               disabled={isSavingThisEdit}
-                              className="rounded-2xl border border-neutral-200 px-5 py-3 text-xs font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400 disabled:cursor-wait disabled:opacity-40"
+                              className="h-9 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-widest text-neutral-600 transition hover:border-neutral-400 disabled:cursor-wait disabled:opacity-40"
                             >
                               Cancelar
                             </button>
@@ -6280,7 +6278,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                               type="button"
                               onClick={saveEdit}
                               disabled={isSavingThisEdit}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-neutral-950 px-5 py-3 text-xs font-black uppercase tracking-widest text-white shadow-sm transition active:scale-95 hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition active:scale-95 hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
                             >
                               <Save size={15} />
                               {isSavingThisEdit ? 'Guardando...' : 'Guardar cambios'}
@@ -6380,7 +6378,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           </div>
                         </div>
                         {isExpanded && shouldShowTrace && (
-                          <div className="mx-4 rounded-2xl border border-neutral-100 bg-neutral-50/70 p-3">
+                          <div className="mx-3 rounded-xl border border-neutral-100 bg-neutral-50/70 p-2.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Rastro</span>
                               {f.importSource && (
@@ -6399,7 +6397,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 </span>
                               )}
                             </div>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                               <PendingMeta label="Concepto original" value={trace.originalConcept || f.originalDescription} />
                               <PendingMeta label="Detalle" value={trace.transferDetail} />
                               <PendingMeta label="Destinatario" value={trace.counterpartyName} />
@@ -6410,7 +6408,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                               <PendingMeta label="Destino" value={destinationAccount?.name} />
                             </div>
                             {(trace.reconciliations.length > 0 || trace.otherLines.length > 0 || f.duplicateReason) && (
-                              <div className="mt-3 space-y-1 border-t border-neutral-200 pt-3">
+                              <div className="mt-2 space-y-1 border-t border-neutral-200 pt-2">
                                 {[...trace.reconciliations, ...trace.otherLines, f.duplicateReason].filter(Boolean).slice(0, 3).map((line, index) => (
                                   <p key={`${f.id}-trace-${index}`} className="text-xs font-semibold leading-5 text-neutral-500">
                                     {line}
@@ -6421,7 +6419,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           </div>
                         )}
                         {isExpanded && (
-                        <div className="mx-4 mb-4 flex flex-wrap items-center gap-4 border-t border-neutral-50 pt-3">
+                        <div className="mx-3 mb-3 flex flex-wrap items-center gap-3 border-t border-neutral-50 pt-2">
                           {(f.source || f.confidence || f.estimatedReason) && (
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Origen</span>
