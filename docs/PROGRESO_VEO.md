@@ -123,6 +123,7 @@ Siguiente: [proximo paso]
 | Abrir detalle desde la fila de movimiento | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Afinar densidad visual de la lista de movimientos | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Unificar encabezado de lectura y edicion de movimientos | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Agrupar movimientos por fecha con subtotal diario | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Compactar header y personalizar tabs de Finanzas | Validando | 95% | `src/components/FinanceTracker.tsx`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 | Ocultar Cuenta destino cuando no aplica | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
