@@ -1,6 +1,6 @@
 # Progreso VEO
 
-Ultima actualizacion: 2026-06-15
+Ultima actualizacion: 2026-06-16
 
 Este archivo resume el estado macro del proyecto para no perder contexto entre bloques de trabajo.
 Los porcentajes son estimaciones de avance funcional, no promesas exactas.
@@ -47,6 +47,7 @@ Siguiente: [proximo paso]
 | Reconciliacion de resumenes | Implementando | 86% | Usar saldos de cierre, evitar falsas alertas de ajustes de saldo, detectar movimientos sin saldo aplicado, aplicar saldos pendientes, evitar duplicados y resolver pendientes en lote. |
 | Categorias financieras | Implementando | 88% | Aprendizaje por correcciones, categorias minimas, subcategorias limpias, memoria Wallet activable, memoria auditable, aprendizajes editables/desactivables y grupos similares mas confiables. |
 | Beneficiarios y economia familiar | Implementando | 62% | Separar cuenta usada de para quien fue el gasto, mejorar filtros por beneficiario real y usar lenguaje de producto claro. |
+| Proyectos y contextos financieros | Implementando | 45% | Usar contextos como Casamiento, Roma o Mudanza para agrupar gastos importantes sin convertirlos en categorias. |
 | Inflacion y lectura real | Planificando | 25% | Conectar fuente automatica confiable y reportes reales/nominales. |
 | Reportes y dashboard financiero | Implementando | 72% | Mejorar lectura practica diaria y mensual con ritmo diario, resumen de periodo, proyeccion de cierre, cuotas futuras, cuenta usada, variacion real, cambios por rubro y menos paneles redundantes; Finanzas ya empieza a separarse en secciones internas desktop-first. |
 | Backup y seguridad de datos | Implementando | 94% | Export JSON, CSV legible, validador local, protocolo de prueba real y playbook de recuperacion listos; falta ejecutar prueba real antes de carga masiva. |
@@ -127,6 +128,7 @@ Siguiente: [proximo paso]
 | Compactar filtros y busqueda de movimientos | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Compactar header y personalizar tabs de Finanzas | Validando | 95% | `src/components/FinanceTracker.tsx`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 | Ocultar Cuenta destino cuando no aplica | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Agregar proyecto/contexto a movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 
 ## Proximos pasos
 
@@ -142,3 +144,4 @@ Siguiente: [proximo paso]
 10. Mantener Importar como tab separada mientras tenga flujo propio: PDF/CSV, preview, evidencias, duplicados, pendientes, errores y confirmacion de importacion.
 11. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
 12. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
+13. Usar Proyecto para gastos grandes de una sola vez, como Casamiento, Viaje o Mudanza, sin ensuciar las categorias financieras.
