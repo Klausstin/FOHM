@@ -187,6 +187,7 @@ function buildFinanceTransactionsCsv(finances: any[], accounts: any[]) {
       ambito: finance.scope || '',
       medio_pago: finance.paymentType || '',
       estado_pago: finance.paymentStatus || '',
+      proyecto: finance.projectId || '',
       gasto_fijo: finance.isFixed ? 'si' : 'no',
       impacta_saldo: finance.accountBalanceApplied ? 'si' : 'no',
       origen: finance.importSource || finance.source || '',
@@ -2011,6 +2012,7 @@ function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
     trace.importedFile,
     trace.installmentLabel,
     trace.sourceLine,
+    finance.projectId,
     ...trace.reconciliations,
     ...trace.otherLines,
     ...(Array.isArray(finance.tags) ? finance.tags : []),
@@ -2123,6 +2125,7 @@ export default function FinanceTracker({ user }: { user: any }) {
   const [fxRate, setFxRate] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [isFixed, setIsFijo] = useState(false);
   const [payer, setPayer] = useState('');
@@ -2229,6 +2232,13 @@ export default function FinanceTracker({ user }: { user: any }) {
   });
   const [showPendingImportDetails, setShowPendingImportDetails] = useState(false);
   const [expandedFinanceId, setExpandedFinanceId] = useState<string | null>(null);
+  const projectOptions = useMemo(() => {
+    return Array.from(new Set(
+      (finances || [])
+        .map(finance => String(finance.projectId || '').trim())
+        .filter(Boolean),
+    )).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [finances]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
@@ -2611,6 +2621,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         sourceAccountId: accountId,
         toAccountId: isInternalTransfer ? toAccountId : '',
         tags: isInternalTransfer ? [] : tags,
+        projectId: isInternalTransfer ? '' : projectId.trim(),
         isFixed: isInternalTransfer ? false : isFixed,
         date: new Date(date),
         source: 'manual',
@@ -2654,6 +2665,7 @@ export default function FinanceTracker({ user }: { user: any }) {
       setTags([]);
 
       if (!keepFields) {
+        setProjectId('');
         setCurrency('ARS');
         setCategory('');
         setSubCategoria('');
@@ -3176,7 +3188,7 @@ export default function FinanceTracker({ user }: { user: any }) {
     setSavingEditId(currentEditingId);
     setEditFeedback(prev => ({ ...prev, [currentEditingId]: { tone: 'ok', message: 'Guardando cambios...' } }));
     try {
-      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, originalAccountId, originalSourceAccountId, originalToAccountId, originalPaymentType, originalBeneficiaryLabel, originalScope, merchantName, merchantKey } = editForm;
+      const { amount, currency, description, note, category, subCategory, subSubCategory, type, accountId, sourceAccountId, toAccountId, tags, isFixed, date, generatedBy, assignedTo, payer, beneficiaryType, beneficiaryId, beneficiaryLabel, scope, visibility, paymentType, paymentStatus, isConfirmed, originalDescription, originalCategory, originalSubCategory, originalSubSubCategory, originalAccountId, originalSourceAccountId, originalToAccountId, originalPaymentType, originalBeneficiaryLabel, originalScope, merchantName, merchantKey, projectId } = editForm;
       if (type === 'transfer' && (!(accountId || sourceAccountId) || !toAccountId)) {
         setEditFeedback(prev => ({
           ...prev,
@@ -3219,6 +3231,7 @@ export default function FinanceTracker({ user }: { user: any }) {
         sourceAccountId: resolvedSourceAccountId,
         toAccountId: isInternalTransfer ? toAccountId || '' : toAccountId || '',
         tags: isInternalTransfer ? [] : Array.isArray(tags) ? tags : [],
+        projectId: isInternalTransfer ? '' : String(projectId || '').trim(),
         isFixed: isInternalTransfer ? false : Boolean(isFixed),
         date: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
         generatedBy: generatedBy || user.uid,
@@ -5570,6 +5583,20 @@ export default function FinanceTracker({ user }: { user: any }) {
                           </select>
                         </div>
 
+                        <div className="space-y-1">
+                          <label className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-400">Proyecto</label>
+                          <input
+                            value={projectId}
+                            onChange={(e) => setProjectId(e.target.value)}
+                            list="finance-project-options"
+                            placeholder="Ej: Casamiento"
+                            className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition-all focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                          />
+                          <datalist id="finance-project-options">
+                            {projectOptions.map(option => <option key={option} value={option} />)}
+                          </datalist>
+                        </div>
+
                         <label className="flex h-9 items-center gap-2 rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold text-neutral-600">
                           <input
                             type="checkbox"
@@ -5952,11 +5979,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                           subtitle={[editCategoryLabel, editCategoryDisplay.secondary].filter(Boolean).join(' · ')}
                           amount={editAmountLabel}
                           amountClassName={editAmountClasses}
-                          badges={['Editando', editAccountLabel, editType === 'transfer' ? 'Movimiento interno' : `Para ${editBeneficiaryLabel}`]}
+                          badges={['Editando', editAccountLabel, editForm.projectId, editType === 'transfer' ? 'Movimiento interno' : `Para ${editBeneficiaryLabel}`]}
                           rows={[
                             { label: 'Fecha', value: editDateLabel },
                             { label: 'Tipo', value: getFinanceTypeLabel(editType) },
                             { label: editType === 'transfer' ? 'Cuenta origen' : getFinanceAccountFieldLabel({ ...f, ...editForm }), value: editAccountLabel },
+                            { label: 'Proyecto', value: editForm.projectId },
                             { label: 'Para', value: editBeneficiaryLabel },
                           ]}
                         />
@@ -6303,6 +6331,16 @@ export default function FinanceTracker({ user }: { user: any }) {
                                     ))}
                                   </select>
                                 </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Proyecto</label>
+                                  <input
+                                    value={editForm.projectId || ''}
+                                    onChange={(e) => setEditForm({ ...editForm, projectId: e.target.value })}
+                                    list="finance-project-options"
+                                    placeholder="Ej: Casamiento"
+                                    className="h-9 w-full rounded-xl border border-neutral-100 bg-neutral-50 px-3 text-xs font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
+                                  />
+                                </div>
                                 <div className="space-y-1 lg:col-span-2">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Etiquetas</label>
                                   <input
@@ -6413,6 +6451,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                               )}
                             </div>
                             <p className="truncate text-[11px] font-medium text-neutral-400">{categoryDisplay.secondary || typeInfo?.label || f.type}</p>
+                            {f.projectId && (
+                              <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-widest text-neutral-400">{f.projectId}</p>
+                            )}
                           </div>
 
                           {f.type === 'transfer' ? (
@@ -6501,6 +6542,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 { label: getFinanceAccountFieldLabel(f), value: accountLabel },
                                 ...(destinationAccount && financeNeedsDestinationAccount(f) ? [{ label: 'Cuenta destino', value: destinationAccount.name }] : []),
                                 { label: 'Para', value: beneficiaryLabel },
+                                { label: 'Proyecto', value: f.projectId },
                                 { label: 'Ambito', value: formatFinanceScope(f.scope || legacyScope(f)) },
                                 { label: 'Registrado por', value: generator?.displayName || 'Sin dato' },
                                 { label: 'Nota', value: primaryNote, wrap: true },
