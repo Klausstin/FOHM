@@ -3,7 +3,7 @@ import { db, collection, addDoc, query, where, orderBy, onSnapshot, handleFirest
 import { User } from 'firebase/auth';
 import {
   Wallet, Plus, FileText, TrendingUp, TrendingDown, PieChart, Upload, Trash2, Filter, Sparkles, AlertCircle, Check, X, Edit2, Save, Banknote, CreditCard, Briefcase, Download,
-  Utensils, ShoppingBag, Home, Bus, Car, Monitor, Coins, List, User as UserIcon, Tag, ChevronRight, ChevronDown, Calendar, ArrowUpRight, ArrowDownLeft, ArrowLeftRight
+  Utensils, ShoppingBag, Home, Bus, Car, Monitor, Coins, List, User as UserIcon, Tag, ChevronRight, ChevronDown, Calendar, ArrowUpRight, ArrowDownLeft, ArrowLeftRight, ArrowRight
 } from 'lucide-react';
 
 const ICON_MAP: { [key: string]: any } = {
@@ -1797,6 +1797,30 @@ function legacyBeneficiaryLabel(finance: any) {
 function legacyScope(finance: any) {
   if (finance.assignedTo === 'Ambos') return 'pareja';
   return finance.scope || 'familia';
+}
+
+function getNeutralMovementLabel(finance: any) {
+  const neutralType = String(finance?.neutralType || '').toLowerCase();
+  if (neutralType === 'credit_card_payment' || isCreditCardPaymentCategory(finance?.category, finance?.subCategory)) return 'Pago de tarjeta';
+  if (neutralType === 'currency_exchange') return 'Cambio de moneda';
+  if (neutralType === 'investment_movement') return 'Inversion';
+  if (neutralType === 'loan_movement') return 'Prestamo';
+  if (neutralType === 'balance_adjustment') return 'Ajuste de saldo';
+  return 'Transferencia';
+}
+
+function getMovementCategoryDisplay(finance: any) {
+  if (finance?.type === 'transfer') {
+    return {
+      primary: getNeutralMovementLabel(finance),
+      secondary: 'Transferencia',
+    };
+  }
+
+  return {
+    primary: finance?.subCategory || finance?.category || 'Sin categoria',
+    secondary: finance?.subCategory ? finance?.category : '',
+  };
 }
 
 interface ParsedFinanceTrace {
@@ -5811,9 +5835,12 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const editHasCurrencyExchange = editForm?.type === 'transfer' && Boolean(editForm?.toAccountId) && editSourceCurrency !== editDestinationCurrency;
                 const isExpanded = expandedFinanceId === f.id;
                 const categoryLabel = [f.category || 'Sin categoria', f.subCategory].filter(Boolean).join(' / ');
+                const categoryDisplay = getMovementCategoryDisplay(f);
                 const accountLabel = f.type === 'transfer'
                   ? [sourceAccount?.name || 'Sin origen', destinationAccount?.name || 'Sin destino'].join(' -> ')
                   : sourceAccount?.name || 'Sin cuenta';
+                const sourceAccountLabel = sourceAccount?.name || 'Sin origen';
+                const destinationAccountLabel = destinationAccount?.name || 'Sin destino';
                 const beneficiaryLabel = beneficiary || (f.assignedTo === 'Ambos' ? 'Pareja' : (assignee?.displayName || 'Familia'));
                 const primaryNote = (f.note || f.description || merchantLabel || trace.originalConcept || f.originalDescription || 'Sin nota').split('\n')[0];
                 const amountPrefix = f.type === 'expense' ? '-' : f.type === 'income' ? '+' : '';
@@ -5831,9 +5858,8 @@ export default function FinanceTracker({ user }: { user: any }) {
                 ];
                 const editType = editForm?.type || f.type || 'expense';
                 const editTitle = (editForm?.note || editForm?.description || primaryNote || 'Movimiento').split('\n')[0];
-                const editCategoryLabel = editType === 'transfer'
-                  ? 'Transferencia interna'
-                  : [editForm?.category || f.category || 'Sin categoria', editForm?.subCategory || f.subCategory].filter(Boolean).join(' / ');
+                const editCategoryDisplay = getMovementCategoryDisplay({ ...f, ...editForm, type: editType });
+                const editCategoryLabel = editCategoryDisplay.primary;
                 const editAccountLabel = editType === 'transfer'
                   ? [
                     editSourceAccount?.name || sourceAccount?.name || 'Sin origen',
@@ -6325,34 +6351,42 @@ export default function FinanceTracker({ user }: { user: any }) {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="whitespace-nowrap text-xs font-black text-neutral-900">{format(f.date.toDate(), 'dd/MM/yyyy')}</p>
-                              <p className="whitespace-nowrap text-[10px] font-bold text-neutral-400">{format(f.date.toDate(), 'HH:mm')}</p>
+                              <p className="whitespace-nowrap text-xs font-semibold text-neutral-900">{format(f.date.toDate(), 'dd/MM/yyyy')}</p>
+                              <p className="whitespace-nowrap text-[10px] font-medium text-neutral-400">{format(f.date.toDate(), 'HH:mm')}</p>
                             </div>
                           </div>
 
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
-                              <p className="truncate text-sm font-black text-neutral-950">{categoryLabel}</p>
+                              <p className="truncate text-sm font-semibold text-neutral-950">{categoryDisplay.primary}</p>
                               {f.isFixed && (
-                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-amber-700">
                                   Fijo
                                 </span>
                               )}
                               {(f.isConfirmed === false || f.needsReview) && (
-                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                                <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-amber-700">
                                   Revisar
                                 </span>
                               )}
                             </div>
-                            <p className="truncate text-[11px] font-bold text-neutral-400">{typeInfo?.label || f.type}</p>
+                            <p className="truncate text-[11px] font-medium text-neutral-400">{categoryDisplay.secondary || typeInfo?.label || f.type}</p>
                           </div>
 
-                          <p className="truncate text-xs font-black text-neutral-700">{accountLabel}</p>
-                          <p className="truncate text-xs font-bold text-neutral-500">{beneficiaryLabel}</p>
-                          <p className="truncate text-xs font-bold text-neutral-600">{primaryNote}</p>
+                          {f.type === 'transfer' ? (
+                            <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-neutral-700">
+                              <span className="truncate">{sourceAccountLabel}</span>
+                              <ArrowRight size={13} className="shrink-0 text-neutral-300" />
+                              <span className="truncate">{destinationAccountLabel}</span>
+                            </div>
+                          ) : (
+                            <p className="truncate text-xs font-medium text-neutral-700">{accountLabel}</p>
+                          )}
+                          <p className="truncate text-xs font-medium text-neutral-500">{beneficiaryLabel}</p>
+                          <p className="truncate text-xs font-medium text-neutral-600">{primaryNote}</p>
 
                           <div className="text-left xl:text-right">
-                            <p className={`text-sm font-black ${typeInfo?.color || 'text-neutral-900'}`}>
+                            <p className={`text-sm font-semibold ${typeInfo?.color || 'text-neutral-900'}`}>
                               {amountPrefix}{f.currency || 'ARS'} {Number(f.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                             </p>
                           </div>
@@ -6410,7 +6444,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                           <div className="mx-3 mb-3">
                             <FinanceMovementDetailDisplay
                               title={primaryNote}
-                              subtitle={categoryLabel}
+                              subtitle={[categoryDisplay.primary, categoryDisplay.secondary].filter(Boolean).join(' · ')}
                               amount={movementAmountLabel}
                               amountClassName={movementAmountClassName}
                               badges={[
