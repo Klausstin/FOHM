@@ -1923,9 +1923,9 @@ function buildFinanceTraceDetails(finance: any, accounts: any[]) {
     sourceAccount,
     destinationAccount,
     rows: [
-      { label: 'Comercio', value: merchant || 'No detectado' },
-      { label: 'Cuenta usada', value: sourceAccount?.name || 'Sin cuenta' },
-      { label: 'Destino', value: destinationAccount?.name || trace.counterpartyName || '-' },
+      { label: getFinanceAccountFieldLabel(finance), value: sourceAccount?.name || 'Sin cuenta' },
+      ...(financeNeedsDestinationAccount(finance) ? [{ label: 'Cuenta destino', value: destinationAccount?.name || '-' }] : []),
+      { label: 'Destinatario', value: trace.counterpartyName || '-' },
       { label: 'Alias', value: trace.counterpartyAlias || '-' },
       { label: 'CBU/CVU', value: trace.counterpartyAccount || '-' },
       { label: 'Archivo', value: trace.importedFile || finance.importSource || '-' },
@@ -4817,7 +4817,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                       <PendingMeta label="Moneda" value={pt.currency || 'ARS'} />
                       <PendingMeta label="Detectado como" value={FINANCE_TYPES.find(item => item.id === pt.type)?.label || pt.type} />
                       <PendingMeta label="Confianza" value={`${Math.round(Number(pt.confidence || 0) * 100)}%`} />
-                      <PendingMeta label="Comercio" value={pt.merchantName || 'No identificado'} />
+                      <PendingMeta label="Referencia detectada" value={pt.merchantName || 'No identificado'} />
                       <PendingMeta label="Fuente" value={pt.importSource || 'PDF'} />
                       <PendingMeta label="Cuenta del resumen" value={pt.statementAccountLabel || 'No detectada'} />
                       <PendingMeta label="Matching cuenta" value={pt.accountMatchConfidence || 'No evaluado'} />
@@ -5817,6 +5817,18 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const beneficiaryLabel = beneficiary || (f.assignedTo === 'Ambos' ? 'Pareja' : (assignee?.displayName || 'Familia'));
                 const primaryNote = (f.note || f.description || merchantLabel || trace.originalConcept || f.originalDescription || 'Sin nota').split('\n')[0];
                 const amountPrefix = f.type === 'expense' ? '-' : f.type === 'income' ? '+' : '';
+                const movementAmountLabel = `${amountPrefix}${f.currency || 'ARS'} ${Number(f.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+                const movementAmountClassName = f.type === 'income'
+                  ? 'text-emerald-700'
+                  : f.type === 'transfer'
+                    ? 'text-amber-700'
+                    : 'text-red-700';
+                const movementRawRows = [
+                  ...trace.reconciliations.map((line, index) => ({ label: `Conciliacion ${index + 1}`, value: line, wrap: true })),
+                  ...trace.otherLines.slice(0, 3).map((line, index) => ({ label: `Rastro ${index + 1}`, value: line, wrap: true })),
+                  ...(f.duplicateReason ? [{ label: 'Duplicado', value: f.duplicateReason, wrap: true }] : []),
+                  ...(f.estimatedReason ? [{ label: 'Supuesto', value: f.estimatedReason, wrap: true }] : []),
+                ];
                 const editType = editForm?.type || f.type || 'expense';
                 const editTitle = (editForm?.note || editForm?.description || primaryNote || 'Movimiento').split('\n')[0];
                 const editCategoryLabel = editType === 'transfer'
@@ -6124,7 +6136,7 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 <input
                                   value={editForm.note}
                                   onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
-                                  placeholder="Comercio, persona, origen o detalle libre"
+                                  placeholder="Persona, origen o detalle libre"
                                   className="h-9 w-full rounded-xl border border-neutral-100 bg-white px-3 text-sm font-bold outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/10"
                                 />
                               </div>
@@ -6377,79 +6389,39 @@ export default function FinanceTracker({ user }: { user: any }) {
                             </div>
                           </div>
                         </div>
-                        {isExpanded && shouldShowTrace && (
-                          <div className="mx-3 rounded-xl border border-neutral-100 bg-neutral-50/70 p-2.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Rastro</span>
-                              {f.importSource && (
-                                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-neutral-600 border border-neutral-100">
-                                  {f.importSource}
-                                </span>
-                              )}
-                              {trace.importedFile && (
-                                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-neutral-600 border border-neutral-100">
-                                  {trace.importedFile}
-                                </span>
-                              )}
-                              {trace.reconciliations.length > 0 && (
-                                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 border border-emerald-100">
-                                  Conciliado
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                              <PendingMeta label="Concepto original" value={trace.originalConcept || f.originalDescription} />
-                              <PendingMeta label="Detalle" value={trace.transferDetail} />
-                              <PendingMeta label="Destinatario" value={trace.counterpartyName} />
-                              <PendingMeta label="Alias" value={trace.counterpartyAlias} />
-                              <PendingMeta label="CBU/CVU" value={trace.counterpartyAccount} />
-                              <PendingMeta label="Comercio" value={merchantLabel} />
-                              <PendingMeta label="Origen" value={sourceAccount?.name} />
-                              <PendingMeta label="Destino" value={destinationAccount?.name} />
-                            </div>
-                            {(trace.reconciliations.length > 0 || trace.otherLines.length > 0 || f.duplicateReason) && (
-                              <div className="mt-2 space-y-1 border-t border-neutral-200 pt-2">
-                                {[...trace.reconciliations, ...trace.otherLines, f.duplicateReason].filter(Boolean).slice(0, 3).map((line, index) => (
-                                  <p key={`${f.id}-trace-${index}`} className="text-xs font-semibold leading-5 text-neutral-500">
-                                    {line}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
                         {isExpanded && (
-                        <div className="mx-3 mb-3 flex flex-wrap items-center gap-3 border-t border-neutral-50 pt-2">
-                          {(f.source || f.confidence || f.estimatedReason) && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Origen</span>
-                              <span className="text-[10px] font-bold text-neutral-500">
-                                {f.source || 'manual'}{f.confidence ? ` - ${f.confidence}` : ''}
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Registrado por</span>
-                            <span className="text-[10px] font-bold text-neutral-500">{generator?.displayName || 'Sin dato'}</span>
+                          <div className="mx-3 mb-3">
+                            <FinanceMovementDetailDisplay
+                              title={primaryNote}
+                              subtitle={categoryLabel}
+                              amount={movementAmountLabel}
+                              amountClassName={movementAmountClassName}
+                              badges={[
+                                f.importSource || f.source || 'manual',
+                                f.confidence,
+                                trace.importedFile,
+                                trace.reconciliations.length > 0 ? 'Conciliado' : '',
+                              ]}
+                              rows={[
+                                { label: 'Fecha', value: format(f.date.toDate(), 'dd/MM/yyyy HH:mm') },
+                                { label: 'Tipo', value: typeInfo?.label || f.type },
+                                { label: getFinanceAccountFieldLabel(f), value: accountLabel },
+                                ...(destinationAccount && financeNeedsDestinationAccount(f) ? [{ label: 'Cuenta destino', value: destinationAccount.name }] : []),
+                                { label: 'Para', value: beneficiaryLabel },
+                                { label: 'Ambito', value: formatFinanceScope(f.scope || legacyScope(f)) },
+                                { label: 'Registrado por', value: generator?.displayName || 'Sin dato' },
+                                { label: 'Nota', value: primaryNote, wrap: true },
+                              ]}
+                              technicalRows={shouldShowTrace ? [
+                                { label: 'Concepto original', value: trace.originalConcept || f.originalDescription, wrap: true },
+                                { label: 'Detalle', value: trace.transferDetail || trace.debitCardDetailLine, wrap: true },
+                                { label: 'Destinatario', value: trace.counterpartyName },
+                                { label: 'Alias', value: trace.counterpartyAlias },
+                                { label: 'CBU/CVU', value: trace.counterpartyAccount },
+                              ] : []}
+                              rawRows={movementRawRows}
+                            />
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Para</span>
-                            <span className="text-[10px] font-bold text-neutral-500">
-                              {beneficiary || (f.assignedTo === 'Ambos' ? 'Pareja' : (assignee?.displayName || 'Familia'))}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-black uppercase tracking-tighter text-neutral-300">Ambito</span>
-                            <span className="text-[10px] font-bold text-neutral-500">{formatFinanceScope(f.scope || legacyScope(f))}</span>
-                          </div>
-                          {f.estimatedReason && (
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[10px] font-bold text-amber-700 truncate block">
-                                Supuesto: {f.estimatedReason}
-                              </span>
-                            </div>
-                          )}
-                        </div>
                         )}
                       </>
                     )}
@@ -7062,7 +7034,7 @@ function FinanceLearningMemoryPanel({
                     <LearningDetailBlock title="Se activa cuando">
                       <LearningDetailRow label="Descripción contiene" value={mapping.originalDescription || mapping.learningKey || '-'} />
                       <LearningDetailRow label="Clave normalizada" value={mapping.learningKey || buildFinanceLearningKey(mapping.originalDescription || mapping.mappedDescription || '') || '-'} />
-                      <LearningDetailRow label="Comercio normalizado" value={mapping.merchantKey || mapping.merchantName || '-'} />
+                      <LearningDetailRow label="Patron normalizado" value={mapping.merchantKey || mapping.merchantName || '-'} />
                       <LearningDetailRow label="Cuenta detectada" value={account?.name || '-'} />
                     </LearningDetailBlock>
 
@@ -7383,6 +7355,86 @@ function PendingMeta({ label, value, wrap = false }: { label: string; value?: st
       <p className={`mt-1 text-xs font-black text-neutral-800 ${wrap ? 'whitespace-normal break-all leading-5' : 'truncate'}`}>
         {displayValue}
       </p>
+    </div>
+  );
+}
+
+function FinanceMovementDetailDisplay({
+  title,
+  amount,
+  amountClassName = 'text-neutral-950',
+  subtitle,
+  badges = [],
+  rows = [],
+  technicalRows = [],
+  rawRows = [],
+  rawExpanded = false,
+  onToggleRaw,
+}: {
+  title: string;
+  amount: string;
+  amountClassName?: string;
+  subtitle?: string;
+  badges?: string[];
+  rows?: Array<{ label: string; value?: string | number; wrap?: boolean }>;
+  technicalRows?: Array<{ label: string; value?: string | number; wrap?: boolean }>;
+  rawRows?: Array<{ label: string; value?: string | number; wrap?: boolean }>;
+  rawExpanded?: boolean;
+  onToggleRaw?: () => void;
+}) {
+  const visibleRows = rows.filter(row => isUsefulAuditValue(row.value));
+  const visibleTechnicalRows = technicalRows.filter(row => isUsefulAuditValue(row.value));
+  const visibleRawRows = rawRows.filter(row => isUsefulAuditValue(row.value));
+
+  return (
+    <div className="rounded-xl border border-neutral-100 bg-neutral-50/70 p-2.5">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black text-neutral-950">{title || 'Movimiento'}</p>
+          {subtitle && <p className="mt-0.5 truncate text-[11px] font-bold text-neutral-500">{subtitle}</p>}
+          {badges.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {badges.filter(Boolean).map(badge => (
+                <span key={badge} className="rounded-full border border-neutral-100 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className={`shrink-0 text-sm font-black lg:text-right ${amountClassName}`}>{amount}</p>
+      </div>
+
+      {visibleRows.length > 0 && (
+        <div className="mt-2 grid gap-2 border-t border-neutral-100 pt-2 sm:grid-cols-2 lg:grid-cols-4">
+          {visibleRows.map(row => <PendingMeta key={row.label} {...row} />)}
+        </div>
+      )}
+
+      {visibleTechnicalRows.length > 0 && (
+        <div className="mt-2 grid gap-2 border-t border-neutral-100 pt-2 sm:grid-cols-2 lg:grid-cols-4">
+          {visibleTechnicalRows.map(row => <PendingMeta key={row.label} {...row} />)}
+        </div>
+      )}
+
+      {visibleRawRows.length > 0 && (
+        <div className="mt-2 border-t border-neutral-100 pt-2">
+          {onToggleRaw ? (
+            <button
+              type="button"
+              onClick={onToggleRaw}
+              className="rounded-full bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-neutral-500 transition hover:text-neutral-900"
+            >
+              {rawExpanded ? 'Ocultar detalle banco' : 'Ver detalle banco'}
+            </button>
+          ) : null}
+          {(rawExpanded || !onToggleRaw) && (
+            <div className="mt-2 grid gap-2">
+              {visibleRawRows.map(row => <PendingMeta key={row.label} {...row} wrap />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -8183,9 +8235,6 @@ function BalanceIntegrityPanel({
                         {CURRENCIES.map(currency => <option key={currency} value={currency}>{currency}</option>)}
                       </select>
                     </AuditField>
-                    <AuditField label="Comercio">
-                      <input value={draft.merchantName} onChange={event => setDraft({ ...draft, merchantName: event.target.value })} placeholder="Ej: Rappi" className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
-                    </AuditField>
                     <AuditField label="Fecha">
                       <input type="date" value={draft.date} onChange={event => setDraft({ ...draft, date: event.target.value })} className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-black" />
                     </AuditField>
@@ -8225,40 +8274,30 @@ function BalanceIntegrityPanel({
                     </AuditField>
                   </div>
                 ) : (
-                  <>
-                    <p className="text-lg font-black text-neutral-950">
-                      {Number(finance.amount || 0).toLocaleString()} <span className="text-xs font-bold text-neutral-400">{finance.currency || 'ARS'}</span>
-                    </p>
-                    <p className="mt-1 text-sm font-bold text-neutral-700">{finance.description || 'Sin descripcion'}</p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <PendingMeta label="Fecha" value={date ? date.toLocaleDateString('es-AR') : 'Sin fecha'} />
-                      <PendingMeta label="Tipo" value={getFinanceTypeLabel(finance.type || finance.kind || 'expense')} />
-                      {visibleRows.map(row => (
-                        <PendingMeta key={row.label} label={row.label} value={row.value} />
-                      ))}
-                      {visibleLongRows.map(row => (
-                        <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
-                      ))}
-                    </div>
-                    {rawRows.length > 0 && (
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedIssueId(isRawExpanded ? null : issue.id)}
-                          className="rounded-full bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition hover:text-neutral-900"
-                        >
-                          {isRawExpanded ? 'Ocultar detalle banco' : 'Ver detalle banco'}
-                        </button>
-                        {isRawExpanded && (
-                          <div className="mt-3 grid gap-2">
-                            {rawRows.map(row => (
-                              <PendingMeta key={row.label} label={row.label} value={row.value} wrap />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
+                  <FinanceMovementDetailDisplay
+                    title={finance.description || finance.note || 'Movimiento'}
+                    subtitle={[finance.category || 'Sin categoria', finance.subCategory].filter(Boolean).join(' / ')}
+                    amount={`${Number(finance.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${finance.currency || 'ARS'}`}
+                    amountClassName={(finance.type || finance.kind) === 'income'
+                      ? 'text-emerald-700'
+                      : (finance.type || finance.kind) === 'transfer'
+                        ? 'text-amber-700'
+                        : 'text-red-700'}
+                    badges={[
+                      details.trace.importedFile || finance.importSource || '',
+                      finance.source || '',
+                      issue.title,
+                    ]}
+                    rows={[
+                      { label: 'Fecha', value: date ? date.toLocaleDateString('es-AR') : 'Sin fecha' },
+                      { label: 'Tipo', value: getFinanceTypeLabel(finance.type || finance.kind || 'expense') },
+                      ...visibleRows,
+                      ...visibleLongRows.map(row => ({ ...row, wrap: true })),
+                    ]}
+                    rawRows={rawRows.map(row => ({ ...row, wrap: true }))}
+                    rawExpanded={isRawExpanded}
+                    onToggleRaw={rawRows.length > 0 ? () => setExpandedIssueId(isRawExpanded ? null : issue.id) : undefined}
+                  />
                 )}
               </div>
 
@@ -8857,7 +8896,7 @@ function CategoryLearningGroupCard({
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <PendingMeta label="Fecha" value={formatPendingDate(sample.date)} />
-                    <PendingMeta label="Comercio" value={sample.merchantName || 'No detectado'} />
+                    <PendingMeta label="Referencia" value={sample.merchantName || 'No detectado'} />
                     <PendingMeta label="Cuenta usada" value={sourceAccount?.name || 'No detectada'} />
                     <PendingMeta label="Para" value={sample.beneficiaryLabel} />
                     <PendingMeta label="Medio" value={sample.paymentType} />
