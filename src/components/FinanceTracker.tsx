@@ -5874,11 +5874,6 @@ export default function FinanceTracker({ user }: { user: any }) {
                 const editDateLabel = editForm?.date
                   ? format(new Date(editForm.date), 'dd/MM/yyyy HH:mm')
                   : format(f.date.toDate(), 'dd/MM/yyyy HH:mm');
-                const editToneClasses = editType === 'income'
-                  ? 'border-emerald-100 bg-emerald-50 text-emerald-900'
-                  : editType === 'transfer'
-                    ? 'border-blue-100 bg-blue-50 text-blue-900'
-                    : 'border-red-100 bg-red-50 text-red-900';
                 const editAmountClasses = editType === 'income'
                   ? 'text-emerald-700'
                   : editType === 'transfer'
@@ -5895,29 +5890,19 @@ export default function FinanceTracker({ user }: { user: any }) {
                   >
                     {isEditing ? (
                       <div className="space-y-2.5 p-3">
-                        <div className={`rounded-2xl border p-3 ${editToneClasses}`}>
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] opacity-60">Editando movimiento</p>
-                              <h3 className="mt-1 truncate text-lg font-black tracking-tight">{editTitle}</h3>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">
-                                  {editCategoryLabel}
-                                </span>
-                                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">
-                                  {editAccountLabel}
-                                </span>
-                                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest">
-                                  Para {editBeneficiaryLabel}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-left shadow-sm lg:text-right">
-                              <p className={`text-lg font-black ${editAmountClasses}`}>{editAmountLabel}</p>
-                              <p className="mt-0.5 text-[10px] font-bold text-neutral-500">{editDateLabel}</p>
-                            </div>
-                          </div>
-                        </div>
+                        <FinanceMovementDetailDisplay
+                          title={editTitle}
+                          subtitle={[editCategoryLabel, editCategoryDisplay.secondary].filter(Boolean).join(' · ')}
+                          amount={editAmountLabel}
+                          amountClassName={editAmountClasses}
+                          badges={['Editando', editAccountLabel, editType === 'transfer' ? 'Movimiento interno' : `Para ${editBeneficiaryLabel}`]}
+                          rows={[
+                            { label: 'Fecha', value: editDateLabel },
+                            { label: 'Tipo', value: getFinanceTypeLabel(editType) },
+                            { label: editType === 'transfer' ? 'Cuenta origen' : getFinanceAccountFieldLabel({ ...f, ...editForm }), value: editAccountLabel },
+                            { label: 'Para', value: editBeneficiaryLabel },
+                          ]}
+                        />
 
                         <section className="rounded-2xl border border-neutral-100 bg-neutral-50 p-3">
                           <div className="mb-2 flex items-center justify-between gap-3">
