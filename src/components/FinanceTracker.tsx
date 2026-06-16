@@ -3393,6 +3393,31 @@ export default function FinanceTracker({ user }: { user: any }) {
     return true;
   });
 
+  const groupedFilteredFinances = filteredFinances.reduce((groups, finance) => {
+    const date = finance.date.toDate();
+    const key = format(date, 'yyyy-MM-dd');
+    const existingGroup = groups.find(group => group.key === key);
+    const signedAmount = finance.type === 'income'
+      ? Number(finance.amount || 0)
+      : finance.type === 'expense'
+        ? -Number(finance.amount || 0)
+        : 0;
+
+    if (existingGroup) {
+      existingGroup.items.push(finance);
+      if ((finance.currency || 'ARS') === 'ARS') existingGroup.arsTotal += signedAmount;
+      return groups;
+    }
+
+    groups.push({
+      key,
+      date,
+      arsTotal: (finance.currency || 'ARS') === 'ARS' ? signedAmount : 0,
+      items: [finance],
+    });
+    return groups;
+  }, [] as Array<{ key: string; date: Date; arsTotal: number; items: any[] }>);
+
   const runAnalysis = async () => {
     if (finances.length === 0) return;
     setIsAnalyzing(true);
@@ -5811,7 +5836,16 @@ export default function FinanceTracker({ user }: { user: any }) {
               <span className="text-right">Acciones</span>
             </div>
             <AnimatePresence initial={false}>
-              {(filteredFinances || []).map((f) => {
+              {groupedFilteredFinances.map(group => (
+                <div key={group.key} className="space-y-2">
+                  <div className="flex items-center justify-between px-3 pt-1">
+                    <p className="text-sm font-semibold text-neutral-950">{format(group.date, 'dd/MM/yyyy')}</p>
+                    <p className={`text-xs font-medium ${group.arsTotal < 0 ? 'text-red-500' : group.arsTotal > 0 ? 'text-emerald-600' : 'text-neutral-400'}`}>
+                      {group.arsTotal < 0 ? '-' : group.arsTotal > 0 ? '+' : ''}ARS {Math.abs(group.arsTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+              {group.items.map((f) => {
                 const typeInfo = FINANCE_TYPES.find(t => t.id === f.type);
                 const isEditing = editingId === f.id;
                 const generator = uniqueHouseholdMembers.find(m => m.uid === f.generatedBy);
@@ -6464,6 +6498,9 @@ export default function FinanceTracker({ user }: { user: any }) {
                   </motion.div>
                 );
               })}
+                  </div>
+                </div>
+              ))}
             </AnimatePresence>
 
             {filteredFinances.length === 0 && (
