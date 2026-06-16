@@ -5777,7 +5777,7 @@ export default function FinanceTracker({ user }: { user: any }) {
           </div>
 
           <div className="space-y-3">
-            <div className="hidden px-4 text-[10px] font-black uppercase tracking-widest text-neutral-400 xl:grid xl:grid-cols-[140px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:gap-4">
+            <div className="hidden px-4 text-[10px] font-black uppercase tracking-widest text-neutral-400 xl:grid xl:grid-cols-[140px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_76px] xl:gap-4">
               <span>Fecha</span>
               <span>Categoria</span>
               <span>Cuenta</span>
@@ -6300,7 +6300,19 @@ export default function FinanceTracker({ user }: { user: any }) {
                       </div>
                     ) : (
                       <>
-                        <div className="grid grid-cols-1 gap-3 px-4 py-3 xl:grid-cols-[140px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_132px] xl:items-center xl:gap-4">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setExpandedFinanceId(isExpanded ? null : f.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              setExpandedFinanceId(isExpanded ? null : f.id);
+                            }
+                          }}
+                          className="grid cursor-pointer grid-cols-1 gap-3 px-4 py-3 outline-none transition hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-900/10 xl:grid-cols-[140px_minmax(180px,1.15fr)_minmax(150px,0.9fr)_minmax(96px,0.65fr)_minmax(220px,1.35fr)_140px_76px] xl:items-center xl:gap-4"
+                          title={isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+                        >
                           <div className="flex items-center gap-3">
                             <div className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${typeInfo?.bg}`}>
                               {(() => {
@@ -6346,25 +6358,24 @@ export default function FinanceTracker({ user }: { user: any }) {
                           </div>
 
                           <div className="flex items-center justify-start gap-1 xl:justify-end">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedFinanceId(isExpanded ? null : f.id)}
-                              className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition-all hover:bg-neutral-100 hover:text-neutral-900"
-                            >
-                              {isExpanded ? 'Ocultar' : 'Detalle'}
-                            </button>
                             <div className="flex gap-1">
                               {(f.isConfirmed === false || f.needsReview) && (
                                 <>
                                   <button
-                                    onClick={() => handleConfirmReviewedFinance(f)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleConfirmReviewedFinance(f);
+                                    }}
                                     className="rounded-lg p-2 text-emerald-600 transition-all hover:bg-emerald-50"
                                     title="Confirmar"
                                   >
                                     <Check size={16} />
                                   </button>
                                   <button
-                                    onClick={() => handleIgnoreReviewedFinance(f)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleIgnoreReviewedFinance(f);
+                                    }}
                                     className="rounded-lg p-2 text-neutral-400 transition-all hover:bg-amber-50 hover:text-amber-700"
                                     title="Ignorar"
                                   >
@@ -6373,14 +6384,20 @@ export default function FinanceTracker({ user }: { user: any }) {
                                 </>
                               )}
                               <button
-                                onClick={() => startEditing(f)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  startEditing(f);
+                                }}
                                 className="rounded-lg p-2 text-neutral-400 transition-all hover:bg-neutral-100 hover:text-neutral-900"
                                 title="Editar"
                               >
                                 <Edit2 size={16} />
                               </button>
                               <button
-                                onClick={() => handleDelete(f.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDelete(f.id);
+                                }}
                                 className="rounded-lg p-2 text-neutral-400 transition-all hover:bg-red-50 hover:text-red-600"
                                 title="Eliminar"
                               >
