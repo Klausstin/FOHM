@@ -43,6 +43,14 @@ import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts
 import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
 import { upsertFinanceLearningMapping } from '../features/finance/finance.learning.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
+import type {
+  DuplicateMatch,
+  ParsedFinanceTrace,
+  PendingTransaction,
+  WalletMemoryMappingImport,
+  StatementClosingSuggestion,
+  PendingImportGroup,
+} from '../features/finance/finance.importTypes.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -199,11 +207,6 @@ function buildFinanceTransactionsCsv(finances: any[], accounts: any[]) {
   });
 
   return unparse(rows, { quotes: true });
-}
-
-interface DuplicateMatch {
-  reason: string;
-  duplicateOfId?: string;
 }
 
 function findLikelyDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
@@ -1824,22 +1827,6 @@ function getMovementCategoryDisplay(finance: any) {
   };
 }
 
-interface ParsedFinanceTrace {
-  originalConcept?: string;
-  transferDetail?: string;
-  counterpartyName?: string;
-  counterpartyAlias?: string;
-  counterpartyAccount?: string;
-  importedFile?: string;
-  installmentLabel?: string;
-  cardLast4?: string;
-  voucherNumber?: string;
-  debitCardDetailLine?: string;
-  sourceLine?: string;
-  reconciliations: string[];
-  otherLines: string[];
-}
-
 function parseFinanceTraceNote(note?: string): ParsedFinanceTrace {
   const trace: ParsedFinanceTrace = {
     reconciliations: [],
@@ -2020,93 +2007,6 @@ function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
-}
-
-interface PendingTransaction {
-  id: string;
-  amount: number;
-  currency?: string;
-  description: string;
-  category: string;
-  subCategory?: string;
-  subSubCategory?: string;
-  type: string;
-  accountId?: string;
-  accountName?: string;
-  sourceAccountId?: string;
-  toAccountId?: string;
-  date: string;
-  isFixed: boolean;
-  originalDescription: string;
-  fileName: string;
-  confidence: number;
-  needsReview: boolean;
-  merchantName?: string;
-  merchantKey?: string;
-  counterpartyName?: string;
-  counterpartyAccount?: string;
-  counterpartyAlias?: string;
-  transferDetail?: string;
-  importSource?: string;
-  importMode?: string;
-  sourceAccountLabel?: string;
-  sourceCategoryLabel?: string;
-  statementAccountLabel?: string;
-  tags?: string[];
-  paymentType?: string;
-  sourceLine?: string;
-  debitCardDetailLine?: string;
-  cardLast4?: string;
-  voucherNumber?: string;
-  installmentNumber?: number;
-  installmentTotal?: number;
-  installmentLabel?: string;
-  accountMatchConfidence?: string;
-  accountMatchReason?: string;
-  transactionFingerprint?: string;
-  statementFingerprint?: string;
-  duplicateOfId?: string;
-  duplicateReason?: string;
-}
-
-interface WalletMemoryMappingImport {
-  originalDescription: string;
-  mappedDescription: string;
-  category: string;
-  subCategory?: string;
-  kind?: string;
-  merchantName?: string;
-  merchantKey?: string;
-  useCount?: number;
-  confidence?: number;
-}
-
-interface StatementClosingSuggestion {
-  id: string;
-  accountId: string;
-  accountName: string;
-  currency: string;
-  fileName: string;
-  periodEnd?: string;
-  closingBalance: number;
-  targetBalance: number;
-  statementLabel?: string;
-}
-
-interface PendingImportGroup {
-  key: string;
-  kind: 'duplicate' | 'missing_account' | 'mixed_review';
-  title: string;
-  detail: string;
-  count: number;
-  totalAmount: number;
-  currency: string;
-  category: string;
-  subCategory?: string;
-  type: string;
-  transactionIds: string[];
-  sample: PendingTransaction;
-  canBulkConfirm: boolean;
 }
 
 export default function FinanceTracker({ user }: { user: any }) {
