@@ -57,6 +57,12 @@ import {
   isCreditCardPaymentCategory,
   isInternalTransferCategory,
 } from '../features/finance/finance.duplicates.ts';
+import {
+  parseFinanceDateValue,
+  formatSignedMoney,
+  legacyBeneficiaryLabel,
+  legacyScope,
+} from '../features/finance/finance.format.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -1351,20 +1357,6 @@ function buildMonthlyAccountUsage(finances: any[], accounts: any[], month?: stri
   };
 }
 
-function parseFinanceDateValue(value: any) {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value.toDate === 'function') return value.toDate();
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function formatSignedMoney(value: number, currency: string) {
-  const rounded = Math.round(Number(value || 0) * 100) / 100;
-  const prefix = rounded > 0 ? '+' : '';
-  return `${prefix}${rounded.toLocaleString()} ${currency}`;
-}
-
 function getAccountTypeLabel(type?: string) {
   const normalized = String(type || '').toLowerCase();
   if (normalized === 'bank') return 'Banco';
@@ -1550,16 +1542,6 @@ const FINANCE_SCOPE_OPTIONS = [
   { value: 'hogar', label: 'Hogar' },
   { value: 'familia', label: 'Familia' },
 ];
-
-function legacyBeneficiaryLabel(finance: any) {
-  if (finance.assignedTo === 'Ambos') return 'Pareja';
-  return finance.beneficiaryLabel || 'Familia';
-}
-
-function legacyScope(finance: any) {
-  if (finance.assignedTo === 'Ambos') return 'pareja';
-  return finance.scope || 'familia';
-}
 
 function getNeutralMovementLabel(finance: any) {
   const neutralType = String(finance?.neutralType || '').toLowerCase();
