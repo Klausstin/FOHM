@@ -43,6 +43,40 @@ import { buildFinanceLearningKey } from '../features/finance/finance.taxonomy.ts
 import { sanitizeFinanceCategories } from '../features/finance/finance.categorySanitizer.ts';
 import { upsertFinanceLearningMapping } from '../features/finance/finance.learning.ts';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types.ts';
+import type {
+  DuplicateMatch,
+  ParsedFinanceTrace,
+  PendingTransaction,
+  WalletMemoryMappingImport,
+  StatementClosingSuggestion,
+  PendingImportGroup,
+} from '../features/finance/finance.importTypes.ts';
+import {
+  findLikelyDuplicateMatch,
+  normalizeDuplicateText,
+  isCreditCardPaymentCategory,
+  isInternalTransferCategory,
+} from '../features/finance/finance.duplicates.ts';
+import {
+  parseFinanceDateValue,
+  formatSignedMoney,
+  legacyBeneficiaryLabel,
+  legacyScope,
+} from '../features/finance/finance.format.ts';
+import {
+  buildFinanceBackupPayload,
+  downloadJsonFile,
+  downloadTextFile,
+  buildFinanceBackupFileName,
+  buildFinanceCsvFileName,
+  buildFinanceTransactionsCsv,
+} from '../features/finance/finance.exports.ts';
+import {
+  parseFinanceTraceNote,
+  hasFinanceTrace,
+  inferStatementMerchant,
+} from '../features/finance/finance.trace.ts';
+import { buildInstallmentForecast } from '../features/finance/finance.installments.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -74,384 +108,6 @@ function buildPdfPageText(items: any[]) {
         .trim()
     )
     .join('\n');
-}
-
-function toBackupSafeValue(value: any): any {
-  if (value == null) return value;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
-  if (Array.isArray(value)) return value.map(toBackupSafeValue);
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, entryValue]) => typeof entryValue !== 'function')
-        .map(([key, entryValue]) => [key, toBackupSafeValue(entryValue)]),
-    );
-  }
-  return value;
-}
-
-function buildFinanceBackupPayload(input: {
-  user: any;
-  finances: any[];
-  accounts: any[];
-  categories: any[];
-  mappings: any[];
-  pendingTransactions: PendingTransaction[];
-}) {
-  return toBackupSafeValue({
-    schema: 'veo.finance.backup.v1',
-    exportedAt: new Date(),
-    householdId: input.user?.householdId || '',
-    exportedBy: {
-      uid: input.user?.uid || '',
-      email: input.user?.email || '',
-      displayName: input.user?.displayName || '',
-    },
-    counts: {
-      accounts: input.accounts.length,
-      transactions: input.finances.length,
-      categories: input.categories.length,
-      learningMappings: input.mappings.length,
-      pendingTransactions: input.pendingTransactions.length,
-    },
-    accounts: input.accounts,
-    transactions: input.finances,
-    categories: input.categories,
-    learningMappings: input.mappings,
-    pendingTransactions: input.pendingTransactions,
-  });
-}
-
-function downloadJsonFile(fileName: string, payload: unknown) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function downloadTextFile(fileName: string, content: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function buildFinanceBackupFileName() {
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  return `veo-finanzas-backup-${stamp}.json`;
-}
-
-function buildFinanceCsvFileName() {
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  return `veo-finanzas-movimientos-${stamp}.csv`;
-}
-
-function formatFinanceDateForExport(value: any) {
-  const date = parseFinanceDateValue(value);
-  return date ? format(date, 'yyyy-MM-dd HH:mm') : '';
-}
-
-function buildFinanceTransactionsCsv(finances: any[], accounts: any[]) {
-  const accountById = new Map((accounts || []).map(account => [account.id, account]));
-
-  const rows = (finances || []).map(finance => {
-    const sourceAccount = accountById.get(finance.sourceAccountId || finance.accountId);
-    const destinationAccount = accountById.get(finance.toAccountId);
-    const tags = Array.isArray(finance.tags) ? finance.tags.join(', ') : '';
-
-    return {
-      fecha: formatFinanceDateForExport(finance.date),
-      tipo: finance.type || finance.kind || '',
-      monto: Number(finance.amount || 0),
-      moneda: finance.currency || 'ARS',
-      categoria: finance.category || '',
-      subcategoria: finance.subCategory || finance.subcategory || '',
-      detalle: finance.subSubCategory || finance.detail || '',
-      descripcion: finance.description || '',
-      nota: finance.note || finance.notes || '',
-      cuenta_usada: sourceAccount?.name || finance.accountName || finance.sourceAccountLabel || '',
-      cuenta_destino: destinationAccount?.name || '',
-      comercio: finance.merchantName || finance.merchant || '',
-      para: finance.beneficiaryLabel || legacyBeneficiaryLabel(finance),
-      ambito: finance.scope || '',
-      medio_pago: finance.paymentType || '',
-      estado_pago: finance.paymentStatus || '',
-      proyecto: finance.projectId || '',
-      gasto_fijo: finance.isFixed ? 'si' : 'no',
-      impacta_saldo: finance.accountBalanceApplied ? 'si' : 'no',
-      origen: finance.importSource || finance.source || '',
-      archivo: finance.importFileName || finance.statementFileName || finance.statementAccountLabel || '',
-      huella_movimiento: finance.transactionFingerprint || '',
-      huella_resumen: finance.statementFingerprint || '',
-      tags,
-    };
-  });
-
-  return unparse(rows, { quotes: true });
-}
-
-interface DuplicateMatch {
-  reason: string;
-  duplicateOfId?: string;
-}
-
-function findLikelyDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
-  return findLikelyDuplicateMatch(candidate, existingTransactions)?.reason || '';
-}
-
-function findLikelyDuplicateMatch(candidate: Partial<PendingTransaction>, existingTransactions: any[]): DuplicateMatch | null {
-  if (candidate.statementFingerprint) {
-    const sameStatement = existingTransactions.find(transaction => transaction.statementFingerprint === candidate.statementFingerprint);
-    if (sameStatement) {
-      return {
-        reason: 'Este resumen parece ya importado.',
-        duplicateOfId: sameStatement.id,
-      };
-    }
-  }
-
-  if (candidate.transactionFingerprint) {
-    const sameFingerprint = existingTransactions.find(transaction => transaction.transactionFingerprint === candidate.transactionFingerprint);
-    if (sameFingerprint) {
-      return {
-        reason: 'Ya existe un movimiento identico.',
-        duplicateOfId: sameFingerprint.id,
-      };
-    }
-  }
-
-  const candidateDate = toDayKey(candidate.date);
-  const candidateAmount = Number(candidate.amount || 0);
-  const candidateText = normalizeDuplicateText(candidate.description || '');
-  if (!candidateDate || !candidateAmount || !candidateText) return null;
-
-  const possibleDuplicate = existingTransactions.find(transaction => {
-    const sameDay = toDayKey(transaction.date) === candidateDate;
-    const sameAmount = Math.abs(Number(transaction.amount || 0) - candidateAmount) < 0.01;
-    const sameText = normalizeDuplicateText(transaction.description || '') === candidateText;
-    return sameDay && sameAmount && sameText;
-  });
-
-  if (possibleDuplicate) {
-    return {
-      reason: 'Coincide en fecha, importe y concepto con un movimiento existente.',
-      duplicateOfId: possibleDuplicate.id,
-    };
-  }
-
-  return findSemanticDuplicateMatch(candidate, existingTransactions);
-}
-
-function findSemanticDuplicateReason(candidate: Partial<PendingTransaction>, existingTransactions: any[]) {
-  return findSemanticDuplicateMatch(candidate, existingTransactions)?.reason || '';
-}
-
-function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction>, existingTransactions: any[]): DuplicateMatch | null {
-  const candidateDate = getDateFromValue(candidate.date);
-  const candidateAmount = Number(candidate.amount || 0);
-  const candidateText = normalizeDuplicateText([
-    candidate.description,
-    candidate.originalDescription,
-    candidate.merchantName,
-    candidate.category,
-    candidate.subCategory,
-  ].filter(Boolean).join(' '));
-
-  if (!candidateDate || !candidateAmount || !candidateText) return null;
-
-  const semanticDuplicate = existingTransactions
-    .map(transaction => {
-    if (transaction.status === 'ignored') return false;
-    if (transaction.statementFingerprint && transaction.statementFingerprint === candidate.statementFingerprint) return true;
-
-    const existingDate = getDateFromValue(transaction.date);
-    if (!existingDate) return false;
-
-    const daysApart = Math.abs((candidateDate.getTime() - existingDate.getTime()) / 86400000);
-    if (daysApart > 95) return false;
-
-    const accountCompatible = areAccountsCompatibleForReconciliation(candidate, transaction);
-    const merchantMatch = Boolean(
-      candidate.merchantKey &&
-      (
-        transaction.merchantKey === candidate.merchantKey ||
-        normalizeDuplicateText(transaction.merchant || '').includes(normalizeDuplicateText(candidate.merchantKey))
-      ),
-    );
-    const textScore = getTextOverlapScore(
-      candidateText,
-      normalizeDuplicateText([
-        transaction.description,
-        transaction.note,
-        transaction.merchantName,
-        transaction.merchant,
-        ...(Array.isArray(transaction.tags) ? transaction.tags : []),
-        transaction.category,
-        transaction.subCategory,
-      ].filter(Boolean).join(' ')),
-    );
-    const amountMatch = areAmountsCompatibleAcrossCurrencies(candidate, transaction);
-    const categoryMatch = normalizeDuplicateText(candidate.category || '') === normalizeDuplicateText(transaction.category || '') ||
-      normalizeDuplicateText(candidate.subCategory || '') === normalizeDuplicateText(transaction.subCategory || '');
-    const manualCandidate = transaction.source === 'manual' || transaction.source === 'catchup_estimate' || transaction.source === 'catchup_inferred';
-    const meaningfulTextMatch = textScore >= 0.12;
-    const highValueForeignCardMatch = amountMatch &&
-      ['USD', 'EUR'].some(currency => currency === String(candidate.currency || '').toUpperCase() || currency === String(transaction.currency || '').toUpperCase()) &&
-      Math.max(candidateAmount, Number(transaction.amount || 0), Number(transaction.originalAmount || 0)) >= 80;
-
-    if (!manualCandidate || !accountCompatible || !amountMatch) return false;
-
-    let score = 0;
-    if (daysApart <= 45) score += 1;
-    if (merchantMatch) score += 3;
-    if (meaningfulTextMatch) score += 2;
-    if (categoryMatch) score += 1;
-    if (highValueForeignCardMatch) score += 2;
-
-    return {
-      transaction,
-      score,
-    };
-  })
-    .filter((item): item is { transaction: any; score: number } => Boolean(item) && typeof item !== 'boolean' && item.score >= 3)
-    .sort((a, b) => b.score - a.score)[0]?.transaction;
-
-  if (!semanticDuplicate) return null;
-
-  return {
-    reason: buildSemanticDuplicateReason(semanticDuplicate, candidate),
-    duplicateOfId: semanticDuplicate.id,
-  };
-}
-
-function areAccountsCompatibleForReconciliation(candidate: Partial<PendingTransaction>, existing: any) {
-  const candidateAccountId = candidate.sourceAccountId || candidate.accountId || '';
-  const existingAccountId = existing.sourceAccountId || existing.accountId || '';
-  if (candidateAccountId && existingAccountId && candidateAccountId === existingAccountId) return true;
-
-  const candidateText = normalizeDuplicateText([
-    candidate.accountName,
-    candidate.description,
-    candidate.originalDescription,
-    candidate.importSource,
-  ].filter(Boolean).join(' '));
-  const existingText = normalizeDuplicateText([
-    existing.accountName,
-    existing.description,
-    existing.note,
-    existing.paymentType,
-    existing.importSource,
-  ].filter(Boolean).join(' '));
-
-  const bothVisa = candidateText.includes('visa') && existingText.includes('visa');
-  const bothMastercard = (candidateText.includes('master') || candidateText.includes('mc')) && (existingText.includes('master') || existingText.includes('mc'));
-  const bothBbva = candidateText.includes('bbva') && existingText.includes('bbva');
-  return Boolean(bothBbva && (bothVisa || bothMastercard));
-}
-
-function buildSemanticDuplicateReason(existing: any, candidate: Partial<PendingTransaction>) {
-  const existingDate = getDateFromValue(existing.date);
-  const existingAmount = Number(existing.originalAmount || existing.amount || 0);
-  const existingCurrency = String(existing.originalCurrency || existing.currency || '').toUpperCase();
-  const candidateAmount = Number(candidate.amount || 0);
-  const candidateCurrency = String(candidate.currency || '').toUpperCase();
-  const amountDetail = existingCurrency && candidateCurrency && existingCurrency !== candidateCurrency
-    ? ` (${existingAmount.toLocaleString()} ${existingCurrency} vs ${candidateAmount.toLocaleString()} ${candidateCurrency})`
-    : '';
-  const dateDetail = existingDate ? ` del ${format(existingDate, 'dd/MM/yyyy')}` : '';
-  return `Parece el mismo gasto que ya cargaste con Luz${dateDetail}: "${existing.description || existing.category || 'movimiento manual'}"${amountDetail}. Conviene unirlo al existente si corresponde.`;
-}
-
-function getDateFromValue(value: any) {
-  if (!value) return null;
-  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function getTextOverlapScore(a: string, b: string) {
-  const ignored = new Set(['gasto', 'pago', 'compra', 'tarjeta', 'visa', 'bbva', 'usd', 'ars', 'eur', 'con', 'del', 'de', 'la', 'el', 'en', 'un', 'una']);
-  const aTokens = new Set(a.split(' ').filter(token => token.length > 2 && !ignored.has(token)));
-  const bTokens = new Set(b.split(' ').filter(token => token.length > 2 && !ignored.has(token)));
-  if (aTokens.size === 0 || bTokens.size === 0) return 0;
-
-  let shared = 0;
-  aTokens.forEach(token => {
-    if (bTokens.has(token)) shared += 1;
-  });
-
-  return shared / Math.min(aTokens.size, bTokens.size);
-}
-
-function areAmountsCompatibleAcrossCurrencies(candidate: Partial<PendingTransaction>, existing: any) {
-  const candidateAmount = Math.abs(Number(candidate.amount || 0));
-  const existingAmounts = [
-    Math.abs(Number(existing.amount || 0)),
-    Math.abs(Number(existing.originalAmount || 0)),
-    Math.abs(Number(existing.settlementAmount || 0)),
-  ].filter(amount => Number.isFinite(amount) && amount > 0);
-  const existingAmount = existingAmounts[0] || 0;
-  if (!candidateAmount || !existingAmount) return false;
-
-  const candidateCurrency = String(candidate.currency || '').toUpperCase();
-  const existingCurrencies = [
-    String(existing.currency || '').toUpperCase(),
-    String(existing.originalCurrency || '').toUpperCase(),
-    String(existing.settlementCurrency || '').toUpperCase(),
-  ].filter(Boolean);
-
-  for (const amount of existingAmounts) {
-    for (const existingCurrency of existingCurrencies) {
-      if (candidateCurrency && existingCurrency && candidateCurrency === existingCurrency) {
-        if (Math.abs(candidateAmount - amount) / Math.max(candidateAmount, amount) <= 0.08) return true;
-      }
-
-      const foreignCardPair = new Set([candidateCurrency, existingCurrency]);
-      if (foreignCardPair.has('EUR') && foreignCardPair.has('USD')) {
-        const ratio = candidateAmount / amount;
-        if (ratio >= 0.65 && ratio <= 1.45) return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function toDayKey(value: any) {
-  if (!value) return '';
-  const date = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
-}
-
-function normalizeDuplicateText(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[0-9]{5,}/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function isCreditCardPaymentCategory(category?: string, subCategory?: string) {
-  const text = normalizeDuplicateText(`${category || ''} ${subCategory || ''}`);
-  return text.includes('movimientos neutros') && text.includes('pago tarjeta credito');
-}
-
-function isInternalTransferCategory(category?: string, subCategory?: string) {
-  const text = normalizeDuplicateText(`${category || ''} ${subCategory || ''}`);
-  return text.includes('movimientos neutros') && (text.includes('transferencia interna') || text.includes('pago tarjeta credito'));
 }
 
 function financeNeedsDestinationAccount(finance: any) {
@@ -961,119 +617,6 @@ function buildAccountBalanceSummary(accounts: any[]) {
   return Array.from(byCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
-function buildInstallmentForecast(finances: any[], accounts: any[]) {
-  const byPurchase = new Map<string, InstallmentForecastItem>();
-
-  for (const finance of finances || []) {
-    if (finance.status === 'ignored' || finance.type !== 'expense') continue;
-    const trace = parseFinanceTraceNote(finance.note);
-    const installment = parseInstallmentLabelValue(trace.installmentLabel || finance.installmentLabel);
-    if (!installment || installment.total <= installment.number) continue;
-
-    const date = parseFinanceDateValue(finance.date);
-    const amount = Number(finance.amount || 0);
-    if (!date || !amount) continue;
-
-    const accountId = finance.sourceAccountId || finance.accountId || '';
-    const account = accounts.find(item => item.id === accountId);
-    const originalText = trace.originalConcept || finance.originalDescription || finance.description || finance.merchantName || 'Compra en cuotas';
-    const baseText = stripInstallmentText(originalText);
-    const purchaseKey = [
-      finance.merchantKey || normalizeDuplicateText(baseText),
-      Math.round(amount * 100),
-      finance.currency || 'ARS',
-      installment.total,
-      accountId,
-    ].join('|');
-    const existing = byPurchase.get(purchaseKey);
-    const shouldReplace = !existing ||
-      installment.number > existing.currentInstallment ||
-      (installment.number === existing.currentInstallment && date > existing.lastSeenAt);
-
-    if (!shouldReplace) continue;
-
-    const remainingCount = installment.total - installment.number;
-    const nextDueDate = addMonthsPreservingDay(date, 1);
-
-    byPurchase.set(purchaseKey, {
-      key: purchaseKey,
-      label: finance.merchantName || baseText || finance.description || 'Compra en cuotas',
-      description: baseText || originalText,
-      accountName: account?.name || '',
-      amount,
-      currency: finance.currency || 'ARS',
-      currentInstallment: installment.number,
-      totalInstallments: installment.total,
-      remainingCount,
-      remainingAmount: remainingCount * amount,
-      lastSeenAt: date,
-      nextDueDate,
-      source: finance.importSource || trace.importedFile || 'Resumen',
-    });
-  }
-
-  const items = Array.from(byPurchase.values())
-    .sort((a, b) => a.nextDueDate.getTime() - b.nextDueDate.getTime())
-    .slice(0, 12);
-  const monthlyMap = new Map<string, InstallmentMonthlyTotal>();
-  const remainingByCurrency = new Map<string, number>();
-
-  for (const item of items) {
-    remainingByCurrency.set(item.currency, (remainingByCurrency.get(item.currency) || 0) + item.remainingAmount);
-
-    for (let offset = 1; offset <= item.remainingCount; offset += 1) {
-      const dueDate = addMonthsPreservingDay(item.lastSeenAt, offset);
-      const monthKey = toMonthKey(dueDate);
-      const key = `${monthKey}|${item.currency}`;
-      const current = monthlyMap.get(key) || { monthKey, currency: item.currency, amount: 0, count: 0 };
-      current.amount += item.amount;
-      current.count += 1;
-      monthlyMap.set(key, current);
-    }
-  }
-
-  const monthlyTotals = Array.from(monthlyMap.values())
-    .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
-    .slice(0, 6);
-  const totalRemainingByCurrency = Array.from(remainingByCurrency.entries())
-    .map(([currency, amount]) => ({ currency, amount }))
-    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-
-  return {
-    items,
-    monthlyTotals,
-    totalRemainingByCurrency,
-    activeCount: items.length,
-  };
-}
-
-function parseInstallmentLabelValue(value?: string) {
-  const match = /(\d{1,2})\s*\/\s*(\d{1,2})/.exec(String(value || ''));
-  if (!match) return null;
-  const number = Number(match[1]);
-  const total = Number(match[2]);
-  if (!Number.isFinite(number) || !Number.isFinite(total) || number < 1 || total < 2 || number > total) return null;
-  return { number, total };
-}
-
-function stripInstallmentText(value: string) {
-  return String(value || '')
-    .replace(/\b(?:CUOTA|CTA)\s*\d{1,2}\s*(?:DE|\/)\s*\d{1,2}\b/gi, '')
-    .replace(/(?:^|\s)\d{1,2}\s*\/\s*\d{1,2}(?:\s|$)/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function addMonthsPreservingDay(date: Date, months: number) {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-function toMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
 function buildAccountReconciliationQueue(accounts: any[]) {
   return (accounts || [])
     .map(account => ({
@@ -1197,29 +740,6 @@ interface MonthlyAccountUsage {
   amount: number;
   currency: string;
   share: number;
-}
-
-interface InstallmentForecastItem {
-  key: string;
-  label: string;
-  description: string;
-  accountName: string;
-  amount: number;
-  currency: string;
-  currentInstallment: number;
-  totalInstallments: number;
-  remainingCount: number;
-  remainingAmount: number;
-  lastSeenAt: Date;
-  nextDueDate: Date;
-  source: string;
-}
-
-interface InstallmentMonthlyTotal {
-  monthKey: string;
-  currency: string;
-  amount: number;
-  count: number;
 }
 
 interface ReviewResolutionDraft {
@@ -1590,20 +1110,6 @@ function buildMonthlyAccountUsage(finances: any[], accounts: any[], month?: stri
   };
 }
 
-function parseFinanceDateValue(value: any) {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value.toDate === 'function') return value.toDate();
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function formatSignedMoney(value: number, currency: string) {
-  const rounded = Math.round(Number(value || 0) * 100) / 100;
-  const prefix = rounded > 0 ? '+' : '';
-  return `${prefix}${rounded.toLocaleString()} ${currency}`;
-}
-
 function getAccountTypeLabel(type?: string) {
   const normalized = String(type || '').toLowerCase();
   if (normalized === 'bank') return 'Banco';
@@ -1790,16 +1296,6 @@ const FINANCE_SCOPE_OPTIONS = [
   { value: 'familia', label: 'Familia' },
 ];
 
-function legacyBeneficiaryLabel(finance: any) {
-  if (finance.assignedTo === 'Ambos') return 'Pareja';
-  return finance.beneficiaryLabel || 'Familia';
-}
-
-function legacyScope(finance: any) {
-  if (finance.assignedTo === 'Ambos') return 'pareja';
-  return finance.scope || 'familia';
-}
-
 function getNeutralMovementLabel(finance: any) {
   const neutralType = String(finance?.neutralType || '').toLowerCase();
   if (neutralType === 'credit_card_payment' || isCreditCardPaymentCategory(finance?.category, finance?.subCategory)) return 'Pago de tarjeta';
@@ -1822,118 +1318,6 @@ function getMovementCategoryDisplay(finance: any) {
     primary: finance?.subCategory || finance?.category || 'Sin categoria',
     secondary: finance?.subCategory ? finance?.category : '',
   };
-}
-
-interface ParsedFinanceTrace {
-  originalConcept?: string;
-  transferDetail?: string;
-  counterpartyName?: string;
-  counterpartyAlias?: string;
-  counterpartyAccount?: string;
-  importedFile?: string;
-  installmentLabel?: string;
-  cardLast4?: string;
-  voucherNumber?: string;
-  debitCardDetailLine?: string;
-  sourceLine?: string;
-  reconciliations: string[];
-  otherLines: string[];
-}
-
-function parseFinanceTraceNote(note?: string): ParsedFinanceTrace {
-  const trace: ParsedFinanceTrace = {
-    reconciliations: [],
-    otherLines: [],
-  };
-
-  String(note || '')
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .forEach(line => {
-      const [rawLabel, ...rest] = line.split(':');
-      const label = rawLabel.trim().toLowerCase();
-      const value = rest.join(':').trim();
-
-      if (!value) {
-        trace.otherLines.push(line);
-        return;
-      }
-
-      if (label === 'concepto original') trace.originalConcept = value;
-      else if (label === 'detalle transferencia') trace.transferDetail = value;
-      else if (label === 'destinatario') trace.counterpartyName = value;
-      else if (label === 'alias') trace.counterpartyAlias = value;
-      else if (label === 'cbu/cvu') trace.counterpartyAccount = value;
-      else if (label === 'archivo importado') trace.importedFile = value;
-      else if (label === 'cuotas') trace.installmentLabel = value;
-      else if (label === 'tarjeta') trace.cardLast4 = value;
-      else if (label === 'comprobante') trace.voucherNumber = value;
-      else if (label === 'detalle tarjeta debito' || label === 'detalle tarjeta débito') trace.debitCardDetailLine = value;
-      else if (label === 'linea resumen' || label === 'línea resumen') trace.sourceLine = value;
-      else if (label.startsWith('conciliado con')) trace.reconciliations.push(line);
-      else trace.otherLines.push(line);
-    });
-
-  return trace;
-}
-
-function hasFinanceTrace(trace: ParsedFinanceTrace, finance: any) {
-  return Boolean(
-    trace.originalConcept ||
-    trace.transferDetail ||
-    trace.counterpartyName ||
-    trace.counterpartyAlias ||
-    trace.counterpartyAccount ||
-    trace.importedFile ||
-    trace.installmentLabel ||
-    trace.cardLast4 ||
-    trace.voucherNumber ||
-    trace.debitCardDetailLine ||
-    trace.sourceLine ||
-    trace.reconciliations.length ||
-    trace.otherLines.length ||
-    finance.importSource ||
-    finance.merchantName ||
-    finance.merchant ||
-    finance.duplicateOfId ||
-    finance.duplicateReason ||
-    finance.transactionFingerprint ||
-    finance.statementFingerprint
-  );
-}
-
-function inferStatementMerchant(finance: any, trace: ParsedFinanceTrace) {
-  const storedMerchant = finance.merchantName || finance.merchant;
-  if (storedMerchant) return storedMerchant;
-
-  const sourceText = [
-    trace.sourceLine,
-    trace.originalConcept,
-    finance.originalDescription,
-    finance.description,
-  ].filter(Boolean).join(' ');
-
-  const directMerchant = /\b(RAPIPAGO[A-Z0-9._-]*|PAGOFACIL[A-Z0-9._-]*|MERCADOPAGO[A-Z0-9._-]*|MP\s*[A-Z0-9._-]+)\b/i.exec(sourceText);
-  if (directMerchant?.[1]) return directMerchant[1].replace(/\s+/g, ' ').trim();
-
-  const ignored = new Set([
-    'PAGO',
-    'CON',
-    'VISA',
-    'DEBITO',
-    'DEBITO',
-    'DIRECTO',
-    'OPERACION',
-    'EFECTIVO',
-    'TARJE',
-    'CUENTA',
-    'CA',
-    'ARS',
-    'BBVA',
-  ]);
-  const candidates = sourceText.match(/\b[A-ZÁÉÍÓÚÑ]{3,}[A-Z0-9._-]*\b/g) || [];
-  return candidates.find(candidate => !ignored.has(candidate.toUpperCase()));
 }
 
 function buildFinanceTraceDetails(finance: any, accounts: any[]) {
@@ -2020,93 +1404,6 @@ function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
-}
-
-interface PendingTransaction {
-  id: string;
-  amount: number;
-  currency?: string;
-  description: string;
-  category: string;
-  subCategory?: string;
-  subSubCategory?: string;
-  type: string;
-  accountId?: string;
-  accountName?: string;
-  sourceAccountId?: string;
-  toAccountId?: string;
-  date: string;
-  isFixed: boolean;
-  originalDescription: string;
-  fileName: string;
-  confidence: number;
-  needsReview: boolean;
-  merchantName?: string;
-  merchantKey?: string;
-  counterpartyName?: string;
-  counterpartyAccount?: string;
-  counterpartyAlias?: string;
-  transferDetail?: string;
-  importSource?: string;
-  importMode?: string;
-  sourceAccountLabel?: string;
-  sourceCategoryLabel?: string;
-  statementAccountLabel?: string;
-  tags?: string[];
-  paymentType?: string;
-  sourceLine?: string;
-  debitCardDetailLine?: string;
-  cardLast4?: string;
-  voucherNumber?: string;
-  installmentNumber?: number;
-  installmentTotal?: number;
-  installmentLabel?: string;
-  accountMatchConfidence?: string;
-  accountMatchReason?: string;
-  transactionFingerprint?: string;
-  statementFingerprint?: string;
-  duplicateOfId?: string;
-  duplicateReason?: string;
-}
-
-interface WalletMemoryMappingImport {
-  originalDescription: string;
-  mappedDescription: string;
-  category: string;
-  subCategory?: string;
-  kind?: string;
-  merchantName?: string;
-  merchantKey?: string;
-  useCount?: number;
-  confidence?: number;
-}
-
-interface StatementClosingSuggestion {
-  id: string;
-  accountId: string;
-  accountName: string;
-  currency: string;
-  fileName: string;
-  periodEnd?: string;
-  closingBalance: number;
-  targetBalance: number;
-  statementLabel?: string;
-}
-
-interface PendingImportGroup {
-  key: string;
-  kind: 'duplicate' | 'missing_account' | 'mixed_review';
-  title: string;
-  detail: string;
-  count: number;
-  totalAmount: number;
-  currency: string;
-  category: string;
-  subCategory?: string;
-  type: string;
-  transactionIds: string[];
-  sample: PendingTransaction;
-  canBulkConfirm: boolean;
 }
 
 export default function FinanceTracker({ user }: { user: any }) {
