@@ -84,8 +84,9 @@ import {
   buildAccountReconciliationQueue,
   getReconciliationWeight,
   buildAccountActivityById,
+  buildMonthlyAccountUsage,
 } from '../features/finance/finance.accountSummary.ts';
-import type { AccountActivitySummary } from '../features/finance/finance.accountSummary.ts';
+import type { AccountActivitySummary, MonthlyAccountUsage } from '../features/finance/finance.accountSummary.ts';
 import {
   getFinanceCategoryClarityStats,
   buildFinanceCategoryGroups,
@@ -443,15 +444,6 @@ interface FinanceDiagnosticItem {
   actionable: boolean;
 }
 
-interface MonthlyAccountUsage {
-  accountId: string;
-  accountName: string;
-  accountType?: string;
-  amount: number;
-  currency: string;
-  share: number;
-}
-
 interface ReviewResolutionDraft {
   finance: any;
   accountId?: string;
@@ -699,44 +691,6 @@ function FinanceInternalNav({
       </div>
     </nav>
   );
-}
-
-function buildMonthlyAccountUsage(finances: any[], accounts: any[], month?: string, currency = 'ARS'): MonthlyAccountUsage | null {
-  if (!month) return null;
-
-  const accountById = new Map((accounts || []).map(account => [account.id, account]));
-  const totals = new Map<string, number>();
-  let total = 0;
-
-  for (const finance of finances || []) {
-    if (finance.status === 'ignored' || finance.type !== 'expense') continue;
-    if ((finance.currency || 'ARS') !== currency) continue;
-
-    const date = parseFinanceDateValue(finance.date);
-    if (!date || format(date, 'yyyy-MM') !== month) continue;
-
-    const accountId = finance.sourceAccountId || finance.accountId || '';
-    if (!accountId) continue;
-
-    const amount = Number(finance.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-
-    totals.set(accountId, (totals.get(accountId) || 0) + amount);
-    total += amount;
-  }
-
-  const [accountId, amount] = Array.from(totals.entries()).sort(([, a], [, b]) => b - a)[0] || [];
-  if (!accountId || !amount) return null;
-
-  const account = accountById.get(accountId);
-  return {
-    accountId,
-    accountName: account?.name || 'Cuenta sin nombre',
-    accountType: account?.type,
-    amount,
-    currency,
-    share: total > 0 ? amount / total : 0,
-  };
 }
 
 function getAccountTypeLabel(type?: string) {
