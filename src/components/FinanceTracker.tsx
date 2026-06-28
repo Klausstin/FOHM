@@ -84,8 +84,14 @@ import {
   buildAccountReconciliationQueue,
   getReconciliationWeight,
   buildAccountActivityById,
+  buildMonthlyAccountUsage,
 } from '../features/finance/finance.accountSummary.ts';
-import type { AccountActivitySummary } from '../features/finance/finance.accountSummary.ts';
+import type { AccountActivitySummary, MonthlyAccountUsage } from '../features/finance/finance.accountSummary.ts';
+import {
+  getFinanceCategoryClarityStats,
+  buildFinanceCategoryGroups,
+  isGenericBankMovementText,
+} from '../features/finance/finance.categories.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -344,162 +350,6 @@ function applyLearnedFinanceMapping(transaction: any, mappings: any[]) {
   };
 }
 
-function isUnclearFinanceCategory(finance: any) {
-  const category = normalizeDuplicateText(finance.category || '');
-  const subCategory = normalizeDuplicateText(finance.subCategory || '');
-  return (
-    !category ||
-    category === 'sin categorizar' ||
-    category === 'sin categoria' ||
-    category === 'otros' ||
-    subCategory === 'otros' ||
-    finance.confidence === 'inferred'
-  );
-}
-
-function getFinanceCategoryClarityStats(finances: any[]) {
-  const expenses = finances.filter(finance => finance.status !== 'ignored' && finance.type === 'expense');
-  const unclear = expenses.filter(isUnclearFinanceCategory);
-  const totalAmountByCurrency = new Map<string, number>();
-
-  for (const finance of unclear) {
-    const currency = finance.currency || 'ARS';
-    totalAmountByCurrency.set(currency, (totalAmountByCurrency.get(currency) || 0) + Number(finance.amount || 0));
-  }
-
-  return {
-    count: unclear.length,
-    expenseCount: expenses.length,
-    share: expenses.length ? unclear.length / expenses.length : 0,
-    totalAmountByCurrency: Array.from(totalAmountByCurrency.entries())
-      .map(([currency, amount]) => ({ currency, amount }))
-      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
-  };
-}
-
-function buildFinanceCategoryGroups(finances: any[]) {
-  const groups = new Map<string, any[]>();
-  const candidates = finances.filter(finance => {
-    if (finance.status === 'ignored' || finance.type !== 'expense') return false;
-    return isUnclearFinanceCategory(finance);
-  });
-
-  for (const finance of candidates) {
-    const key = getFinanceCategoryGroupKey(finance);
-    if (!key) continue;
-    groups.set(key, [...(groups.get(key) || []), finance]);
-  }
-
-  return Array.from(groups.entries())
-    .map(([key, items]) => {
-      const amounts = items.map(item => Number(item.amount || 0)).filter(Number.isFinite);
-      const first = items[0];
-      return {
-        key,
-        label: first.merchantName || first.description || first.originalDescription || 'Movimiento similar',
-        count: items.length,
-        averageAmount: amounts.length ? amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length : 0,
-        currency: first.currency || 'ARS',
-        currentCategory: first.category || 'Sin categorizar',
-        reason: getFinanceCategoryGroupReason(first),
-        originalDescription: first.originalDescription || first.description || '',
-        merchantName: first.merchantName || '',
-        merchantKey: first.merchantKey || '',
-        accountId: first.accountId || '',
-        sourceAccountId: first.sourceAccountId || first.accountId || '',
-        toAccountId: first.toAccountId || '',
-        paymentType: first.paymentType || '',
-        beneficiaryType: first.beneficiaryType || '',
-        beneficiaryLabel: first.beneficiaryLabel || legacyBeneficiaryLabel(first),
-        scope: first.scope || legacyScope(first),
-        visibility: first.visibility || 'household_shared',
-        transactionIds: items.map(item => item.id).filter(Boolean),
-        samples: items.slice(0, 5).map(item => {
-          const trace = parseFinanceTraceNote(item.note);
-          return {
-            id: item.id,
-            date: item.date,
-            amount: Number(item.amount || 0),
-            currency: item.currency || first.currency || 'ARS',
-            description: item.description || '',
-            originalDescription: item.originalDescription || trace.originalConcept || '',
-            merchantName: item.merchantName || item.merchant || '',
-            importSource: item.importSource || '',
-            importedFile: trace.importedFile || '',
-            sourceAccountId: item.sourceAccountId || item.accountId || '',
-            toAccountId: item.toAccountId || '',
-            paymentType: item.paymentType || '',
-            beneficiaryLabel: item.beneficiaryLabel || legacyBeneficiaryLabel(item),
-            sourceLine: trace.sourceLine || '',
-            installmentLabel: trace.installmentLabel || '',
-            transferDetail: trace.transferDetail || '',
-            counterpartyName: trace.counterpartyName || '',
-            counterpartyAlias: trace.counterpartyAlias || '',
-            counterpartyAccount: trace.counterpartyAccount || '',
-            transactionFingerprint: item.transactionFingerprint || '',
-            statementFingerprint: item.statementFingerprint || '',
-          };
-        }),
-      };
-    })
-    .filter(group => group.count >= 2)
-    .sort((a, b) => b.count - a.count || b.averageAmount - a.averageAmount)
-    .slice(0, 6);
-}
-
-function getFinanceCategoryGroupKey(finance: any) {
-  const trace = parseFinanceTraceNote(finance.note);
-  const merchantText = normalizeDuplicateText(`${finance.merchantName || ''} ${finance.merchant || ''} ${finance.merchantKey || ''}`);
-  if (finance.merchantKey && !isGenericBankMovementText(merchantText)) {
-    return `merchant:${finance.merchantKey}`;
-  }
-
-  const counterpartyText = normalizeDuplicateText([
-    trace.counterpartyAlias,
-    trace.counterpartyAccount,
-    trace.counterpartyName,
-  ].filter(Boolean).join(' '));
-  if (counterpartyText) return `counterparty:${counterpartyText}`;
-
-  const rawDescription = trace.originalConcept || finance.originalDescription || finance.description || '';
-  const descriptionText = normalizeDuplicateText(rawDescription);
-  if (!descriptionText) return '';
-
-  if (isGenericBankMovementText(descriptionText)) {
-    const amount = Math.round(Number(finance.amount || 0) * 100);
-    const currency = finance.currency || 'ARS';
-    return amount ? `generic-bank-label:${descriptionText}:${currency}:${amount}` : '';
-  }
-
-  return `description:${descriptionText}`;
-}
-
-function isGenericBankMovementText(value: string) {
-  const normalized = normalizeDuplicateText(value || '');
-  return [
-    'pago con visa debito',
-    'debito directo',
-    'operacion en efectivo tarje',
-    'operacion en efectivo tarjeta',
-    'compra con tarjeta',
-    'pago con tarjeta',
-    'consumo tarjeta',
-    'visa debito',
-    'mastercard debito',
-  ].some(label => normalized === label || normalized.includes(label));
-}
-
-function getFinanceCategoryGroupReason(finance: any) {
-  const category = normalizeDuplicateText(finance.category || '');
-  const subCategory = normalizeDuplicateText(finance.subCategory || '');
-  const rawDescription = normalizeDuplicateText(finance.originalDescription || finance.description || '');
-  if (isGenericBankMovementText(rawDescription)) return 'Etiqueta bancaria generica';
-  if (!category || category === 'sin categorizar' || category === 'sin categoria') return 'Sin categoria clara';
-  if (category === 'otros' || subCategory === 'otros') return 'Cayo en Otros';
-  if (finance.confidence === 'inferred') return 'Clasificacion inferida';
-  return 'Revisar precision';
-}
-
 function buildPendingImportGroups(transactions: PendingTransaction[]): PendingImportGroup[] {
   const groups = new Map<string, PendingTransaction[]>();
 
@@ -592,15 +442,6 @@ interface FinanceDiagnosticItem {
   tone: FinanceDiagnosticTone;
   priority: number;
   actionable: boolean;
-}
-
-interface MonthlyAccountUsage {
-  accountId: string;
-  accountName: string;
-  accountType?: string;
-  amount: number;
-  currency: string;
-  share: number;
 }
 
 interface ReviewResolutionDraft {
@@ -850,44 +691,6 @@ function FinanceInternalNav({
       </div>
     </nav>
   );
-}
-
-function buildMonthlyAccountUsage(finances: any[], accounts: any[], month?: string, currency = 'ARS'): MonthlyAccountUsage | null {
-  if (!month) return null;
-
-  const accountById = new Map((accounts || []).map(account => [account.id, account]));
-  const totals = new Map<string, number>();
-  let total = 0;
-
-  for (const finance of finances || []) {
-    if (finance.status === 'ignored' || finance.type !== 'expense') continue;
-    if ((finance.currency || 'ARS') !== currency) continue;
-
-    const date = parseFinanceDateValue(finance.date);
-    if (!date || format(date, 'yyyy-MM') !== month) continue;
-
-    const accountId = finance.sourceAccountId || finance.accountId || '';
-    if (!accountId) continue;
-
-    const amount = Number(finance.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-
-    totals.set(accountId, (totals.get(accountId) || 0) + amount);
-    total += amount;
-  }
-
-  const [accountId, amount] = Array.from(totals.entries()).sort(([, a], [, b]) => b - a)[0] || [];
-  if (!accountId || !amount) return null;
-
-  const account = accountById.get(accountId);
-  return {
-    accountId,
-    accountName: account?.name || 'Cuenta sin nombre',
-    accountType: account?.type,
-    amount,
-    currency,
-    share: total > 0 ? amount / total : 0,
-  };
 }
 
 function getAccountTypeLabel(type?: string) {
