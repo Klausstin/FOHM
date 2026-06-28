@@ -77,6 +77,15 @@ import {
   inferStatementMerchant,
 } from '../features/finance/finance.trace.ts';
 import { buildInstallmentForecast } from '../features/finance/finance.installments.ts';
+import { buildBalanceIntegrityIssues } from '../features/finance/finance.diagnostics.ts';
+import type { BalanceIntegrityIssue } from '../features/finance/finance.diagnostics.ts';
+import {
+  buildAccountBalanceSummary,
+  buildAccountReconciliationQueue,
+  getReconciliationWeight,
+  buildAccountActivityById,
+} from '../features/finance/finance.accountSummary.ts';
+import type { AccountActivitySummary } from '../features/finance/finance.accountSummary.ts';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -573,154 +582,6 @@ function getPendingImportGroupKey(transaction: PendingTransaction) {
   ].join(':');
 }
 
-function buildAccountBalanceSummary(accounts: any[]) {
-  const byCurrency = new Map<string, {
-    currency: string;
-    liquidity: number;
-    creditCardDebt: number;
-    investments: number;
-    netWorth: number;
-    accountCount: number;
-  }>();
-
-  for (const account of accounts || []) {
-    const currency = account.currency || 'ARS';
-    const current = byCurrency.get(currency) || {
-      currency,
-      liquidity: 0,
-      creditCardDebt: 0,
-      investments: 0,
-      netWorth: 0,
-      accountCount: 0,
-    };
-    const balance = Number(account.balance || 0);
-    const type = String(account.type || '').toLowerCase();
-
-    current.accountCount += 1;
-    if (type === 'credit_card') {
-      current.creditCardDebt += Math.min(balance, 0);
-    } else if (type === 'investment') {
-      current.investments += balance;
-      current.netWorth += balance;
-    } else {
-      current.liquidity += balance;
-      current.netWorth += balance;
-    }
-
-    if (type === 'credit_card') {
-      current.netWorth += balance;
-    }
-
-    byCurrency.set(currency, current);
-  }
-
-  return Array.from(byCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency));
-}
-
-function buildAccountReconciliationQueue(accounts: any[]) {
-  return (accounts || [])
-    .map(account => ({
-      account,
-      reconciliation: getAccountReconciliationInfo(account),
-    }))
-    .filter(item => item.reconciliation.tone !== 'ok')
-    .sort((a, b) => getReconciliationWeight(b.reconciliation.tone) - getReconciliationWeight(a.reconciliation.tone));
-}
-
-function getReconciliationWeight(tone: string) {
-  if (tone === 'danger') return 4;
-  if (tone === 'warn') return 3;
-  if (tone === 'neutral') return 2;
-  return 1;
-}
-
-function buildAccountActivityById(accounts: any[], finances: any[], pendingTransactions: PendingTransaction[] = []) {
-  const entries = new Map<string, AccountActivitySummary>();
-
-  for (const account of accounts || []) {
-    entries.set(account.id, {
-      movementCount: 0,
-      pendingCount: 0,
-      netActivity: 0,
-    });
-  }
-
-  for (const finance of finances || []) {
-    const sourceAccountId = finance.accountId || finance.sourceAccountId || '';
-    const destinationAccountId = finance.toAccountId || '';
-    const touchedAccountIds = [sourceAccountId, destinationAccountId].filter(Boolean);
-    const hasReviewFlag = finance.isConfirmed === false || finance.needsReview || finance.status === 'pending' || finance.duplicateReason;
-
-    for (const accountId of touchedAccountIds) {
-      const current = entries.get(accountId);
-      if (current && hasReviewFlag) current.pendingCount += 1;
-    }
-
-    if (!finance.accountBalanceApplied) continue;
-
-    const transactionDate = parseFinanceDateValue(finance.date);
-    for (const account of accounts || []) {
-      const reconciledAt = parseFinanceDateValue(account.lastReconciledAt);
-      if (reconciledAt && transactionDate && transactionDate <= reconciledAt) continue;
-
-      let delta = 0;
-      if (sourceAccountId === account.id) {
-        delta += getAccountBalanceDelta({
-          accountType: account.type,
-          transactionType: finance.type,
-          amount: Number(finance.amount || 0),
-          direction: 'source',
-        });
-      }
-      if (finance.type === 'transfer' && destinationAccountId === account.id) {
-        delta += getAccountBalanceDelta({
-          accountType: account.type,
-          transactionType: finance.type,
-          amount: Number(finance.amount || 0),
-          direction: 'destination',
-        });
-      }
-
-      if (delta !== 0) {
-        const current = entries.get(account.id);
-        if (current) {
-          current.netActivity += delta;
-          current.movementCount += 1;
-        }
-      }
-    }
-  }
-
-  for (const transaction of pendingTransactions || []) {
-    const accountId = transaction.accountId || transaction.sourceAccountId || '';
-    const current = accountId ? entries.get(accountId) : null;
-    if (current) current.pendingCount += 1;
-  }
-
-  return entries;
-}
-
-type BalanceIntegrityIssueType =
-  | 'missing_balance_application'
-  | 'missing_account'
-  | 'missing_transfer_destination'
-  | 'applied_without_effect';
-
-interface BalanceIntegrityIssue {
-  id: string;
-  type: BalanceIntegrityIssueType;
-  finance: any;
-  title: string;
-  helper: string;
-  canApplyBalance: boolean;
-}
-
-interface AccountActivitySummary {
-  movementCount: number;
-  pendingCount: number;
-  netActivity: number;
-}
-
 type FinanceDiagnosticTone = 'ok' | 'warn' | 'danger' | 'neutral';
 
 interface FinanceDiagnosticItem {
@@ -746,87 +607,6 @@ interface ReviewResolutionDraft {
   finance: any;
   accountId?: string;
   toAccountId?: string;
-}
-
-function buildBalanceIntegrityIssues(finances: any[], accounts: any[] = []) {
-  const accountIds = new Set((accounts || []).map(account => account.id));
-
-  return (finances || [])
-    .map(finance => {
-      const status = finance.status || 'posted';
-      if (status === 'ignored') return null;
-
-      const sourceAccountId = finance.sourceAccountId || finance.accountId || '';
-      const toAccountId = finance.toAccountId || '';
-      const hasRealSourceAccount = sourceAccountId ? accountIds.has(sourceAccountId) : false;
-      const hasRealDestinationAccount = toAccountId ? accountIds.has(toAccountId) : false;
-      const type = finance.type || (finance.kind === 'income' ? 'income' : finance.kind === 'neutral' ? 'neutral' : 'expense');
-      const isBalanceAdjustment = isBalanceAdjustmentTransaction(finance);
-      const shouldAffectBalance = shouldApplyTransactionToAccountBalances({
-        ...finance,
-        accountId: sourceAccountId,
-        sourceAccountId,
-        toAccountId,
-        date: parseFinanceDateValue(finance.date) || new Date(),
-      });
-
-      if ((type === 'expense' || type === 'income') && (!sourceAccountId || !hasRealSourceAccount) && Number(finance.amount || 0) > 0) {
-        return {
-          id: `${finance.id}-missing-account`,
-          type: 'missing_account' as const,
-          finance,
-          title: 'Movimiento sin cuenta usada',
-          helper: sourceAccountId
-            ? 'Tiene una cuenta heredada del resumen, pero no coincide con una cuenta real de VEO.'
-            : 'Tiene monto y tipo financiero, pero no sabemos de que cuenta salio o entro.',
-          canApplyBalance: false,
-        };
-      }
-
-      if (type === 'transfer' && sourceAccountId && (!toAccountId || !hasRealDestinationAccount)) {
-        return {
-          id: `${finance.id}-missing-transfer-destination`,
-          type: 'missing_transfer_destination' as const,
-          finance,
-          title: 'Transferencia sin destino',
-          helper: toAccountId
-            ? 'La cuenta destino guardada no coincide con una cuenta real de VEO.'
-            : 'Para mover saldo entre cuentas, VEO necesita cuenta origen y cuenta destino.',
-          canApplyBalance: false,
-        };
-      }
-
-      if (shouldAffectBalance && !finance.accountBalanceApplied) {
-        return {
-          id: `${finance.id}-missing-balance-application`,
-          type: 'missing_balance_application' as const,
-          finance,
-          title: 'No impacto el saldo',
-          helper: 'El movimiento esta contabilizado, pero todavia no ajusto el saldo de la cuenta.',
-          canApplyBalance: true,
-        };
-      }
-
-      if (!shouldAffectBalance && finance.accountBalanceApplied && !isBalanceAdjustment) {
-        return {
-          id: `${finance.id}-applied-without-effect`,
-          type: 'applied_without_effect' as const,
-          finance,
-          title: 'Saldo aplicado con regla dudosa',
-          helper: 'El movimiento figura como aplicado, pero por sus datos actuales no deberia mover saldo.',
-          canApplyBalance: false,
-        };
-      }
-
-      return null;
-    })
-    .filter(Boolean) as BalanceIntegrityIssue[];
-}
-
-function isBalanceAdjustmentTransaction(finance: any) {
-  const neutralType = String(finance.neutralType || '').toLowerCase();
-  const categoryText = normalizeDuplicateText(`${finance.category || ''} ${finance.subCategory || ''} ${finance.description || ''}`);
-  return neutralType === 'balance_adjustment' || categoryText.includes('ajuste saldo');
 }
 
 function buildFinanceDiagnosticItems({
