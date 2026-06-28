@@ -119,6 +119,14 @@ import {
   applyLearnedFinanceMapping,
   buildPendingImportGroups,
 } from '../features/finance/finance.pendingImport.ts';
+import {
+  financeNeedsDestinationAccount,
+  getFinanceAccountFieldLabel,
+  getMovementCategoryDisplay,
+  buildFinanceTraceDetails,
+  getFinanceSearchText,
+} from '../features/finance/finance.movementDisplay.ts';
+import { InstallmentForecastPanel } from '../features/finance/components/InstallmentForecastPanel.tsx';
 
 // Set up PDF.js worker using a more reliable CDN link
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -150,30 +158,6 @@ function buildPdfPageText(items: any[]) {
         .trim()
     )
     .join('\n');
-}
-
-function financeNeedsDestinationAccount(finance: any) {
-  const type = String(finance?.type || finance?.kind || '').toLowerCase();
-  const kind = String(finance?.kind || '').toLowerCase();
-  const neutralType = String(finance?.neutralType || '').toLowerCase();
-
-  if (type === 'transfer') return true;
-  if ((type === 'neutral' || kind === 'neutral') && [
-    'internal_transfer',
-    'credit_card_payment',
-    'currency_exchange',
-    'investment_movement',
-    'loan_movement',
-  ].includes(neutralType)) return true;
-
-  return isInternalTransferCategory(finance?.category, finance?.subCategory);
-}
-
-function getFinanceAccountFieldLabel(finance: any) {
-  const type = String(finance?.type || finance?.kind || '').toLowerCase();
-  if (financeNeedsDestinationAccount(finance)) return 'Cuenta origen';
-  if (type === 'income') return 'Cuenta donde entra';
-  return 'Cuenta usada';
 }
 
 type FinanceDiagnosticTone = 'ok' | 'warn' | 'danger' | 'neutral';
@@ -461,116 +445,6 @@ const FINANCE_SCOPE_OPTIONS = [
   { value: 'hogar', label: 'Hogar' },
   { value: 'familia', label: 'Familia' },
 ];
-
-function getNeutralMovementLabel(finance: any) {
-  const neutralType = String(finance?.neutralType || '').toLowerCase();
-  if (neutralType === 'credit_card_payment' || isCreditCardPaymentCategory(finance?.category, finance?.subCategory)) return 'Pago de tarjeta';
-  if (neutralType === 'currency_exchange') return 'Cambio de moneda';
-  if (neutralType === 'investment_movement') return 'Inversion';
-  if (neutralType === 'loan_movement') return 'Prestamo';
-  if (neutralType === 'balance_adjustment') return 'Ajuste de saldo';
-  return 'Transferencia';
-}
-
-function getMovementCategoryDisplay(finance: any) {
-  if (finance?.type === 'transfer') {
-    return {
-      primary: getNeutralMovementLabel(finance),
-      secondary: 'Transferencia',
-    };
-  }
-
-  return {
-    primary: finance?.subCategory || finance?.category || 'Sin categoria',
-    secondary: finance?.subCategory ? finance?.category : '',
-  };
-}
-
-function buildFinanceTraceDetails(finance: any, accounts: any[]) {
-  const trace = parseFinanceTraceNote(finance.note);
-  const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
-  const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
-  const merchant = inferStatementMerchant(finance, trace);
-
-  return {
-    trace,
-    merchant,
-    sourceAccount,
-    destinationAccount,
-    rows: [
-      { label: getFinanceAccountFieldLabel(finance), value: sourceAccount?.name || 'Sin cuenta' },
-      ...(financeNeedsDestinationAccount(finance) ? [{ label: 'Cuenta destino', value: destinationAccount?.name || '-' }] : []),
-      { label: 'Destinatario', value: trace.counterpartyName || '-' },
-      { label: 'Alias', value: trace.counterpartyAlias || '-' },
-      { label: 'CBU/CVU', value: trace.counterpartyAccount || '-' },
-      { label: 'Archivo', value: trace.importedFile || finance.importSource || '-' },
-      { label: 'Tarjeta', value: trace.cardLast4 || finance.cardLast4 || '-' },
-      { label: 'Comprobante', value: trace.voucherNumber || finance.voucherNumber || '-' },
-      { label: 'Cuotas', value: trace.installmentLabel || finance.installmentLabel || '-' },
-      { label: 'Huella', value: finance.transactionFingerprint || finance.statementFingerprint || '-' },
-    ],
-    longRows: [
-      { label: 'Concepto original', value: trace.originalConcept || finance.originalDescription || '' },
-      { label: 'Linea del resumen', value: trace.sourceLine || '' },
-      { label: 'Detalle tarjeta debito', value: trace.debitCardDetailLine || finance.debitCardDetailLine || '' },
-      { label: 'Detalle transferencia', value: trace.transferDetail || '' },
-    ].filter(row => row.value),
-  };
-}
-
-function getFinanceSearchText(finance: any, accounts: any[], members: any[]) {
-  const sourceAccount = accounts.find(account => account.id === (finance.sourceAccountId || finance.accountId));
-  const destinationAccount = accounts.find(account => account.id === finance.toAccountId);
-  const generator = members.find(member => member.uid === finance.generatedBy || member.id === finance.generatedBy);
-  const trace = parseFinanceTraceNote(finance.note);
-
-  return [
-    finance.id,
-    finance.description,
-    finance.note,
-    finance.category,
-    finance.subCategory,
-    finance.subSubCategory,
-    finance.type,
-    finance.currency,
-    finance.amount,
-    finance.paymentType,
-    finance.paymentStatus,
-    finance.source,
-    finance.confidence,
-    finance.importSource,
-    finance.merchantName,
-    finance.merchant,
-    finance.merchantKey,
-    finance.beneficiaryLabel,
-    finance.scope,
-    finance.originalDescription,
-    finance.duplicateReason,
-    sourceAccount?.name,
-    sourceAccount?.currency,
-    sourceAccount?.type,
-    destinationAccount?.name,
-    destinationAccount?.currency,
-    destinationAccount?.type,
-    generator?.displayName,
-    generator?.email,
-    trace.originalConcept,
-    trace.transferDetail,
-    trace.counterpartyName,
-    trace.counterpartyAlias,
-    trace.counterpartyAccount,
-    trace.importedFile,
-    trace.installmentLabel,
-    trace.sourceLine,
-    finance.projectId,
-    ...trace.reconciliations,
-    ...trace.otherLines,
-    ...(Array.isArray(finance.tags) ? finance.tags : []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-}
 
 export default function FinanceTracker({ user }: { user: any }) {
   const [finances, setFinances] = useState<any[]>([]);
@@ -6450,94 +6324,6 @@ function FinanceCatchupSessionPanel({
       </div>
     </section>
   );
-}
-
-function InstallmentForecastPanel({
-  forecast,
-}: {
-  forecast: ReturnType<typeof buildInstallmentForecast>;
-}) {
-  if (!forecast.activeCount) return null;
-
-  return (
-    <section className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-neutral-400">Cuotas</p>
-          <h3 className="mt-1 text-2xl font-black tracking-tight text-neutral-950">Compromisos próximos</h3>
-          <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-neutral-500">
-            Estimado desde resúmenes importados. No crea gastos futuros: sirve para anticipar caja.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-neutral-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white">
-            {forecast.activeCount} compra(s)
-          </span>
-          {forecast.totalRemainingByCurrency.map(item => (
-            <span key={item.currency} className="rounded-full bg-neutral-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-700">
-              {item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {item.currency}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-3 md:grid-cols-2">
-          {forecast.items.slice(0, 4).map(item => (
-            <div key={item.key} className="rounded-3xl border border-neutral-100 bg-neutral-50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-neutral-950">{item.label}</p>
-                  <p className="mt-1 truncate text-xs font-bold text-neutral-500">{item.description}</p>
-                </div>
-                <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-neutral-600">
-                  {item.currentInstallment}/{item.totalInstallments}
-                </span>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold">
-                <div className="rounded-2xl bg-white px-3 py-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Próxima</p>
-                  <p className="mt-1 text-neutral-800">{format(item.nextDueDate, 'MM/yyyy')}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-3 py-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Restan</p>
-                  <p className="mt-1 text-neutral-800">{item.remainingCount}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-3 py-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Cuota</p>
-                  <p className="mt-1 text-neutral-800">{item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {item.currency}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-3 py-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-neutral-400">Cuenta</p>
-                  <p className="mt-1 truncate text-neutral-800">{item.accountName || 'No detectada'}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-3xl border border-neutral-100 bg-neutral-50 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Próximos meses</p>
-          <div className="mt-3 space-y-2">
-            {forecast.monthlyTotals.length ? forecast.monthlyTotals.map(item => (
-              <div key={`${item.monthKey}-${item.currency}`} className="flex items-center justify-between rounded-2xl bg-white px-3 py-3 text-xs font-black text-neutral-800">
-                <span>{formatForecastMonth(item.monthKey)}</span>
-                <span>{item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {item.currency}</span>
-              </div>
-            )) : (
-              <p className="rounded-2xl bg-white px-3 py-3 text-xs font-bold text-neutral-500">Sin próximos meses detectados.</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function formatForecastMonth(monthKey: string) {
-  const [year, month] = monthKey.split('-').map(Number);
-  if (!year || !month) return monthKey;
-  return format(new Date(year, month - 1, 1), 'MM/yyyy');
 }
 
 function AccountReconciliationOverview({
