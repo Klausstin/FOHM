@@ -24,3 +24,22 @@ export function legacyScope(finance: any) {
   if (finance.assignedTo === 'Ambos') return 'pareja';
   return finance.scope || 'familia';
 }
+
+export function formatFinanceMonth(monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number);
+  if (!year || !month) return monthKey;
+  return new Date(year, month - 1, 1).toLocaleDateString('es-AR', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+export function formatFinanceScope(scope: string) {
+  const labels: Record<string, string> = {
+    personal: 'Personal',
+    pareja: 'Pareja',
+    hogar: 'Hogar',
+    familia: 'Familia',
+  };
+  return labels[scope] || scope || 'Familia';
+}
