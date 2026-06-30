@@ -27,6 +27,13 @@ export function getFinanceAccountFieldLabel(finance: any) {
   return 'Cuenta usada';
 }
 
+export function getFinanceTypeLabel(type?: string) {
+  if (type === 'income') return 'Ingreso';
+  if (type === 'transfer') return 'Transferencia';
+  if (type === 'neutral') return 'Movimiento neutro';
+  return 'Gasto';
+}
+
 export function getNeutralMovementLabel(finance: any) {
   const neutralType = String(finance?.neutralType || '').toLowerCase();
   if (neutralType === 'credit_card_payment' || isCreditCardPaymentCategory(finance?.category, finance?.subCategory)) return 'Pago de tarjeta';
