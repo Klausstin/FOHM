@@ -1,103 +1,74 @@
-# Plan de refactor — Módulo de Finanzas (VEO)
+# Refactor del Módulo de Finanzas (VEO) — Estado y cómo seguir
 
-> Documento de referencia para Agustín, Claude y Codex.
-> Estado: **plan aprobado, sin código tocado todavía.**
-> Última actualización del análisis: 2026-06-21.
+> Documento de referencia para Agustín y cualquier asistente (Claude o Codex).
+> **Última actualización: 2026-07-01.**
 
-## Contexto
+## 📌 Estado actual (resumen para retomar rápido)
 
-El módulo de finanzas funciona y tiene buenas ideas (categorización inteligente,
-detección de duplicados, ajuste por inflación con datos reales del INDEC, scripts
-de backup seguros). El problema principal **no es la lógica, es la prolijidad
-estructural**: casi toda la pantalla vive en un solo archivo gigante,
-`src/components/FinanceTracker.tsx`, de **9.186 líneas** (9 veces más grande que
-el siguiente componente del proyecto).
+- **Fase A: ✅ COMPLETA** — toda la lógica pura salió a módulos en `src/features/finance/`.
+- **Fase B: ✅ COMPLETA** — todos los paneles visuales salieron a `src/features/finance/components/`.
+- **Fase C: ⬜ PENDIENTE** — partir el componente principal por secciones (lo más delicado; ver abajo).
+- `src/components/FinanceTracker.tsx` pasó de **9.186 → 4.664 líneas** (~49% afuera).
+- Todo verificado y en `main`. Método usado: una rama por tanda + PR, verificando en cada paso.
 
-### Por qué importa partirlo
-- Es lento y arriesgado de modificar: un cambio chico puede romper algo lejano.
-- Es donde Claude y Codex se pisan más fácil al trabajar en paralelo.
-- Hace que la app cargue más pesada de lo necesario.
+## Cómo quedó organizado el módulo
 
-## Hallazgo clave: el archivo ya viene en 3 capas
+- **Lógica** (`src/features/finance/*.ts`): tipos (`finance.importTypes`, `finance.types`),
+  duplicados, formato, exportar/backup, rastro, cuotas, diagnósticos, resúmenes de cuenta,
+  categorías, formulario de cuenta, importación pendiente, display de movimientos,
+  constantes, secciones, etc.
+- **Componentes** (`src/features/finance/components/*.tsx`): InstallmentForecastPanel,
+  FinancialInsightsPanel, MonthlyFinanceSnapshot, FinanceLearningMemoryPanel,
+  CategoryLearningGroupsPanel, BalanceIntegrityPanel, FinanceMovementDetailDisplay,
+  AccountReconciliation, FinanceCatchupSessionPanel, PendingImportGroupsPanel,
+  FinanceInternalNav, PendingMeta, AuditField, TransferTraceCard.
+- `FinanceTracker.tsx` sigue siendo el **componente principal**: tiene el estado, la carga
+  de datos (Firestore), los handlers y arma cada sección importando esos componentes.
 
-| Capa | Qué es | Líneas aprox. | Riesgo de mover |
-|---|---|---|---|
-| 1. Funciones de cálculo (puras) | ~50 funciones sin nada visual (duplicados, backup, resúmenes de cuentas, diagnósticos) | 13–2.111 | 🟢 Bajo |
-| 2. Sub-paneles ya separados | ~25 componentes que ya están sueltos dentro del archivo | 6.585–9.186 | 🟡 Medio |
-| 3. Componente principal | ~4.500 líneas, ~101 hooks, las 8 secciones mezcladas entre sí | 2.112–6.585 | 🔴 Delicado |
-
-La pantalla ya está pensada en **8 secciones** (Resumen, Cuentas, Movimientos,
-Importar, Revisar, Categorías, Reportes, Backup). Esas son las líneas de corte
-naturales para la capa 3.
-
-## Redes de seguridad (correr después de CADA paso)
-- `npm run lint` — revisa que no haya errores de tipos.
+## Redes de seguridad (correr después de CADA cambio)
+- `npm run lint` (o `npx tsc --noEmit`) — errores de tipos.
 - `npm run finance:smoke` — prueba de la lógica de saldos.
-- Abrir la app y mirar la sección tocada.
-- Si algo falla → revertir el paso. Nunca avanzar a ciegas.
+- `npm run build` — build de producción (antes de mergear).
+- Abrir la app (`npm run dev` → localhost:3000) y mirar la sección tocada.
+- Si algo falla → revertir. Nunca avanzar a ciegas.
 
-## Fases
-
-### Fase 0 — Red de seguridad (antes de tocar nada)
-- Confirmar que `lint` y `finance:smoke` pasan en limpio (foto base).
-- Trabajar en una rama aparte, con commits chiquitos y frecuentes.
-
-### Fase A — Mover funciones de cálculo 🟢 (bajo riesgo)
-Sacar las ~50 funciones puras a archivos de lógica en `features/finance/`,
-agrupadas por tema. Ejemplos:
-- `finance.duplicates.ts` — detección de duplicados
-- `finance.backup.ts` — exportar / backup / CSV
-- `finance.accountSummary.ts` — resúmenes y actividad de cuentas
-- `finance.diagnostics.ts` — chequeos de integridad de saldos
-- `finance.installments.ts` — proyección de cuotas
-
-Impacto: le saca ~2.000 líneas al archivo. Casi mecánico.
-
-### Fase B — Sacar los sub-paneles ya separados 🟡 (riesgo medio)
-Crear `features/finance/components/` y mudar ahí los ~25 paneles que ya están
-sueltos (panel de aprendizaje, centro de revisión, importación, reportes, etc.).
-Impacto: ~2.600 líneas afuera.
-
-### Fase C — Partir el componente principal 🔴 (lo delicado, al final)
-Una sección a la vez, NO de un saque:
-1. Concentrar el estado y la carga de datos compartida en un hook `useFinanceData`.
-2. Convertir cada una de las 8 secciones en su propio componente
-   (`SummarySection`, `AccountsSection`, …), una por una, probando entre cada una.
-3. `FinanceTracker.tsx` queda como un esqueleto delgado (~300 líneas) que arma
-   el menú y muestra la sección activa.
-
-Nota honesta: es la fase más laboriosa porque las 8 secciones hoy comparten
-mucho estado. Por eso se hace de a una sección, en pasos chicos y verificables.
-
-## Resultado esperado
-- **De:** 1 archivo de 9.186 líneas.
-- **A:** ~18 archivos de 100–500 líneas, fáciles de leer y modificar.
-
-## Coordinación con Codex
-Mientras dure este refactor, **Codex no debería tocar finanzas** (el archivo
-estará "en obra"). Al terminar y subir a GitHub, Codex baja la versión nueva y
-ambos pueden trabajar sobre los archivos chicos sin pisarse.
+## Método de trabajo (la "posta" con dos asistentes)
+- Al EMPEZAR: `git pull`. Al TERMINAR una tanda: `git add` + `commit` + `push` (+ PR y merge).
+- Una rama por tanda (`refactor/...` o `fix/...`), commits chicos.
+- Ver `AGENTS.md` / `CLAUDE.md` en la raíz.
 
 ---
 
-## Otros hallazgos del análisis (fuera del refactor de la pantalla)
+## Fase C — Partir el componente principal (lo que falta del refactor)
 
-Pendientes detectados, por prioridad, para encarar después del refactor:
+`FinanceTracker.tsx` (~4.664 líneas) todavía concentra todo el estado y las 8 secciones
+(Resumen, Cuentas, Movimientos, Importar, Revisar, Categorías, Reportes, Backup).
 
-1. **🟠 Atomicidad de saldos (confirmado).** Actualizar un saldo hace
-   leer→modificar→escribir sin protección (`finance.service.ts:189-208`), y la
-   carga de un movimiento son 3 pasos sueltos que pueden cortarse a la mitad.
-   Riesgo real de "el saldo no cierra" con uso concurrente (dos personas / dos
-   dispositivos) o cortes de red. Solución: usar transacciones / `increment` de
-   Firestore.
-2. **🟢 Centavos con decimales (higiene).** El dinero se guarda como float;
-   verificado que el error es microscópico (no se pierde plata), pero conviene
-   migrar a centavos enteros cuando se toque esa zona.
+Plan sugerido, **una sección a la vez** (no de un saque):
+1. Concentrar el estado y la carga de datos compartida en un hook `useFinanceData(user)`.
+2. Convertir cada sección en su propio componente (`SummarySection`, `AccountsSection`, …),
+   una por una, verificando entre cada una.
+3. `FinanceTracker.tsx` queda como un esqueleto delgado que arma el menú y muestra la
+   sección activa.
+
+Es la fase más laboriosa porque las secciones comparten mucho estado. Por eso: pasos
+chicos y verificables. **No es obligatoria para que la app funcione** — es prolijidad.
+
+---
+
+## Otros hallazgos del análisis original (pendientes, fuera del refactor)
+
+Por prioridad:
+
+1. **🟠 Atomicidad de saldos (confirmado).** Actualizar un saldo hace leer→modificar→escribir
+   sin protección (`finance.service.ts`), y cargar un movimiento son 3 pasos sueltos que
+   pueden cortarse a la mitad. Riesgo real de "el saldo no cierra" con uso concurrente
+   (dos personas/dispositivos) o cortes de red. Solución: transacciones / `increment` de Firestore.
+2. **🟢 Centavos con decimales (higiene).** El dinero se guarda como float; el error es
+   microscópico (no se pierde plata), pero conviene migrar a centavos enteros al tocar esa zona.
 3. **🟡 Avisar errores al usuario.** Hoy muchos fallos se "tragan" en silencio.
-4. **🟡 Números mágicos** repartidos (umbrales de duplicados, "gasto inusual >
-   $10.000", etc.) → centralizar en un único lugar de configuración.
-5. **🟡 Categorías y comercios fijos** en el código → permitir crear los propios
-   desde la app.
+4. **🟡 Números mágicos** repartidos (umbrales de duplicados, "gasto inusual > $10.000", etc.)
+   → centralizar en configuración.
+5. **🟡 Categorías y comercios fijos** en el código → permitir crear los propios desde la app.
 6. **🟢 Caché de inflación sin fecha** → no se sabe si el dato está fresco.
-7. **🟢 Tipos `any`** en lógica financiera → tipar para recuperar el control de
-   calidad de TypeScript.
+7. **🟢 Tipos `any`** en lógica financiera → tipar para recuperar control de calidad.

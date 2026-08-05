@@ -2067,6 +2067,14 @@ export default function FinanceTracker({ user }: { user: any }) {
 
   return (
     <div className="space-y-5">
+      <FinanceInternalNav
+        active={activeFinanceSection}
+        onChange={setActiveFinanceSection}
+        sections={orderedFinanceSections}
+        onReorderSections={reorderFinanceSections}
+        onResetOrder={resetFinanceSectionOrder}
+      />
+
       {(activeFinanceSection === 'accounts' || activeFinanceSection === 'reports') && (
         <div className="flex justify-end">
           {activeFinanceSection === 'accounts' && (
@@ -2092,14 +2100,6 @@ export default function FinanceTracker({ user }: { user: any }) {
           )}
         </div>
       )}
-
-      <FinanceInternalNav
-        active={activeFinanceSection}
-        onChange={setActiveFinanceSection}
-        sections={orderedFinanceSections}
-        onReorderSections={reorderFinanceSections}
-        onResetOrder={resetFinanceSectionOrder}
-      />
 
       {activeFinanceSection === 'backup' && (
         <section className="rounded-[2rem] border border-neutral-100 bg-white p-6 shadow-sm">
