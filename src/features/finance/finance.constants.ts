@@ -8,6 +8,8 @@ export const FINANCE_SCOPE_OPTIONS = [
   { value: 'familia', label: 'Familia' },
 ];
 
+export const CURRENCIES = ['ARS', 'USD', 'EUR', 'BRL', 'CLP', 'UYU'];
+
 export const PAYMENT_TYPES = ['Efectivo', 'Tarjeta de Débito', 'Tarjeta de credito', 'Transferencia', 'Mercado Pago', 'Otro'];
 
 export const FINANCE_BENEFICIARIES = [

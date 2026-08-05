@@ -34,6 +34,12 @@ export function getFinanceTypeLabel(type?: string) {
   return 'Gasto';
 }
 
+export function isUsefulAuditValue(value?: string | number) {
+  if (value === 0) return true;
+  const text = String(value || '').trim();
+  return Boolean(text && text !== '-' && text.toLowerCase() !== 'no detectado' && text.toLowerCase() !== 'sin cuenta');
+}
+
 export function getNeutralMovementLabel(finance: any) {
   const neutralType = String(finance?.neutralType || '').toLowerCase();
   if (neutralType === 'credit_card_payment' || isCreditCardPaymentCategory(finance?.category, finance?.subCategory)) return 'Pago de tarjeta';
