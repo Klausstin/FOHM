@@ -108,6 +108,7 @@ export function findSemanticDuplicateMatch(candidate: Partial<PendingTransaction
       Math.max(candidateAmount, Number(transaction.amount || 0), Number(transaction.originalAmount || 0)) >= 80;
 
     if (!manualCandidate || !accountCompatible || !amountMatch) return false;
+    if (highValueForeignCardMatch && !merchantMatch && !meaningfulTextMatch) return false;
 
     let score = 0;
     if (daysApart <= 45) score += 1;

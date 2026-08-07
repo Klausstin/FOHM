@@ -232,6 +232,12 @@ Prueba local de saldos de Finanzas:
 npm run finance:smoke
 ```
 
+Prueba de aceptacion de los recorridos financieros criticos, sin tocar datos reales:
+
+```powershell
+npm run finance:acceptance
+```
+
 Validar un backup JSON de Finanzas:
 
 ```powershell

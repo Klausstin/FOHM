@@ -1,7 +1,7 @@
 # Refactor del Módulo de Finanzas (VEO) — Estado y cómo seguir
 
 > Documento de referencia para Agustín y cualquier asistente (Claude o Codex).
-> **Última actualización: 2026-07-01.**
+> **Última actualización: 2026-08-07.**
 
 ## 📌 Estado actual (resumen para retomar rápido)
 
@@ -28,6 +28,7 @@
 ## Redes de seguridad (correr después de CADA cambio)
 - `npm run lint` (o `npx tsc --noEmit`) — errores de tipos.
 - `npm run finance:smoke` — prueba de la lógica de saldos.
+- `npm run finance:acceptance` — recorridos financieros críticos simulados sin tocar datos reales.
 - `npm run build` — build de producción (antes de mergear).
 - Abrir la app (`npm run dev` → localhost:3000) y mirar la sección tocada.
 - Si algo falla → revertir. Nunca avanzar a ciegas.
@@ -60,10 +61,9 @@ chicos y verificables. **No es obligatoria para que la app funcione** — es pro
 
 Por prioridad:
 
-1. **🟠 Atomicidad de saldos (confirmado).** Actualizar un saldo hace leer→modificar→escribir
-   sin protección (`finance.service.ts`), y cargar un movimiento son 3 pasos sueltos que
-   pueden cortarse a la mitad. Riesgo real de "el saldo no cierra" con uso concurrente
-   (dos personas/dispositivos) o cortes de red. Solución: transacciones / `increment` de Firestore.
+1. **✅ Atomicidad de saldos (resuelto en 2026-08).** Las altas, ediciones y bajas que afectan
+   saldos usan transacciones de Firestore. La prueba `finance:acceptance` simula los recorridos
+   críticos; todavía falta la validación breve de uso real con Agustín y Vicky.
 2. **🟢 Centavos con decimales (higiene).** El dinero se guarda como float; el error es
    microscópico (no se pierde plata), pero conviene migrar a centavos enteros al tocar esa zona.
 3. **🟡 Avisar errores al usuario.** Hoy muchos fallos se "tragan" en silencio.
