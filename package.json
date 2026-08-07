@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "finance:acceptance": "tsx scripts/finance-acceptance.ts",
     "finance:backup:validate": "tsx scripts/finance-backup-validate.ts",
     "finance:reset-test-data": "tsx scripts/finance-reset-test-data.ts",
     "finance:smoke": "tsx scripts/finance-balance-smoke.ts",

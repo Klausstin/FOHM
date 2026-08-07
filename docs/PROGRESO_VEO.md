@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 93% | Prioridad actual y MVP central. Altas, ediciones, bajas y revisiones ya protegen movimiento y saldos en una misma operacion; falta validacion real con Agustin y Vicky. |
+| Finanzas | Validando | 94% | Prioridad actual y MVP central. Altas, ediciones, bajas, transferencias, tarjetas, pendientes, duplicados y asignacion de cuentas ya tienen prueba automatica; falta validacion real breve con Agustin y Vicky. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -131,20 +131,22 @@ Siguiente: [proximo paso]
 | Compactar header y personalizar tabs de Finanzas | Validando | 95% | `src/components/FinanceTracker.tsx`, `docs/VEO_PRODUCT_VISION.md`, `docs/PROGRESO_VEO.md` |
 | Ocultar Cuenta destino cuando no aplica | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar proyecto/contexto a movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Automatizar prueba de aceptacion financiera | Listo | 100% | `scripts/finance-acceptance.ts`, `src/features/finance/finance.duplicates.ts`, `package.json`, `README.md`, `docs/finanzas-plan-refactor.md` |
 
 ## Proximos pasos
 
-1. Ejecutar `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md` en la app antes de carga masiva.
-2. Si se quiere empezar limpio, configurar credenciales admin locales y correr dry-run de `npm run finance:reset-test-data`; aplicar solo con confirmacion explicita.
-3. Descargar backup financiero y CSV antes de cargar datos reales masivos, y validar el JSON con `npm run finance:backup:validate`.
-4. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
-5. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
-6. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
-7. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
-8. Probar auditoria de movimientos importados validando que comercio, linea del resumen, huella, archivo y cuotas eviten abrir el PDF original.
-9. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
-10. Mantener Importar como tab separada mientras tenga flujo propio: PDF/CSV, preview, evidencias, duplicados, pendientes, errores y confirmacion de importacion.
-11. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
-12. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
-13. Usar Proyecto para gastos grandes de una sola vez, como Casamiento, Viaje o Mudanza, sin ensuciar las categorias financieras.
-14. Despues de cerrar Finanzas y estabilizar el shell visual, definir un catalogo comun de temas configurables. Cada usuario puede elegir cualquiera, compartir el mismo con otra persona o usar uno distinto; solo la seleccion activa es personal.
+1. Ejecutar `npm run finance:acceptance` junto con lint, smoke y build antes de cada cierre importante de Finanzas.
+2. Ejecutar `docs/FINANCE_REAL_USE_TEST_PROTOCOL.md` en la app antes de carga masiva.
+3. Si se quiere empezar limpio, configurar credenciales admin locales y correr dry-run de `npm run finance:reset-test-data`; aplicar solo con confirmacion explicita.
+4. Descargar backup financiero y CSV antes de cargar datos reales masivos, y validar el JSON con `npm run finance:backup:validate`.
+5. Validar que "Ver movimientos" desde una cuenta ayude a auditar saldos reales.
+6. Validar el nuevo panel de movimientos a revisar y aplicar saldo faltante si aparece.
+7. Probar CSV reales de banco/billetera/broker y ajustar mapeo de columnas.
+8. Probar gastos reales desde Luz para validar memoria Wallet, beneficiarios y categorias.
+9. Probar auditoria de movimientos importados validando que comercio, linea del resumen, huella, archivo y cuotas eviten abrir el PDF original.
+10. Probar el resumen mensual y el diagnostico con datos reales, ajustando lo que no ayude en el uso diario.
+11. Mantener Importar como tab separada mientras tenga flujo propio: PDF/CSV, preview, evidencias, duplicados, pendientes, errores y confirmacion de importacion.
+12. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
+13. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
+14. Usar Proyecto para gastos grandes de una sola vez, como Casamiento, Viaje o Mudanza, sin ensuciar las categorias financieras.
+15. Despues de cerrar Finanzas y estabilizar el shell visual, definir un catalogo comun de temas configurables. Cada usuario puede elegir cualquiera, compartir el mismo con otra persona o usar uno distinto; solo la seleccion activa es personal.
