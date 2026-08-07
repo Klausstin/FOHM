@@ -84,7 +84,7 @@ La prioridad inmediata es aplicar este criterio dentro de Finanzas para llegar a
 
 La personalizacion debe aparecer solo cuando simplifica el uso cotidiano. El orden editable de tabs internas en Finanzas es un primer paso local y acotado; no implica abrir por ahora un dashboard editable global ni un constructor de layouts.
 
-Despues de cerrar Finanzas como MVP usable, VEO debe preparar una capa de experiencia visual por usuario. Agustin y Vicky comparten los datos que correspondan, pero cada uno puede elegir su propio tema sin modificar la experiencia del otro. Los temas deben poder cambiarse cuando cansen y pueden recorrer lenguajes originales como aventura portatil, cozy, editorial, monocromo o arcade sobrio. No se copiaran marcas o universos existentes: se busca capturar sensaciones ludicas con identidad propia de VEO.
+Despues de cerrar Finanzas como MVP usable, VEO debe preparar una capa de experiencia visual configurable. Los temas pertenecen a un catalogo comun de VEO, no a una persona: Agustin y Vicky pueden elegir cualquiera, usar el mismo tema o temas distintos y cambiarlos cuando quieran. La seleccion activa se guarda por usuario para no modificar la experiencia del otro. Los temas pueden recorrer lenguajes originales como aventura portatil, cozy, editorial, monocromo o arcade sobrio. No se copiaran marcas o universos existentes: se busca capturar sensaciones ludicas con identidad propia de VEO.
 
 Los temas no son solamente modo claro u oscuro. Pueden variar tipografia, superficies, iconografia, microanimaciones y ambientacion, manteniendo siempre la misma arquitectura, legibilidad y densidad funcional. Esta capa se implementa despues de la confiabilidad financiera y antes del pulido visual final de todos los modulos.
 
