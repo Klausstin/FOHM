@@ -75,7 +75,15 @@ Luz debe:
 
 ## Estado actual
 
-La app corre localmente y tiene estas secciones principales:
+La app corre localmente y tambien esta publicada como web instalable en:
+
+`https://ai-studio-applet-webapp-8efca.firebaseapp.com`
+
+En iPhone se agrega desde Safari con Compartir > Agregar a pantalla de inicio. En Android
+se instala desde Chrome con Instalar app o Agregar a pantalla principal. El alcance y la
+validacion pendiente estan documentados en `docs/MOBILE_PWA_ROLLOUT.md`.
+
+VEO tiene estas secciones principales:
 
 - Inicio
 - Luz
