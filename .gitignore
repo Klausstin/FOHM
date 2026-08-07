@@ -8,3 +8,4 @@ coverage/
 !.env.example
 *.zip
 .veo-local-imports/
+.firebase/

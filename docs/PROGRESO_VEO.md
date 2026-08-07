@@ -34,6 +34,7 @@ Siguiente: [proximo paso]
 | Calendario | Pendiente | 10% | Integracion real con Google Calendar queda para despues de Finanzas. |
 | Tareas | Planificando | 5% | Concepto definido, todavia no implementar hasta cerrar Finanzas. |
 | Ajustes | Base | 30% | Perfil, household y permisos iniciales. |
+| Experiencia movil instalable | Validando | 75% | PWA publicada en Firebase Hosting, iconos, modo app y login Google preparados. Falta instalar y probar en iPhone/Samsung y vincular el perfil de Vicky al household compartido. |
 | Experiencia visual y temas configurables | Planificando | 10% | Post-Finanzas: catalogo comun de temas originales; cada usuario puede elegir cualquiera y guardar su seleccion sin cambiar datos ni funciones compartidas. |
 | Documentacion troncal | Implementando | 65% | README actualizado como mapa central de vision, foco Finanzas, decisiones MVP y comandos. |
 | Investigacion tecnica | Listo | 20% | Primer mapa de librerias, APIs y proyectos open source creado en `docs/OPEN_SOURCE_RESEARCH.md`. |
@@ -132,6 +133,7 @@ Siguiente: [proximo paso]
 | Ocultar Cuenta destino cuando no aplica | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar proyecto/contexto a movimientos financieros | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Automatizar prueba de aceptacion financiera | Listo | 100% | `scripts/finance-acceptance.ts`, `src/features/finance/finance.duplicates.ts`, `package.json`, `README.md`, `docs/finanzas-plan-refactor.md` |
+| Publicar VEO como app web instalable | Validando | 95% | `public/manifest.webmanifest`, `public/sw.js`, `public/veo-icon-*`, `firebase.json`, `src/components/Auth.tsx`, `src/firebase.ts`, `src/main.tsx`, `docs/MOBILE_PWA_ROLLOUT.md`, `README.md` |
 
 ## Proximos pasos
 
@@ -150,3 +152,4 @@ Siguiente: [proximo paso]
 13. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
 14. Usar Proyecto para gastos grandes de una sola vez, como Casamiento, Viaje o Mudanza, sin ensuciar las categorias financieras.
 15. Despues de cerrar Finanzas y estabilizar el shell visual, definir un catalogo comun de temas configurables. Cada usuario puede elegir cualquiera, compartir el mismo con otra persona o usar uno distinto; solo la seleccion activa es personal.
+16. Instalar la PWA publica en iPhone y Samsung, validar el login de ambos usuarios y vincular a Vicky al household compartido despues de su primer ingreso.
