@@ -34,7 +34,7 @@ Siguiente: [proximo paso]
 | Calendario | Pendiente | 10% | Integracion real con Google Calendar queda para despues de Finanzas. |
 | Tareas | Planificando | 5% | Concepto definido, todavia no implementar hasta cerrar Finanzas. |
 | Ajustes | Base | 30% | Perfil, household y permisos iniciales. |
-| Experiencia visual y temas personales | Planificando | 10% | Post-Finanzas: preferencias visuales por usuario con temas originales expresivos, chill y sobrios, sin cambiar datos ni funciones compartidas. |
+| Experiencia visual y temas configurables | Planificando | 10% | Post-Finanzas: catalogo comun de temas originales; cada usuario puede elegir cualquiera y guardar su seleccion sin cambiar datos ni funciones compartidas. |
 | Documentacion troncal | Implementando | 65% | README actualizado como mapa central de vision, foco Finanzas, decisiones MVP y comandos. |
 | Investigacion tecnica | Listo | 20% | Primer mapa de librerias, APIs y proyectos open source creado en `docs/OPEN_SOURCE_RESEARCH.md`. |
 
@@ -147,4 +147,4 @@ Siguiente: [proximo paso]
 11. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
 12. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
 13. Usar Proyecto para gastos grandes de una sola vez, como Casamiento, Viaje o Mudanza, sin ensuciar las categorias financieras.
-14. Despues de cerrar Finanzas y estabilizar el shell visual, definir temas personales por usuario: misma informacion y funciones, distinta experiencia visual elegible y modificable.
+14. Despues de cerrar Finanzas y estabilizar el shell visual, definir un catalogo comun de temas configurables. Cada usuario puede elegir cualquiera, compartir el mismo con otra persona o usar uno distinto; solo la seleccion activa es personal.
