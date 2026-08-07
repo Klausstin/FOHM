@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, runTransaction, updateDoc, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../firebase';
 import type {
   CreateFinancialAccountInput,
@@ -6,10 +6,10 @@ import type {
   FinancialAccountRecord,
   FinancialTransactionRecord,
 } from './finance.types';
-import { getAccountBalanceDelta } from './finance.accounts.ts';
 import {
-  getBalanceTransactionType,
-  getSourceAccountId,
+  calculateTransactionBalanceDeltas,
+  calculateBalanceTransitionDeltas,
+  getBalanceAccountIds,
   shouldApplyTransactionToAccountBalances,
   type BalanceAffectingTransactionInput,
 } from './finance.balance.ts';
@@ -63,8 +63,20 @@ export async function deleteFinancialAccount(accountId: string) {
 }
 
 export async function createFinancialTransaction(input: CreateFinancialTransactionInput) {
+  // Los movimientos que afectan saldos deben usar createFinancialTransactionAtomically.
+  const payload = buildFinancialTransactionPayload(input);
+
+  try {
+    return await addDoc(collection(db, 'finances'), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'finances');
+    throw error;
+  }
+}
+
+function buildFinancialTransactionPayload(input: CreateFinancialTransactionInput) {
   const kind = input.kind || (input.type === 'income' ? 'income' : input.type === 'neutral' || input.type === 'transfer' ? 'neutral' : 'expense');
-  const payload = compactPayload({
+  return compactPayload({
     uid: input.uid,
     householdId: input.householdId,
     amount: input.amount,
@@ -128,13 +140,6 @@ export async function createFinancialTransaction(input: CreateFinancialTransacti
     accountBalanceApplied: input.accountBalanceApplied ? true : undefined,
     createdAt: new Date(),
   });
-
-  try {
-    return await addDoc(collection(db, 'finances'), payload);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, 'finances');
-    throw error;
-  }
 }
 
 function compactPayload<T extends Record<string, unknown>>(payload: T) {
@@ -182,53 +187,130 @@ export async function updateFinancialTransaction(transactionId: string, input: P
   }));
 }
 
-export async function deleteFinancialTransaction(transactionId: string) {
-  await deleteDoc(doc(db, 'finances', transactionId));
+type AtomicBalanceOptions = {
+  applyBalances?: boolean;
+};
+
+async function readAtomicAccounts(
+  firestoreTransaction: Parameters<Parameters<typeof runTransaction>[1]>[0],
+  inputs: BalanceAffectingTransactionInput[],
+) {
+  const accountIds = Array.from(new Set(inputs.flatMap(getBalanceAccountIds)));
+  const accounts = new Map<string, { ref: ReturnType<typeof doc>; balance: number; type: string }>();
+
+  for (const accountId of accountIds) {
+    const accountRef = doc(db, 'accounts', accountId);
+    const accountSnapshot = await firestoreTransaction.get(accountRef);
+    if (!accountSnapshot.exists()) {
+      throw new Error(`No existe la cuenta necesaria para actualizar el saldo: ${accountId}.`);
+    }
+    accounts.set(accountId, {
+      ref: accountRef,
+      balance: Number(accountSnapshot.data().balance || 0),
+      type: String(accountSnapshot.data().type || 'bank'),
+    });
+  }
+
+  return accounts;
 }
 
-async function adjustAccountBalance(accountId: string, input: BalanceAffectingTransactionInput, direction: 'source' | 'destination', multiplier = 1) {
-  const accountRef = doc(db, 'accounts', accountId);
-  const accountSnap = await getDoc(accountRef);
-  if (!accountSnap.exists()) return false;
-
-  const currentBalance = Number(accountSnap.data().balance || 0);
-  const transactionType = getBalanceTransactionType(input);
-  const balanceAmount = direction === 'destination' && transactionType === 'transfer' && Number.isFinite(Number(input.settlementAmount))
-    ? Number(input.settlementAmount)
-    : Number(input.amount || 0);
-  const delta = getAccountBalanceDelta({
-    accountType: accountSnap.data().type,
-    transactionType,
-    amount: balanceAmount,
-    direction,
+function applyAtomicBalanceDeltas(
+  firestoreTransaction: Parameters<Parameters<typeof runTransaction>[1]>[0],
+  accounts: Map<string, { ref: ReturnType<typeof doc>; balance: number; type: string }>,
+  deltas: Record<string, number>,
+) {
+  Object.entries(deltas).forEach(([accountId, delta]) => {
+    const account = accounts.get(accountId);
+    if (!account) throw new Error(`No se pudo actualizar la cuenta ${accountId}.`);
+    firestoreTransaction.update(account.ref, { balance: account.balance + delta });
   });
-
-  await updateDoc(accountRef, { balance: currentBalance + delta * multiplier });
-  return true;
 }
 
-async function applyTransactionBalanceDelta(input: BalanceAffectingTransactionInput, multiplier = 1) {
-  if (!shouldApplyTransactionToAccountBalances(input)) return false;
+export async function createFinancialTransactionAtomically(
+  input: CreateFinancialTransactionInput,
+  options: AtomicBalanceOptions = {},
+) {
+  const financeRef = doc(collection(db, 'finances'));
 
-  const sourceAccountId = getSourceAccountId(input);
-  let touchedAnyAccount = false;
+  try {
+    await runTransaction(db, async firestoreTransaction => {
+      const shouldApplyBalance = options.applyBalances !== false && shouldApplyTransactionToAccountBalances(input);
+      const balanceInput = shouldApplyBalance ? input : null;
+      const accounts = await readAtomicAccounts(firestoreTransaction, balanceInput ? [balanceInput] : []);
+      const accountTypes = Object.fromEntries(Array.from(accounts, ([id, account]) => [id, account.type]));
+      const deltas = balanceInput ? calculateTransactionBalanceDeltas(balanceInput, accountTypes) : {};
 
-  if (sourceAccountId) {
-    touchedAnyAccount = await adjustAccountBalance(sourceAccountId, input, 'source', multiplier) || touchedAnyAccount;
+      applyAtomicBalanceDeltas(firestoreTransaction, accounts, deltas);
+      firestoreTransaction.set(financeRef, buildFinancialTransactionPayload({
+        ...input,
+        accountBalanceApplied: shouldApplyBalance,
+      }));
+    });
+    return financeRef;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'finances');
+    throw error;
   }
+}
 
-  if (input.type === 'transfer' && input.toAccountId) {
-    touchedAnyAccount = await adjustAccountBalance(input.toAccountId, input, 'destination', multiplier) || touchedAnyAccount;
+export async function updateFinancialTransactionAtomically(
+  transactionId: string,
+  input: Partial<CreateFinancialTransactionInput>,
+  options: AtomicBalanceOptions = {},
+) {
+  const financeRef = doc(db, 'finances', transactionId);
+
+  try {
+    return await runTransaction(db, async firestoreTransaction => {
+      const financeSnapshot = await firestoreTransaction.get(financeRef);
+      if (!financeSnapshot.exists()) throw new Error('El movimiento que queres editar ya no existe.');
+
+      const previous = financeSnapshot.data() as BalanceAffectingTransactionInput;
+      const next = { ...previous, ...input } as BalanceAffectingTransactionInput;
+      const previousApplied = Boolean(previous.accountBalanceApplied);
+      const shouldApplyNext = options.applyBalances !== false && shouldApplyTransactionToAccountBalances(next);
+      const balanceInputs = [
+        ...(previousApplied ? [previous] : []),
+        ...(shouldApplyNext ? [next] : []),
+      ];
+      const accounts = await readAtomicAccounts(firestoreTransaction, balanceInputs);
+      const accountTypes = Object.fromEntries(Array.from(accounts, ([id, account]) => [id, account.type]));
+      const deltas = calculateBalanceTransitionDeltas(previous, next, accountTypes, shouldApplyNext);
+
+      applyAtomicBalanceDeltas(firestoreTransaction, accounts, deltas);
+      firestoreTransaction.update(financeRef, compactUpdatePayload({
+        ...input,
+        accountBalanceApplied: shouldApplyNext,
+        updatedAt: new Date(),
+      }));
+
+      return { balanceApplied: shouldApplyNext };
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `finances/${transactionId}`);
+    throw error;
   }
-
-  return touchedAnyAccount;
 }
 
-export async function applyTransactionToAccountBalances(input: BalanceAffectingTransactionInput) {
-  return applyTransactionBalanceDelta(input, 1);
-}
+export async function deleteFinancialTransactionAtomically(transactionId: string) {
+  const financeRef = doc(db, 'finances', transactionId);
 
-export async function reverseTransactionFromAccountBalances(input: BalanceAffectingTransactionInput) {
-  if (!input.accountBalanceApplied) return false;
-  return applyTransactionBalanceDelta(input, -1);
+  try {
+    await runTransaction(db, async firestoreTransaction => {
+      const financeSnapshot = await firestoreTransaction.get(financeRef);
+      if (!financeSnapshot.exists()) return;
+
+      const previous = financeSnapshot.data() as BalanceAffectingTransactionInput;
+      const previousApplied = Boolean(previous.accountBalanceApplied);
+      const accounts = await readAtomicAccounts(firestoreTransaction, previousApplied ? [previous] : []);
+      const accountTypes = Object.fromEntries(Array.from(accounts, ([id, account]) => [id, account.type]));
+      const deltas = previousApplied ? calculateTransactionBalanceDeltas(previous, accountTypes, -1) : {};
+
+      applyAtomicBalanceDeltas(firestoreTransaction, accounts, deltas);
+      firestoreTransaction.delete(financeRef);
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `finances/${transactionId}`);
+    throw error;
+  }
 }

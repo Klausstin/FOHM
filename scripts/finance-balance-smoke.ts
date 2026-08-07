@@ -1,5 +1,7 @@
 import { getAccountBalanceDelta } from '../src/features/finance/finance.accounts.ts';
 import {
+  calculateBalanceTransitionDeltas,
+  calculateTransactionBalanceDeltas,
   getBalanceTransactionType,
   getSourceAccountId,
   shouldApplyTransactionToAccountBalances,
@@ -109,5 +111,53 @@ assertEqual(
   true,
   'intentional catchup estimate should apply',
 );
+
+const accountTypes = {
+  'cash-ars': 'cash',
+  'bank-ars': 'bank',
+  'bank-usd': 'bank',
+  visa: 'credit_card',
+};
+
+const createExpenseDeltas = calculateTransactionBalanceDeltas(cashExpense, accountTypes);
+assertEqual(createExpenseDeltas['cash-ars'], -18000, 'atomic create calculates one cash impact');
+
+const editExpenseDeltas = calculateBalanceTransitionDeltas(
+  { ...cashExpense, accountBalanceApplied: true },
+  editedCashExpense,
+  accountTypes,
+);
+assertEqual(editExpenseDeltas['cash-ars'], -2000, 'atomic edit only applies the difference');
+
+const repeatedConfirmationDeltas = calculateBalanceTransitionDeltas(
+  { ...editedCashExpense, accountBalanceApplied: true },
+  editedCashExpense,
+  accountTypes,
+);
+assertEqual(repeatedConfirmationDeltas['cash-ars'], 0, 'confirming twice does not duplicate the balance impact');
+
+const deleteExpenseDeltas = calculateBalanceTransitionDeltas(
+  { ...editedCashExpense, accountBalanceApplied: true },
+  null,
+  accountTypes,
+);
+assertEqual(deleteExpenseDeltas['cash-ars'], 20000, 'atomic delete restores the previous impact');
+
+const currencyExchangeTransfer: BalanceAffectingTransactionInput = {
+  amount: 1000,
+  settlementAmount: 1440000,
+  type: 'transfer',
+  accountId: 'bank-usd',
+  sourceAccountId: 'bank-usd',
+  toAccountId: 'bank-ars',
+  status: 'posted',
+};
+const exchangeDeltas = calculateTransactionBalanceDeltas(currencyExchangeTransfer, accountTypes);
+assertEqual(exchangeDeltas['bank-usd'], -1000, 'cross-currency transfer uses source amount');
+assertEqual(exchangeDeltas['bank-ars'], 1440000, 'cross-currency transfer uses destination amount');
+
+const atomicCardPaymentDeltas = calculateTransactionBalanceDeltas(cardPayment, accountTypes);
+assertEqual(atomicCardPaymentDeltas['bank-ars'], -950, 'atomic card payment decreases bank balance');
+assertEqual(atomicCardPaymentDeltas.visa, 950, 'atomic card payment reduces credit-card debt');
 
 console.log('Finance balance smoke checks passed.');

@@ -1,6 +1,6 @@
 # Progreso VEO
 
-Ultima actualizacion: 2026-06-16
+Ultima actualizacion: 2026-08-07
 
 Este archivo resume el estado macro del proyecto para no perder contexto entre bloques de trabajo.
 Los porcentajes son estimaciones de avance funcional, no promesas exactas.
@@ -24,7 +24,7 @@ Siguiente: [proximo paso]
 
 | Modulo | Estado | Avance estimado | Nota |
 | --- | --- | ---: | --- |
-| Finanzas | Implementando | 92% | Prioridad actual y MVP central del producto. No pasar a otros modulos grandes hasta dejar Finanzas usable al 100% para Agustin y Vicky. |
+| Finanzas | Implementando | 93% | Prioridad actual y MVP central. Altas, ediciones, bajas y revisiones ya protegen movimiento y saldos en una misma operacion; falta validacion real con Agustin y Vicky. |
 | Luz | Implementando | 45% | Ya funciona como captura universal inicial, pero falta IA real y mejor interpretacion. |
 | Panel General | Implementando | 35% | Necesita dashboard mas utilitario y menos explicativo. |
 | Diario Mental | Implementando | 45% | Ya tiene estructura de biblioteca, falta busqueda semantica e IA real. |
@@ -34,6 +34,7 @@ Siguiente: [proximo paso]
 | Calendario | Pendiente | 10% | Integracion real con Google Calendar queda para despues de Finanzas. |
 | Tareas | Planificando | 5% | Concepto definido, todavia no implementar hasta cerrar Finanzas. |
 | Ajustes | Base | 30% | Perfil, household y permisos iniciales. |
+| Experiencia visual y temas personales | Planificando | 10% | Post-Finanzas: preferencias visuales por usuario con temas originales expresivos, chill y sobrios, sin cambiar datos ni funciones compartidas. |
 | Documentacion troncal | Implementando | 65% | README actualizado como mapa central de vision, foco Finanzas, decisiones MVP y comandos. |
 | Investigacion tecnica | Listo | 20% | Primer mapa de librerias, APIs y proyectos open source creado en `docs/OPEN_SOURCE_RESEARCH.md`. |
 
@@ -95,6 +96,7 @@ Siguiente: [proximo paso]
 | Mejorar lenguaje y filtros de economia familiar | Validando | 85% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Evitar falsas alertas en ajustes de saldo | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Hacer mas segura la reversa de saldo al editar o borrar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
+| Guardar movimiento y saldos de forma atomica | Validando | 95% | `src/features/finance/finance.service.ts`, `src/features/finance/finance.balance.ts`, `src/components/FinanceTracker.tsx`, `src/components/LuzCommandCenter.tsx`, `scripts/finance-balance-smoke.ts` |
 | Filtrar movimientos desde una cuenta a auditar | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Mostrar ritmo diario de gasto mensual | Validando | 90% | `src/features/finance/finance.insights.ts`, `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
 | Agregar export manual de backup financiero | Validando | 90% | `src/components/FinanceTracker.tsx`, `docs/PROGRESO_VEO.md` |
@@ -145,3 +147,4 @@ Siguiente: [proximo paso]
 11. No avanzar a otros modulos grandes hasta que Finanzas quede como MVP usable al 100% para uso real con Vicky.
 12. Despues del MVP, evaluar Mercado Pago API como primera integracion automatica.
 13. Usar Proyecto para gastos grandes de una sola vez, como Casamiento, Viaje o Mudanza, sin ensuciar las categorias financieras.
+14. Despues de cerrar Finanzas y estabilizar el shell visual, definir temas personales por usuario: misma informacion y funciones, distinta experiencia visual elegible y modificable.

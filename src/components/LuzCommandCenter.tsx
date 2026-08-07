@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Brain, CheckCircle2, Gift, HelpCircle, Loader2, Mic, Send, Sparkles, Wallet, X } from 'lucide-react';
-import { applyTransactionToAccountBalances, createFinancialTransaction, updateFinancialTransaction } from '../features/finance/finance.service';
+import { createFinancialTransactionAtomically } from '../features/finance/finance.service';
 import type { CreateFinancialTransactionInput } from '../features/finance/finance.types';
 import { subscribeToFinanceLearningMappings, upsertFinanceLearningMapping, type FinanceLearningMapping } from '../features/finance/finance.learning';
 import { createGoal } from '../features/goals/goal.service';
@@ -225,7 +225,7 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
         isFixed: action.finance.isLikelyRecurring || false,
       };
 
-      const transactionRef = await createFinancialTransaction(transactionInput);
+      await createFinancialTransactionAtomically(transactionInput);
       if (action.finance.userEdited || action.confidence === 'high') {
         await upsertFinanceLearningMapping({
           uid: user.uid,
@@ -241,12 +241,6 @@ export default function LuzCommandCenter({ user, habits = [], accounts = [], cat
           merchantName: action.finance.merchantName || '',
           merchantKey: action.finance.merchantKey || '',
         }, financeMappings);
-      }
-      if (!action.finance.needsReview) {
-        const balanceApplied = await applyTransactionToAccountBalances(transactionInput);
-        if (transactionRef?.id) {
-          await updateFinancialTransaction(transactionRef.id, { accountBalanceApplied: balanceApplied } as any);
-        }
       }
     }
 
